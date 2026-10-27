@@ -5,6 +5,7 @@ import { GraphLayout } from '../src/graph/graphLayout';
 import { GitContentProvider } from '../src/git/gitContentProvider';
 import { LruCache } from '../src/utils/lruCache';
 import { GitClient } from '../src/git/gitClient';
+import { GitHubService } from '../src/git/githubService';
 import { GitCommit } from '../src/git/types';
 
 console.log('🧪 Starting Branchify Extended Test Suite...\n');
@@ -152,4 +153,36 @@ assert.strictEqual(stats.topContributors[0].commitsCount, 3);
 assert.strictEqual(stats.topContributors[0].percentage, 75);
 console.log('  ✔ Repo Stats tests passed!');
 
-console.log('\n🎉 ALL 6 BRANCHIFY TEST SUITES PASSED WITH 100% SUCCESS!\n');
+// 7. Test GitHub Service
+console.log('\n▶ Testing GitHub Service...');
+const ghService = GitHubService.getInstance();
+
+// HTTPS format
+const httpsInfo = ghService.parseRemoteUrl('https://github.com/Ignaciobrenas/branchify.git');
+assert.ok(httpsInfo !== null, 'Should parse HTTPS GitHub URL');
+assert.strictEqual(httpsInfo?.owner, 'Ignaciobrenas');
+assert.strictEqual(httpsInfo?.repo, 'branchify');
+assert.strictEqual(httpsInfo?.webUrl, 'https://github.com/Ignaciobrenas/branchify');
+
+// SSH format
+const sshInfo = ghService.parseRemoteUrl('git@github.com:Ignaciobrenas/branchify.git');
+assert.ok(sshInfo !== null, 'Should parse SSH GitHub URL');
+assert.strictEqual(sshInfo?.owner, 'Ignaciobrenas');
+assert.strictEqual(sshInfo?.repo, 'branchify');
+
+// Commit & Branch links
+const commitUrl = ghService.getCommitUrl(httpsInfo!, '1171cdd');
+assert.strictEqual(commitUrl, 'https://github.com/Ignaciobrenas/branchify/commit/1171cdd');
+
+const branchUrl = ghService.getBranchUrl(httpsInfo!, 'origin/feature/auth');
+assert.strictEqual(branchUrl, 'https://github.com/Ignaciobrenas/branchify/tree/feature%2Fauth');
+
+// Autolink issues
+const linked = ghService.autolinkIssues(httpsInfo!, 'fix: resolve bug in parser (#42)');
+assert.strictEqual(
+  linked,
+  'fix: resolve bug in parser ([#42](https://github.com/Ignaciobrenas/branchify/issues/42))'
+);
+console.log('  ✔ GitHub Service tests passed!');
+
+console.log('\n🎉 ALL 7 BRANCHIFY TEST SUITES PASSED WITH 100% SUCCESS!\n');

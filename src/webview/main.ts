@@ -70,6 +70,12 @@ interface RepoStats {
   topContributors: ContributorStat[];
 }
 
+interface GitHubRepoInfo {
+  owner: string;
+  repo: string;
+  webUrl: string;
+}
+
 declare function acquireVsCodeApi(): {
   postMessage(msg: any): void;
   getState(): any;
@@ -83,6 +89,7 @@ let allNodes: GraphNode[] = [];
 let filteredNodes: GraphNode[] = [];
 let branches: GitBranch[] = [];
 let repoStats: RepoStats | null = null;
+let githubRepo: GitHubRepoInfo | null = null;
 let currentBranchName = '';
 let selectedNode: GraphNode | null = null;
 let searchQuery = '';
@@ -118,6 +125,7 @@ window.addEventListener('message', (event) => {
       branches = message.payload.branches || [];
       currentBranchName = message.payload.currentBranch || '';
       repoStats = message.payload.stats || null;
+      githubRepo = message.payload.githubRepo || null;
       updateStatsBar();
       updateBranchesDropdown();
       updateActiveBranchBadge();
@@ -430,13 +438,20 @@ function selectCommit(node: GraphNode): void {
     </div>
 
     <!-- Actions -->
-    <div style="display: flex; gap: 8px;">
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
       <button class="btn-drawer-action" id="btn-copy-sha">
         <span>📋</span> Copy SHA (${commit.shortHash})
       </button>
       <button class="btn-drawer-action" id="btn-copy-msg">
         <span>💬</span> Copy Message
       </button>
+      ${
+        githubRepo
+          ? `<button class="btn-drawer-action" id="btn-open-github">
+              <span>🐙</span> View on GitHub
+            </button>`
+          : ''
+      }
     </div>
 
     <!-- Message -->
@@ -480,6 +495,15 @@ function selectCommit(node: GraphNode): void {
     const fullMsg = commit.subject + (commit.body ? '\n\n' + commit.body : '');
     vscode.postMessage({ command: 'copyToClipboard', payload: fullMsg });
   });
+
+  if (githubRepo) {
+    document.getElementById('btn-open-github')?.addEventListener('click', () => {
+      vscode.postMessage({
+        command: 'openExternal',
+        payload: `${githubRepo!.webUrl}/commit/${commit.hash}`,
+      });
+    });
+  }
 
   // Request detailed changed files list from extension host
   vscode.postMessage({

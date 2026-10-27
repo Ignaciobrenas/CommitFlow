@@ -119,10 +119,11 @@ export class GraphWebviewProvider
         .getConfiguration('branchify.graph')
         .get<number>('pageSize', 300);
 
-      const [commits, branches, currentBranch] = await Promise.all([
+      const [commits, branches, currentBranch, githubRepo] = await Promise.all([
         this.gitClient.getCommits(root, limit),
         this.gitClient.getBranches(root),
         this.gitClient.getCurrentBranch(root),
+        this.gitClient.getGitHubRepoInfo(root),
       ]);
 
       const graphNodes = GraphLayout.compute(commits);
@@ -132,6 +133,7 @@ export class GraphWebviewProvider
         commits: graphNodes,
         branches,
         currentBranch,
+        githubRepo,
         stats,
         totalCommits: graphNodes.length,
         hasMore: false,
@@ -186,6 +188,12 @@ export class GraphWebviewProvider
           if (msg.payload) {
             await vscode.env.clipboard.writeText(msg.payload);
             vscode.window.showInformationMessage('Copied to clipboard!');
+          }
+          break;
+
+        case 'openExternal':
+          if (msg.payload) {
+            await vscode.env.openExternal(vscode.Uri.parse(msg.payload));
           }
           break;
 

@@ -12,6 +12,7 @@ import {
 } from './types';
 import { GitParser } from './gitParser';
 import { AvatarService } from '../avatars/avatarService';
+import { GitHubService, GitHubRepoInfo } from './githubService';
 import { LruCache } from '../utils/lruCache';
 
 export class GitClient {
@@ -412,6 +413,21 @@ export class GitClient {
       activeBranches: branches.length,
       topContributors,
     };
+  }
+
+  /**
+   * Retrieves GitHub repository metadata from git remote config
+   */
+  public async getGitHubRepoInfo(cwd: string): Promise<GitHubRepoInfo | null> {
+    try {
+      const output = await this.execute(
+        ['config', '--get', 'remote.origin.url'],
+        cwd
+      );
+      return GitHubService.getInstance().parseRemoteUrl(output);
+    } catch {
+      return null;
+    }
   }
 
   /**

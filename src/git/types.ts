@@ -86,10 +86,17 @@ export interface GraphNode {
   lines: GraphRouteLine[];
 }
 
+export interface GitHubRepoInfo {
+  owner: string;
+  repo: string;
+  webUrl: string;
+}
+
 export interface GraphDataPayload {
   commits: GraphNode[];
   branches: GitBranch[];
   currentBranch?: string;
+  githubRepo?: GitHubRepoInfo | null;
   stats: RepoStats;
   totalCommits: number;
   hasMore: boolean;
@@ -102,6 +109,7 @@ export interface WebviewToExtensionMessage {
     | 'requestCommitFiles'
     | 'checkoutBranch'
     | 'copyToClipboard'
+    | 'openExternal'
     | 'openCommit'
     | 'openDiff'
     | 'filter';
