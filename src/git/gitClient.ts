@@ -28,7 +28,7 @@ export class GitClient {
   }
 
   /**
-   * Executes a git command in the specified directory with cancellation support
+   * Executes a git command in the specified directory with cancellation and edge-case resilience
    */
   public execute(
     args: string[],
@@ -40,31 +40,60 @@ export class GitClient {
         return reject(new vscode.CancellationError());
       }
 
-      const child = cp.spawn('git', args, {
-        cwd,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-        windowsHide: true,
-      });
+      // Ensure UTF-8 and disable octal escaping for filenames with non-ASCII / spaces
+      const normalizedArgs = ['-c', 'core.quotepath=false', ...args];
+
+      let child: cp.ChildProcess;
+      try {
+        child = cp.spawn('git', normalizedArgs, {
+          cwd,
+          env: {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: '0',
+            LC_ALL: 'C.UTF-8',
+          },
+          windowsHide: true,
+        });
+      } catch (err: any) {
+        if (err.code === 'ENOENT') {
+          return reject(
+            new Error(
+              'Git executable was not found in your system PATH. Please install Git (https://git-scm.com).'
+            )
+          );
+        }
+        return reject(err);
+      }
 
       let stdout = '';
       let stderr = '';
 
-      child.stdout.on('data', (data) => {
+      child.stdout?.on('data', (data) => {
         stdout += data.toString('utf8');
       });
 
-      child.stderr.on('data', (data) => {
+      child.stderr?.on('data', (data) => {
         stderr += data.toString('utf8');
       });
 
       const tokenListener = token?.onCancellationRequested(() => {
-        child.kill();
+        try {
+          child.kill();
+        } catch {}
         reject(new vscode.CancellationError());
       });
 
-      child.on('error', (err) => {
+      child.on('error', (err: any) => {
         tokenListener?.dispose();
-        reject(err);
+        if (err.code === 'ENOENT') {
+          reject(
+            new Error(
+              'Git executable was not found in your system PATH. Please install Git (https://git-scm.com).'
+            )
+          );
+        } else {
+          reject(err);
+        }
       });
 
       child.on('close', (code) => {
@@ -85,10 +114,19 @@ export class GitClient {
   }
 
   /**
-   * Resolves the top-level repository root directory
+   * Resolves repository root dynamically from a given file path, active editor, or workspace folder
    */
-  public async getRepoRoot(cwd?: string): Promise<string | null> {
-    const targetDir = cwd || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  public async getRepoRoot(hintPath?: string): Promise<string | null> {
+    let targetDir = hintPath;
+
+    if (!targetDir && vscode.window.activeTextEditor?.document.uri.scheme === 'file') {
+      targetDir = path.dirname(vscode.window.activeTextEditor.document.uri.fsPath);
+    }
+
+    if (!targetDir) {
+      targetDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    }
+
     if (!targetDir) {
       return null;
     }
@@ -105,7 +143,23 @@ export class GitClient {
   }
 
   /**
-   * Retrieves commits from git log with parents, author metadata, refs, and subject
+   * Resolves the real physical path of the HEAD file (supports Git Worktrees and Submodules)
+   */
+  public async getGitHeadPath(cwd: string): Promise<string | null> {
+    try {
+      const output = await this.execute(['rev-parse', '--git-path', 'HEAD'], cwd);
+      const relativeOrAbsolute = output.trim();
+      return path.isAbsolute(relativeOrAbsolute)
+        ? relativeOrAbsolute
+        : path.resolve(cwd, relativeOrAbsolute);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Retrieves commits from git log with parents, author metadata, refs, and subject.
+   * Gracefully handles brand new empty repositories (unborn branches).
    */
   public async getCommits(
     cwd: string,
@@ -125,8 +179,20 @@ export class GitClient {
       `--skip=${skip}`,
     ];
 
-    const raw = await this.execute(args, cwd);
-    return GitParser.parseLogOutput(raw);
+    try {
+      const raw = await this.execute(args, cwd);
+      return GitParser.parseLogOutput(raw);
+    } catch (err: any) {
+      // Empty repo or unborn branch edge case (fatal: your current branch does not have any commits yet)
+      if (
+        err.message.includes('does not have any commits') ||
+        err.message.includes('unknown revision or path') ||
+        err.message.includes('bad default revision')
+      ) {
+        return [];
+      }
+      throw err;
+    }
   }
 
   /**
@@ -135,10 +201,17 @@ export class GitClient {
   public async getBranches(cwd: string): Promise<GitBranch[]> {
     const format =
       '%(refname)%00%(refname:short)%00%(HEAD)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(authorname)%00%(authoremail)%00%(authordate:unix)';
-    const output = await this.execute(
-      ['for-each-ref', `--format=${format}`, 'refs/heads', 'refs/remotes'],
-      cwd
-    );
+    
+    let output = '';
+    try {
+      output = await this.execute(
+        ['for-each-ref', `--format=${format}`, 'refs/heads', 'refs/remotes'],
+        cwd
+      );
+    } catch (err: any) {
+      // In completely empty repositories, refs don't exist yet
+      return [];
+    }
 
     const lines = output.split('\n').filter((l) => l.trim().length > 0);
     const branches: GitBranch[] = [];
@@ -164,7 +237,10 @@ export class GitClient {
       const isRemote = refname.startsWith('refs/remotes/');
       const name = shortName.trim() || refname.replace(/^refs\/(heads|remotes)\//, '');
       const authorEmail = (authorEmailRaw || '').replace(/^<|>$/g, '').trim();
-      const authorDate = new Date(parseInt(authorDateRaw, 10) * 1000);
+      const parsedTimestamp = parseInt(authorDateRaw, 10);
+      const authorDate = isNaN(parsedTimestamp)
+        ? new Date()
+        : new Date(parsedTimestamp * 1000);
 
       let ahead = 0;
       let behind = 0;
@@ -200,7 +276,7 @@ export class GitClient {
   }
 
   /**
-   * Retrieves the currently active branch name
+   * Retrieves the currently active branch name (handles detached HEAD gracefully)
    */
   public async getCurrentBranch(cwd: string): Promise<string> {
     try {
@@ -208,14 +284,21 @@ export class GitClient {
         ['rev-parse', '--abbrev-ref', 'HEAD'],
         cwd
       );
-      return output.trim();
+      const branch = output.trim();
+      if (branch === 'HEAD') {
+        // Detached HEAD state: retrieve short commit hash
+        const shortSha = (await this.execute(['rev-parse', '--short', 'HEAD'], cwd)).trim();
+        return `HEAD (detached at ${shortSha})`;
+      }
+      return branch;
     } catch {
-      return '';
+      return 'main';
     }
   }
 
   /**
-   * Obtains incremental git blame for a specific line in an active file
+   * Obtains incremental git blame for a specific line in an active file.
+   * Handles untracked files, binary files, and uncommitted local changes seamlessly.
    */
   public async getBlameForLine(
     filePath: string,
@@ -229,6 +312,11 @@ export class GitClient {
     const cached = this.blameCache.get(cacheKey);
     if (cached) {
       return cached;
+    }
+
+    // Edge case: line number 0 or negative
+    if (line <= 0) {
+      return null;
     }
 
     const args = [
@@ -247,10 +335,11 @@ export class GitClient {
         this.blameCache.set(cacheKey, parsed);
       }
       return parsed;
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof vscode.CancellationError) {
         throw err;
       }
+      // Edge case: file is untracked, binary, or line exceeds file length
       return null;
     }
   }
@@ -263,9 +352,9 @@ export class GitClient {
   }
 
   /**
-   * Parses git blame --incremental output
+   * Parses git blame --incremental output with uncommitted changes handling
    */
-  private parseIncrementalBlame(
+  public parseIncrementalBlame(
     raw: string,
     line: number,
     filename: string
@@ -303,6 +392,29 @@ export class GitClient {
 
     if (!commitHash) {
       return null;
+    }
+
+    // Edge case: Uncommitted local line modification (Hash is all zeros)
+    const isUncommitted = /^0{40}$/.test(commitHash);
+    if (isUncommitted) {
+      const date = new Date();
+      const author: GitAuthor = {
+        name: 'You (Uncommitted)',
+        email: authorEmail,
+        date,
+        relativeTime: 'Local changes',
+        avatarUrl: this.avatarService.getAvatarUrl('You', authorEmail),
+      };
+
+      return {
+        line,
+        commitHash: '0000000',
+        shortHash: 'Working Tree',
+        author,
+        summary: 'Uncommitted local modifications',
+        previousHash,
+        filename,
+      };
     }
 
     const date = new Date(authorTime * 1000);
@@ -381,7 +493,7 @@ export class GitClient {
     >();
 
     for (const commit of commits) {
-      const email = commit.author.email.toLowerCase().trim();
+      const email = commit.author.email.toLowerCase().trim() || commit.author.name;
       const existing = authorCounts.get(email);
       if (existing) {
         existing.count++;

@@ -18,11 +18,22 @@ export class GraphWebviewProvider
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(private readonly extensionUri: vscode.Uri) {
-    // Watch for Git HEAD changes to auto-refresh when checking out branches
+    // 1. Watch for Git HEAD changes to auto-refresh when checking out branches
     const watcher = vscode.workspace.createFileSystemWatcher('**/.git/HEAD');
     watcher.onDidChange(() => this.refreshData(), this, this.disposables);
     watcher.onDidCreate(() => this.refreshData(), this, this.disposables);
     this.disposables.push(watcher);
+
+    // 2. Multi-root workspace: Refresh when switching active editor to a different root
+    vscode.window.onDidChangeActiveTextEditor(
+      (editor) => {
+        if (editor?.document.uri.scheme === 'file') {
+          this.refreshData();
+        }
+      },
+      null,
+      this.disposables
+    );
   }
 
   public resolveWebviewView(
@@ -99,19 +110,24 @@ export class GraphWebviewProvider
       return;
     }
 
-    activeWebviews.forEach((w) =>
-      w.postMessage({ command: 'loading' } as ExtensionToWebviewMessage)
-    );
+    activeWebviews.forEach((w) => {
+      try {
+        w.postMessage({ command: 'loading' } as ExtensionToWebviewMessage);
+      } catch {}
+    });
 
     try {
       const root = await this.gitClient.getRepoRoot();
       if (!root) {
-        activeWebviews.forEach((w) =>
-          w.postMessage({
-            command: 'error',
-            payload: 'No Git repository detected in the current workspace.',
-          } as ExtensionToWebviewMessage)
-        );
+        activeWebviews.forEach((w) => {
+          try {
+            w.postMessage({
+              command: 'error',
+              payload:
+                'No Git repository detected in the active workspace. Open a folder with a Git repository to view Branchify.',
+            } as ExtensionToWebviewMessage);
+          } catch {}
+        });
         return;
       }
 
@@ -139,19 +155,23 @@ export class GraphWebviewProvider
         hasMore: false,
       };
 
-      activeWebviews.forEach((w) =>
-        w.postMessage({
-          command: 'graphData',
-          payload,
-        } as ExtensionToWebviewMessage)
-      );
+      activeWebviews.forEach((w) => {
+        try {
+          w.postMessage({
+            command: 'graphData',
+            payload,
+          } as ExtensionToWebviewMessage);
+        } catch {}
+      });
     } catch (err: any) {
-      activeWebviews.forEach((w) =>
-        w.postMessage({
-          command: 'error',
-          payload: err.message || String(err),
-        } as ExtensionToWebviewMessage)
-      );
+      activeWebviews.forEach((w) => {
+        try {
+          w.postMessage({
+            command: 'error',
+            payload: err.message || String(err),
+          } as ExtensionToWebviewMessage);
+        } catch {}
+      });
     }
   }
 

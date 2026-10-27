@@ -185,4 +185,51 @@ assert.strictEqual(
 );
 console.log('  ✔ GitHub Service tests passed!');
 
-console.log('\n🎉 ALL 7 BRANCHIFY TEST SUITES PASSED WITH 100% SUCCESS!\n');
+// 8. Test Edge Cases & Fault Tolerance
+console.log('\n▶ Testing Edge Cases & Fault Tolerance...');
+
+// Edge case A: Empty commits list
+const emptyNodes = GraphLayout.compute([]);
+assert.deepStrictEqual(emptyNodes, [], 'Empty commits list should yield empty nodes array');
+
+// Edge case B: Octopus merge with 4 parents
+const octopusCommit: GitCommit = {
+  hash: 'octopus-merge',
+  shortHash: 'octo',
+  parentHashes: ['p1', 'p2', 'p3', 'p4'],
+  author: { name: 'Lead', email: 'lead@test.com', date: new Date(), relativeTime: 'just now', avatarUrl: '' },
+  committer: { name: 'Lead', email: 'lead@test.com', date: new Date(), relativeTime: 'just now', avatarUrl: '' },
+  subject: 'Merge 4 feature branches',
+  body: '',
+  refs: [],
+};
+const octoNodes = GraphLayout.compute([octopusCommit]);
+assert.strictEqual(octoNodes.length, 1);
+assert.strictEqual(octoNodes[0].lines.length, 4, 'Octopus merge must produce 4 route lines');
+assert.strictEqual(octoNodes[0].lines.filter((l) => l.isMerge).length, 3);
+
+// Edge case C: Uncommitted local modifications in Git Blame
+const rawUncommittedBlame = `0000000000000000000000000000000000000000 1 1 1
+author Not Committed Yet
+author-mail <not.committed.yet>
+author-time 1700000000
+author-tz +0000
+committer Not Committed Yet
+committer-mail <not.committed.yet>
+committer-time 1700000000
+committer-tz +0000
+summary Version of file with local modifications
+filename test.ts`;
+
+const parsedUncommitted = gitClient.parseIncrementalBlame(rawUncommittedBlame, 1, 'test.ts');
+assert.ok(parsedUncommitted !== null);
+assert.strictEqual(parsedUncommitted?.shortHash, 'Working Tree');
+assert.strictEqual(parsedUncommitted?.author.name, 'You (Uncommitted)');
+
+// Edge case D: Untracked / empty raw blame
+const nullBlame = gitClient.parseIncrementalBlame('', 1, 'untracked.ts');
+assert.strictEqual(nullBlame, null, 'Empty blame output should return null');
+
+console.log('  ✔ Edge cases and fault tolerance tests passed!');
+
+console.log('\n🎉 ALL 8 BRANCHIFY TEST SUITES PASSED WITH 100% SUCCESS!\n');

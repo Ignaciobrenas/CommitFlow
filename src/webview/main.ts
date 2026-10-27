@@ -247,11 +247,25 @@ function renderError(err: string): void {
 }
 
 function renderGraph(): void {
+  if (allNodes.length === 0) {
+    tableContainer.innerHTML = `
+      <div class="state-container">
+        <div style="font-size: 36px;">🌱</div>
+        <div style="font-weight: 600; font-size: 14px; color: var(--text-primary);">Empty Repository</div>
+        <div style="max-width: 300px; text-align: center; font-size: 12px; color: var(--text-muted);">
+          No commits found in this repository yet. Stage and commit files to view your Git history!
+        </div>
+      </div>
+    `;
+    return;
+  }
+
   if (filteredNodes.length === 0) {
     tableContainer.innerHTML = `
       <div class="state-container">
-        <div style="font-size: 24px;">🔍</div>
-        <div>No commits found matching the filter</div>
+        <div style="font-size: 28px;">🔍</div>
+        <div style="font-weight: 600; color: var(--text-primary);">No matching commits</div>
+        <div style="font-size: 12px; color: var(--text-muted);">Try searching for a different commit message, author name, or hash.</div>
       </div>
     `;
     return;
@@ -425,7 +439,7 @@ function selectCommit(node: GraphNode): void {
     <div class="author-hero-card">
       <img class="author-hero-avatar" src="${commit.author.avatarUrl}" alt="${
     commit.author.name
-  }" />
+  }" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'44\\' height=\\'44\\'><circle cx=\\'22\\' cy=\\'22\\' r=\\'22\\' fill=\\'%2338bdf8\\'/><text x=\\'50%\\' y=\\'54%\\' text-anchor=\\'middle\\' dominant-baseline=\\'middle\\' fill=\\'%23fff\\' font-size=\\'18\\' font-family=\\'sans-serif\\'>?</text></svg>'" />
       <div class="author-hero-info">
         <span class="author-hero-name">${commit.author.name}</span>
         <span class="author-hero-email">${
@@ -559,13 +573,22 @@ function renderCommitFiles(files: GitFileChange[]): void {
   });
 }
 
-// Drawer Close
-drawerCloseBtn?.addEventListener('click', () => {
+function closeDrawer(): void {
   drawer.classList.remove('open');
   selectedNode = null;
   document
     .querySelectorAll('.commit-row')
     .forEach((r) => r.classList.remove('selected'));
+}
+
+// Drawer Close
+drawerCloseBtn?.addEventListener('click', closeDrawer);
+
+// Escape key closes drawer
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeDrawer();
+  }
 });
 
 // Search input

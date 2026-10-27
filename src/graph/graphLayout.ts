@@ -16,11 +16,17 @@ export class GraphLayout {
   ];
 
   /**
-   * Computes topological lanes and connecting route lines for a list of commits
+   * Computes topological lanes and connecting route lines for a list of commits.
+   * Handles edge cases: empty lists, octopus merges (3+ parents), disconnected roots, shallow clones.
    */
   public static compute(commits: GitCommit[]): GraphNode[] {
+    if (!commits || commits.length === 0) {
+      return [];
+    }
+
     const nodes: GraphNode[] = [];
     const activeLanes: (string | null)[] = []; // maps lane index -> expected parent commit hash
+    const knownHashes = new Set(commits.map((c) => c.hash));
 
     for (let i = 0; i < commits.length; i++) {
       const commit = commits[i];
@@ -30,7 +36,7 @@ export class GraphLayout {
       for (let l = 0; l < activeLanes.length; l++) {
         if (activeLanes[l] === commit.hash) {
           assignedLane = l;
-          activeLanes[l] = null; // Free up or assign to first parent below
+          activeLanes[l] = null;
           break;
         }
       }
@@ -45,7 +51,7 @@ export class GraphLayout {
       }
 
       const lines: GraphRouteLine[] = [];
-      const parents = commit.parentHashes;
+      const parents = commit.parentHashes || [];
 
       if (parents.length > 0) {
         // First parent continues on the current lane
@@ -60,7 +66,7 @@ export class GraphLayout {
           isFork: false,
         });
 
-        // Additional parents (merges) are assigned to secondary lanes
+        // Additional parents (Octopus / multi-parent merges)
         for (let p = 1; p < parents.length; p++) {
           const mergeParent = parents[p];
           let parentLane = activeLanes.indexOf(mergeParent);
@@ -88,7 +94,7 @@ export class GraphLayout {
         activeLanes[assignedLane] = null;
       }
 
-      // Trim trailing nulls from activeLanes
+      // Trim trailing nulls from activeLanes to prevent unbound lane expansion
       while (
         activeLanes.length > 0 &&
         activeLanes[activeLanes.length - 1] === null
@@ -96,14 +102,14 @@ export class GraphLayout {
         activeLanes.pop();
       }
 
+      // Ensure lane is never negative
+      const safeLane = Math.max(0, assignedLane);
       const color =
-        GraphLayout.LANE_COLORS[
-          assignedLane % GraphLayout.LANE_COLORS.length
-        ];
+        GraphLayout.LANE_COLORS[safeLane % GraphLayout.LANE_COLORS.length];
 
       nodes.push({
         commit,
-        lane: assignedLane,
+        lane: safeLane,
         color,
         lines,
       });
