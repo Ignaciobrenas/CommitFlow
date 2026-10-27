@@ -4,7 +4,7 @@ import { GitClient } from '../git/gitClient';
 import { GraphLayout } from './graphLayout';
 import { GitContentProvider } from '../git/gitContentProvider';
 import {
-  BranchifySettings,
+  CommitFlowSettings,
   ExtensionToWebviewMessage,
   WebviewToExtensionMessage,
 } from '../git/types';
@@ -12,7 +12,7 @@ import {
 export class GraphWebviewProvider
   implements vscode.WebviewViewProvider, vscode.Disposable
 {
-  public static readonly viewType = 'branchify.graphView';
+  public static readonly viewType = 'commitflow.graphView';
   private view?: vscode.WebviewView;
   private panel?: vscode.WebviewPanel;
   private readonly gitClient = GitClient.getInstance();
@@ -70,8 +70,8 @@ export class GraphWebviewProvider
       this.panel.reveal(vscode.ViewColumn.One);
     } else {
       this.panel = vscode.window.createWebviewPanel(
-        'branchify.graphPanel',
-        'Branchify: Commit & Branch Graph',
+        'commitflow.graphPanel',
+        'CommitFlow: Commit & Branch Graph',
         vscode.ViewColumn.One,
         {
           enableScripts: true,
@@ -147,26 +147,39 @@ export class GraphWebviewProvider
             w.postMessage({
               command: 'error',
               payload:
-                'No Git repository detected in the active workspace. Open a folder with a Git repository to view Branchify.',
+                'No Git repository detected in the active workspace. Open a folder with a Git repository to view CommitFlow.',
             } as ExtensionToWebviewMessage);
           } catch {}
         });
         return;
       }
 
-      const config = vscode.workspace.getConfiguration('branchify');
+      const config = vscode.workspace.getConfiguration('commitflow');
       const limit = config.get<number>('graph.pageSize', 300);
 
-      const [commits, branches, currentBranch, githubRepo, userIdentity] =
+      const [commits, branches, currentBranch, githubRepo, userIdentity, upstreamStatus, stashes] =
         await Promise.all([
           this.gitClient.getCommits(root, limit),
           this.gitClient.getBranches(root),
           this.gitClient.getCurrentBranch(root),
           this.gitClient.getGitHubRepoInfo(root),
           this.gitClient.getUserIdentity(root),
+          this.gitClient.getUpstreamStatus(root),
+          this.gitClient.getStashes(root),
         ]);
 
       const graphNodes = GraphLayout.compute(commits);
+      let maxLane = 0;
+      graphNodes.forEach((n) => {
+        if (n.lane > maxLane) maxLane = n.lane;
+        n.passingLanes?.forEach((p) => {
+          if (p.lane > maxLane) maxLane = p.lane;
+        });
+        n.lines.forEach((l) => {
+          if (l.toLane > maxLane) maxLane = l.toLane;
+        });
+      });
+
       const stats = this.gitClient.computeRepoStats(commits, branches);
       const personalStats = this.gitClient.computePersonalStats(
         commits,
@@ -175,7 +188,7 @@ export class GraphWebviewProvider
         userIdentity.email
       );
 
-      const settingsPayload: BranchifySettings = {
+      const settingsPayload: CommitFlowSettings = {
         language: config.get<'auto' | 'es' | 'en'>('language', 'auto'),
         density: config.get<'compact' | 'comfortable' | 'spacious'>('graph.density', 'comfortable'),
         theme: config.get<'auto' | 'dark' | 'light'>('graph.theme', 'auto'),
@@ -197,6 +210,9 @@ export class GraphWebviewProvider
         githubRepo,
         stats,
         personalStats,
+        upstreamStatus,
+        stashes,
+        maxLane,
         settings: settingsPayload,
         systemLanguage: vscode.env.language,
         totalCommits: graphNodes.length,
@@ -309,20 +325,155 @@ export class GraphWebviewProvider
 
         case 'pullBranch':
           if (root) {
+            await vscode.window.withProgress(
+              {
+                location: vscode.ProgressLocation.Notification,
+                title: 'CommitFlow: Pulling latest commits...',
+                cancellable: false,
+              },
+              async () => {
+                try {
+                  const res = await this.gitClient.pull(root);
+                  vscode.window.showInformationMessage(
+                    `Pull succeeded: ${res.split('\n')[0] || 'Already up to date.'}`
+                  );
+                  await this.refreshData();
+                } catch (e: any) {
+                  vscode.window.showErrorMessage(`Pull failed: ${e.message}`);
+                }
+              }
+            );
+          }
+          break;
+
+        case 'rebaseBranch':
+          if (root) {
+            const target = msg.payload?.upstream || undefined;
+            await vscode.window.withProgress(
+              {
+                location: vscode.ProgressLocation.Notification,
+                title: `CommitFlow: Rebasing onto ${target || 'upstream'}...`,
+                cancellable: false,
+              },
+              async () => {
+                try {
+                  const res = await this.gitClient.rebase(root, target);
+                  vscode.window.showInformationMessage(
+                    `Rebase succeeded: ${res.split('\n')[0] || 'Successfully rebased.'}`
+                  );
+                  await this.refreshData();
+                } catch (e: any) {
+                  vscode.window.showErrorMessage(
+                    `Rebase failed: ${e.message}. Resolve conflicts or abort with git rebase --abort.`
+                  );
+                }
+              }
+            );
+          }
+          break;
+
+        case 'mergeBranch':
+          if (root) {
+            const target = msg.payload?.upstream || undefined;
+            await vscode.window.withProgress(
+              {
+                location: vscode.ProgressLocation.Notification,
+                title: `CommitFlow: Merging ${target || 'upstream'}...`,
+                cancellable: false,
+              },
+              async () => {
+                try {
+                  const res = await this.gitClient.merge(root, target);
+                  vscode.window.showInformationMessage(
+                    `Merge succeeded: ${res.split('\n')[0] || 'Merged successfully.'}`
+                  );
+                  await this.refreshData();
+                } catch (e: any) {
+                  vscode.window.showErrorMessage(
+                    `Merge failed: ${e.message}. Resolve conflicts or abort with git merge --abort.`
+                  );
+                }
+              }
+            );
+          }
+          break;
+
+        case 'abortRebase':
+          if (root) {
             try {
-              await this.gitClient.pull(root);
-              vscode.window.showInformationMessage('Pull completed successfully.');
+              await this.gitClient.abortRebase(root);
+              vscode.window.showInformationMessage('CommitFlow: Rebase aborted successfully.');
               await this.refreshData();
             } catch (e: any) {
-              vscode.window.showErrorMessage(`Pull failed: ${e.message}`);
+              vscode.window.showErrorMessage(`Abort rebase failed: ${e.message}`);
+            }
+          }
+          break;
+
+        case 'stashSave':
+          if (root) {
+            try {
+              const msgText = msg.payload?.message || '';
+              const res = await this.gitClient.stashSave(root, msgText);
+              vscode.window.showInformationMessage(
+                `CommitFlow: Stash saved. (${res.split('\n')[0] || 'OK'})`
+              );
+              await this.refreshData();
+            } catch (e: any) {
+              vscode.window.showErrorMessage(`Stash failed: ${e.message}`);
+            }
+          }
+          break;
+
+        case 'stashPop':
+          if (root) {
+            try {
+              const ref = msg.payload?.ref || 'stash@{0}';
+              const res = await this.gitClient.stashPop(root, ref);
+              vscode.window.showInformationMessage(
+                `CommitFlow: Stash applied and dropped. (${res.split('\n')[0] || 'OK'})`
+              );
+              await this.refreshData();
+            } catch (e: any) {
+              vscode.window.showErrorMessage(`Stash pop failed: ${e.message}`);
+            }
+          }
+          break;
+
+        case 'stashApply':
+          if (root) {
+            try {
+              const ref = msg.payload?.ref || 'stash@{0}';
+              const res = await this.gitClient.stashApply(root, ref);
+              vscode.window.showInformationMessage(
+                `CommitFlow: Stash applied. (${res.split('\n')[0] || 'OK'})`
+              );
+              await this.refreshData();
+            } catch (e: any) {
+              vscode.window.showErrorMessage(`Stash apply failed: ${e.message}`);
+            }
+          }
+          break;
+
+        case 'stashDrop':
+          if (root) {
+            try {
+              const ref = msg.payload?.ref || 'stash@{0}';
+              const res = await this.gitClient.stashDrop(root, ref);
+              vscode.window.showInformationMessage(
+                `CommitFlow: Stash dropped. (${res.split('\n')[0] || 'OK'})`
+              );
+              await this.refreshData();
+            } catch (e: any) {
+              vscode.window.showErrorMessage(`Stash drop failed: ${e.message}`);
             }
           }
           break;
 
         case 'saveSettings':
           if (msg.payload) {
-            const cfg = vscode.workspace.getConfiguration('branchify');
-            const s: BranchifySettings = msg.payload;
+            const cfg = vscode.workspace.getConfiguration('commitflow');
+            const s: CommitFlowSettings = msg.payload;
             await Promise.all([
               cfg.update('language', s.language, vscode.ConfigurationTarget.Global),
               cfg.update('graph.density', s.density, vscode.ConfigurationTarget.Global),
@@ -342,7 +493,7 @@ export class GraphWebviewProvider
               payload: s,
             } as ExtensionToWebviewMessage);
 
-            vscode.window.showInformationMessage('Branchify: Settings saved successfully!');
+            vscode.window.showInformationMessage('CommitFlow: Settings saved successfully!');
           }
           break;
       }
@@ -405,8 +556,11 @@ export class GraphWebviewProvider
     const codiconCssUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'codicon.css')
     );
-    const logoUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'resources', 'icon.png')
+    const logoDarkUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'resources', 'logo-dark.png')
+    );
+    const logoLightUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'resources', 'logo-light.png')
     );
 
     const nonce = getNonce();
@@ -419,14 +573,15 @@ export class GraphWebviewProvider
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="${codiconCssUri}" rel="stylesheet" />
   <link href="${styleUri}" rel="stylesheet" />
-  <title>Branchify Graph</title>
+  <title>CommitFlow Graph</title>
 </head>
 <body class="density-comfortable">
   <!-- Top Header Bar -->
   <div class="header-bar">
     <div class="brand-section">
-      <img src="${logoUri}" alt="Branchify" class="brand-logo" />
-      <span>Branchify</span>
+      <img src="${logoDarkUri}" alt="CommitFlow" class="brand-logo logo-dark-mode" />
+      <img src="${logoLightUri}" alt="CommitFlow" class="brand-logo logo-light-mode" />
+      <span>CommitFlow</span>
     </div>
 
     <div class="toolbar-controls">
@@ -443,11 +598,15 @@ export class GraphWebviewProvider
         <i class="codicon codicon-arrow-swap"></i>
       </button>
 
+      <button id="btn-stash" class="btn-icon" title="Gestor de Git Stash">
+        <i class="codicon codicon-archive"></i>
+      </button>
+
       <button id="btn-personal-stats" class="btn-icon" title="Ver Mi Impacto">
         <i class="codicon codicon-graph"></i>
       </button>
 
-      <button id="btn-settings" class="btn-icon" title="Ajustes de Branchify">
+      <button id="btn-settings" class="btn-icon" title="Ajustes de CommitFlow">
         <i class="codicon codicon-settings-gear"></i>
       </button>
 
@@ -479,20 +638,42 @@ export class GraphWebviewProvider
       <span class="stat-value" id="stat-total-branches">0</span>
     </div>
     <div class="stat-divider"></div>
+    <div class="stat-item" id="stat-stash-item" style="cursor:pointer;" title="Ver Stashes guardados">
+      <span class="stat-label" id="label-stat-stashes">Stashes:</span>
+      <span class="stat-value" id="stat-total-stashes">0</span>
+    </div>
+    <div class="stat-divider"></div>
     <div class="top-contributors-row" id="top-contributors-row"></div>
   </div>
+
+  <!-- Upstream Sync Banner Container -->
+  <div id="upstream-sync-container"></div>
 
   <!-- Main Viewport -->
   <div class="main-viewport">
     <div id="graph-table-container" class="graph-table-container">
       <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
         <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
-        <div>Iniciando Branchify Graph...</div>
+        <div>Iniciando CommitFlow Graph...</div>
       </div>
     </div>
 
     <!-- Floating Hover Popover -->
     <div id="hover-popover" class="hover-popover"></div>
+
+    <!-- Git Stash Manager Modal -->
+    <div id="stash-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-archive" style="font-size:16px; color:var(--accent-amber);"></i>
+            <span id="stash-modal-title" style="font-weight:700; font-size:var(--font-size-base);">Gestor de Git Stash</span>
+          </div>
+          <button id="stash-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div id="stash-modal-body" class="modal-body"></div>
+      </div>
+    </div>
 
     <!-- Personal Contribution Modal -->
     <div id="personal-modal" class="modal-overlay">
@@ -514,7 +695,7 @@ export class GraphWebviewProvider
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-settings-gear" style="font-size:16px; color:var(--accent-cyan);"></i>
-            <span id="settings-modal-title" style="font-weight:700; font-size:var(--font-size-base);">Ajustes de Branchify</span>
+            <span id="settings-modal-title" style="font-weight:700; font-size:var(--font-size-base);">Ajustes de CommitFlow</span>
           </div>
           <button id="settings-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
         </div>

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Branchify - Modern Adaptive Design System (Light/Dark, Responsive, Codicons)
+   CommitFlow - Modern Adaptive Design System (Light/Dark, Responsive, Codicons)
    ========================================================================== */
 
 @import url('./codicon.css');
@@ -154,10 +154,31 @@ body {
 }
 
 .brand-logo {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
+  height: 20px;
+  width: auto;
+  max-width: 26px;
   object-fit: contain;
+  vertical-align: middle;
+}
+
+body.theme-light .logo-dark-mode,
+body.vscode-light:not(.theme-dark) .logo-dark-mode {
+  display: none !important;
+}
+
+body.theme-light .logo-light-mode,
+body.vscode-light:not(.theme-dark) .logo-light-mode {
+  display: inline-block !important;
+}
+
+body.theme-dark .logo-light-mode,
+body.vscode-dark:not(.theme-light) .logo-light-mode {
+  display: none !important;
+}
+
+body.theme-dark .logo-dark-mode,
+body.vscode-dark:not(.theme-light) .logo-dark-mode {
+  display: inline-block !important;
 }
 
 .toolbar-controls {
@@ -390,7 +411,6 @@ body {
 
 /* Graph Canvas Column */
 .graph-canvas-col {
-  width: 90px;
   height: var(--row-height);
   position: relative;
   flex-shrink: 0;
@@ -398,6 +418,100 @@ body {
 
 .graph-canvas-col canvas {
   display: block;
+}
+
+/* Upstream Sync Bar */
+.upstream-sync-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.35);
+  gap: 8px;
+  font-size: var(--font-size-xs);
+  flex-shrink: 0;
+  animation: slideDown 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.upstream-sync-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upstream-sync-info i {
+  color: var(--accent-cyan);
+  font-size: 14px;
+}
+
+.upstream-sync-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.btn-sync-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-glass);
+  color: var(--text-primary);
+  transition: all 0.15s ease-out;
+}
+
+.btn-sync-action:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-sync-action:active {
+  transform: scale(0.95);
+}
+
+.btn-sync-action.btn-rebase {
+  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--accent-amber);
+}
+
+.btn-sync-action.btn-merge {
+  border-color: rgba(139, 92, 246, 0.4);
+  color: var(--accent-violet);
+}
+
+.btn-sync-action.btn-pull {
+  border-color: rgba(56, 189, 248, 0.4);
+  color: var(--accent-cyan);
+}
+
+/* Branch Pathway Highlighting */
+.commit-row.branch-path-dimmed {
+  opacity: 0.32;
+  transition: opacity 0.2s ease-out;
+}
+
+.commit-row.branch-path-active {
+  opacity: 1;
+  background: rgba(56, 189, 248, 0.08);
+  border-left: 2px solid var(--accent-cyan);
 }
 
 /* Message & Badges Column */
@@ -895,4 +1009,124 @@ input:checked + .slider:before {
     height: auto;
     padding: 4px 8px;
   }
+}
+
+/* Stash Modal & Manager */
+.stash-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stash-input {
+  flex: 1;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  outline: none;
+}
+
+.stash-input:focus {
+  border-color: var(--focus-ring);
+}
+
+.btn-stash-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background: var(--accent-amber);
+  color: #000;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-stash-save:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-stash-save:active {
+  transform: scale(0.96);
+}
+
+.stash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.stash-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.stash-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+.stash-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.stash-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stash-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.stash-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.btn-stash-action {
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  transition: all 0.15s ease;
+}
+
+.btn-stash-action:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-cyan);
+}
+
+.btn-stash-action.btn-drop:hover {
+  border-color: var(--accent-rose);
+  color: var(--accent-rose);
 }

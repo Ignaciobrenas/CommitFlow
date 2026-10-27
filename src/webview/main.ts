@@ -1,12 +1,14 @@
 import {
-  BranchifySettings,
+  CommitFlowSettings,
   ContributorStat,
   GitBranch,
   GitCommit,
   GitFileChange,
   GitHubRepoInfo,
+  GitStash,
   GraphNode,
   RepoStats,
+  UpstreamStatus,
   UserPersonalStats,
 } from '../git/types';
 import { t, Language } from '../i18n/locales';
@@ -23,6 +25,7 @@ const vscode = acquireVsCodeApi();
 let allNodes: GraphNode[] = [];
 let filteredNodes: GraphNode[] = [];
 let branches: GitBranch[] = [];
+let stashes: GitStash[] = [];
 let repoStats: RepoStats | null = null;
 let personalStats: UserPersonalStats | null = null;
 let githubRepo: GitHubRepoInfo | null = null;
@@ -30,12 +33,14 @@ let currentBranchName = '';
 let selectedNode: GraphNode | null = null;
 let searchQuery = '';
 let selectedBranchFilter = 'all';
+let upstreamStatus: UpstreamStatus | null = null;
+let currentMaxLane = 0;
 
 let currentLang: Language = 'auto';
 let systemLang: string = 'es';
 let currentDensity: 'compact' | 'comfortable' | 'spacious' = 'comfortable';
 let currentTheme: 'auto' | 'dark' | 'light' = 'auto';
-let settings: BranchifySettings = {
+let settings: CommitFlowSettings = {
   language: 'auto',
   density: 'comfortable',
   theme: 'auto',
@@ -54,16 +59,22 @@ let settings: BranchifySettings = {
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 const branchSelect = document.getElementById('branch-select') as HTMLSelectElement;
 const btnCheckout = document.getElementById('btn-checkout') as HTMLButtonElement;
+const btnStash = document.getElementById('btn-stash') as HTMLButtonElement;
 const btnPersonalStats = document.getElementById('btn-personal-stats') as HTMLButtonElement;
 const btnSettings = document.getElementById('btn-settings') as HTMLButtonElement;
 const btnRefresh = document.getElementById('refresh-btn') as HTMLButtonElement;
 const activeBranchPill = document.getElementById('active-branch-pill') as HTMLElement;
+const upstreamSyncContainer = document.getElementById('upstream-sync-container') as HTMLElement;
 const tableContainer = document.getElementById('graph-table-container') as HTMLElement;
 const drawer = document.getElementById('commit-drawer') as HTMLElement;
 const drawerCloseBtn = document.getElementById('drawer-close-btn') as HTMLButtonElement;
 const hoverPopover = document.getElementById('hover-popover') as HTMLElement;
 
 // Modals
+const stashModal = document.getElementById('stash-modal') as HTMLElement;
+const stashModalClose = document.getElementById('stash-modal-close') as HTMLButtonElement;
+const stashModalBody = document.getElementById('stash-modal-body') as HTMLElement;
+
 const personalModal = document.getElementById('personal-modal') as HTMLElement;
 const personalModalClose = document.getElementById('personal-modal-close') as HTMLButtonElement;
 const personalModalBody = document.getElementById('personal-modal-body') as HTMLElement;
@@ -76,6 +87,8 @@ const settingsModalBody = document.getElementById('settings-modal-body') as HTML
 const statTotalCommits = document.getElementById('stat-total-commits');
 const statTotalContributors = document.getElementById('stat-total-contributors');
 const statTotalBranches = document.getElementById('stat-total-branches');
+const statTotalStashes = document.getElementById('stat-total-stashes');
+const statStashItem = document.getElementById('stat-stash-item');
 const topContributorsRow = document.getElementById('top-contributors-row');
 
 function getRowHeight(): number {
@@ -132,10 +145,13 @@ window.addEventListener('message', (event) => {
     case 'graphData':
       allNodes = message.payload.commits || [];
       branches = message.payload.branches || [];
+      stashes = message.payload.stashes || [];
       currentBranchName = message.payload.currentBranch || '';
       repoStats = message.payload.stats || null;
       personalStats = message.payload.personalStats || null;
       githubRepo = message.payload.githubRepo || null;
+      upstreamStatus = message.payload.upstreamStatus || null;
+      currentMaxLane = message.payload.maxLane || 0;
       if (message.payload.systemLanguage) {
         systemLang = message.payload.systemLanguage;
       }
@@ -149,6 +165,7 @@ window.addEventListener('message', (event) => {
       updateStatsBar();
       updateBranchesDropdown();
       updateActiveBranchBadge();
+      renderUpstreamSyncBar();
       applyFilters();
       break;
 
@@ -183,6 +200,7 @@ function applyLocalization(): void {
   // Toolbar placeholders and titles
   if (searchInput) searchInput.placeholder = tr('toolbar.searchPlaceholder');
   if (btnCheckout) btnCheckout.title = tr('toolbar.checkout');
+  if (btnStash) btnStash.title = tr('toolbar.stash');
   if (btnPersonalStats) btnPersonalStats.title = tr('toolbar.myImpact');
   if (btnSettings) btnSettings.title = tr('toolbar.settings');
   if (btnRefresh) btnRefresh.title = tr('toolbar.refresh');
@@ -192,13 +210,19 @@ function applyLocalization(): void {
   const labelCommits = document.getElementById('label-stat-commits');
   const labelContribs = document.getElementById('label-stat-contributors');
   const labelBranches = document.getElementById('label-stat-branches');
+  const labelStashes = document.getElementById('label-stat-stashes');
   if (labelCommits) labelCommits.textContent = tr('stats.commits');
   if (labelContribs) labelContribs.textContent = tr('stats.contributors');
   if (labelBranches) labelBranches.textContent = tr('stats.branches');
+  if (labelStashes) labelStashes.textContent = tr('stash.stashes');
 
   // Drawer Title
   const drawerTitle = document.getElementById('drawer-title');
   if (drawerTitle) drawerTitle.textContent = tr('drawer.title');
+
+  // Stash Modal Title
+  const stashModalTitle = document.getElementById('stash-modal-title');
+  if (stashModalTitle) stashModalTitle.textContent = tr('stash.title');
 
   // Personal Modal Title
   const personalModalTitle = document.getElementById('personal-modal-title');
@@ -214,6 +238,7 @@ function updateStatsBar(): void {
   if (statTotalCommits) statTotalCommits.textContent = repoStats.totalCommits.toString();
   if (statTotalContributors) statTotalContributors.textContent = repoStats.totalContributors.toString();
   if (statTotalBranches) statTotalBranches.textContent = repoStats.activeBranches.toString();
+  if (statTotalStashes) statTotalStashes.textContent = stashes.length.toString();
 
   // Highlight your personal contribution share in stats bar
   const existingMyPill = document.getElementById('my-personal-stats-pill');
@@ -327,6 +352,101 @@ function renderError(err: string): void {
   `;
 }
 
+function renderUpstreamSyncBar(): void {
+  if (!upstreamSyncContainer) return;
+  if (!upstreamStatus || (upstreamStatus.behind <= 0 && upstreamStatus.ahead <= 0)) {
+    upstreamSyncContainer.innerHTML = '';
+    return;
+  }
+
+  const behindText =
+    upstreamStatus.behind > 0
+      ? tr('sync.commitsBehind', { count: upstreamStatus.behind })
+      : '';
+  const aheadText =
+    upstreamStatus.ahead > 0
+      ? tr('sync.commitsAhead', { count: upstreamStatus.ahead })
+      : '';
+  const countsText = [behindText, aheadText].filter(Boolean).join(' • ');
+
+  upstreamSyncContainer.innerHTML = `
+    <div class="upstream-sync-bar">
+      <div class="upstream-sync-info" title="${tr('sync.syncOptions')}">
+        <i class="codicon codicon-cloud-download"></i>
+        <span><strong>${upstreamStatus.upstreamBranch}</strong> (${countsText || 'Up to date'})</span>
+      </div>
+      <div class="upstream-sync-actions">
+        <button class="btn-sync-action btn-rebase" id="btn-sync-rebase" title="${tr('watcher.rebaseNow')}">
+          <i class="codicon codicon-git-pull-request-go-to-changes"></i> <span>${tr('sync.rebase')}</span>
+        </button>
+        <button class="btn-sync-action btn-merge" id="btn-sync-merge" title="${tr('watcher.mergeNow')}">
+          <i class="codicon codicon-git-merge"></i> <span>${tr('sync.merge')}</span>
+        </button>
+        <button class="btn-sync-action btn-pull" id="btn-sync-pull" title="${tr('watcher.pullNow')}">
+          <i class="codicon codicon-cloud-download"></i> <span>${tr('sync.pull')}</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('btn-sync-rebase')?.addEventListener('click', () => {
+    vscode.postMessage({
+      command: 'rebaseBranch',
+      payload: { upstream: upstreamStatus?.upstreamBranch },
+    });
+  });
+
+  document.getElementById('btn-sync-merge')?.addEventListener('click', () => {
+    vscode.postMessage({
+      command: 'mergeBranch',
+      payload: { upstream: upstreamStatus?.upstreamBranch },
+    });
+  });
+
+  document.getElementById('btn-sync-pull')?.addEventListener('click', () => {
+    vscode.postMessage({ command: 'pullBranch' });
+  });
+}
+
+function highlightBranchPath(commitHash: string): void {
+  const targetHashes = new Set<string>();
+  const queue = [commitHash];
+  const nodeMap = new Map<string, GraphNode>();
+  allNodes.forEach((n) => nodeMap.set(n.commit.hash, n));
+
+  while (queue.length > 0) {
+    const h = queue.shift()!;
+    if (targetHashes.has(h)) continue;
+    targetHashes.add(h);
+    const n = nodeMap.get(h);
+    if (n) {
+      n.commit.parentHashes?.forEach((p) => {
+        if (!targetHashes.has(p)) queue.push(p);
+      });
+    }
+  }
+
+  const rows = tableContainer.querySelectorAll('.commit-row');
+  rows.forEach((r, idx) => {
+    const node = filteredNodes[idx];
+    if (!node) return;
+    if (targetHashes.has(node.commit.hash)) {
+      r.classList.add('branch-path-active');
+      r.classList.remove('branch-path-dimmed');
+    } else {
+      r.classList.add('branch-path-dimmed');
+      r.classList.remove('branch-path-active');
+    }
+  });
+}
+
+function clearBranchPathHighlight(): void {
+  const rows = tableContainer.querySelectorAll('.commit-row');
+  rows.forEach((r) => {
+    r.classList.remove('branch-path-active', 'branch-path-dimmed');
+  });
+}
+
 function renderGraph(): void {
   if (allNodes.length === 0) {
     tableContainer.innerHTML = `
@@ -353,6 +473,23 @@ function renderGraph(): void {
   tableContainer.innerHTML = '';
   const fragment = document.createDocumentFragment();
   const rowHeight = getRowHeight();
+  const laneWidth = getLaneWidth();
+  const laneOffset = getLaneOffset();
+
+  // Compute dynamic max lane to fit all branches without clipping
+  let maxLane = currentMaxLane;
+  filteredNodes.forEach((n) => {
+    if (n.lane > maxLane) maxLane = n.lane;
+    n.passingLanes?.forEach((p) => {
+      if (p.lane > maxLane) maxLane = p.lane;
+    });
+    n.lines.forEach((l) => {
+      if (l.toLane > maxLane) maxLane = l.toLane;
+    });
+  });
+
+  const canvasCssWidth = Math.max(80, (maxLane + 1) * laneWidth + laneOffset * 2);
+  const dpr = window.devicePixelRatio || 1;
 
   filteredNodes.forEach((node, index) => {
     const row = document.createElement('div');
@@ -361,13 +498,17 @@ function renderGraph(): void {
     }`;
     row.style.height = `${rowHeight}px`;
 
-    // 1. Canvas Column
+    // 1. Canvas Column with High-DPI support
     const canvasCol = document.createElement('div');
     canvasCol.className = 'graph-canvas-col';
+    canvasCol.style.width = `${canvasCssWidth}px`;
+
     const canvas = document.createElement('canvas');
-    canvas.width = 90;
-    canvas.height = rowHeight;
-    drawCommitNode(canvas, node, index);
+    canvas.width = Math.round(canvasCssWidth * dpr);
+    canvas.height = Math.round(rowHeight * dpr);
+    canvas.style.width = `${canvasCssWidth}px`;
+    canvas.style.height = `${rowHeight}px`;
+    drawCommitNode(canvas, node, index, dpr);
     canvasCol.appendChild(canvas);
 
     // 2. Info Column (Refs + Subject)
@@ -383,6 +524,13 @@ function renderGraph(): void {
       pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
         ref.isHead ? `HEAD -> ${ref.name}` : ref.name
       }`;
+      pill.addEventListener('mouseenter', (e) => {
+        e.stopPropagation();
+        highlightBranchPath(node.commit.hash);
+      });
+      pill.addEventListener('mouseleave', () => {
+        clearBranchPathHighlight();
+      });
       infoCol.appendChild(pill);
     });
 
@@ -483,10 +631,16 @@ function renderGraph(): void {
     row.appendChild(metaCol);
     row.appendChild(rowActions);
 
-    // Row Click & Hover popover handlers
+    // Row Click & Hover handlers
     row.addEventListener('click', () => selectCommit(node));
-    row.addEventListener('mouseenter', (e) => showHoverPopover(e, node));
-    row.addEventListener('mouseleave', hideHoverPopover);
+    row.addEventListener('mouseenter', (e) => {
+      showHoverPopover(e, node);
+      highlightBranchPath(node.commit.hash);
+    });
+    row.addEventListener('mouseleave', () => {
+      hideHoverPopover();
+      clearBranchPathHighlight();
+    });
 
     fragment.appendChild(row);
   });
@@ -494,9 +648,17 @@ function renderGraph(): void {
   tableContainer.appendChild(fragment);
 }
 
-function drawCommitNode(canvas: HTMLCanvasElement, node: GraphNode, index: number): void {
+function drawCommitNode(
+  canvas: HTMLCanvasElement,
+  node: GraphNode,
+  index: number,
+  dpr = 1
+): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+
+  ctx.save();
+  ctx.scale(dpr, dpr);
 
   const rowHeight = getRowHeight();
   const laneWidth = getLaneWidth();
@@ -507,31 +669,66 @@ function drawCommitNode(canvas: HTMLCanvasElement, node: GraphNode, index: numbe
   const nodeY = rowHeight / 2;
   const isHead = node.commit.refs.some((r) => r.isHead);
 
-  // 1. Draw connecting route lines
+  // 1. Draw Passing Lanes (Continuous straight lines from y=0 to y=rowHeight)
+  if (node.passingLanes && node.passingLanes.length > 0) {
+    node.passingLanes.forEach((pass) => {
+      const px = laneOffset + pass.lane * laneWidth;
+      ctx.beginPath();
+      ctx.strokeStyle = pass.color;
+      ctx.lineWidth = 1.75;
+      ctx.lineCap = 'round';
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, rowHeight);
+      ctx.stroke();
+    });
+  }
+
+  // 2. Draw Incoming Lines from children above (from y=0 to y=nodeY)
+  if (node.incomingLines && node.incomingLines.length > 0) {
+    node.incomingLines.forEach((inc) => {
+      const childX = laneOffset + inc.fromLane * laneWidth;
+      ctx.beginPath();
+      ctx.strokeStyle = inc.color;
+      ctx.lineWidth = 1.75;
+      ctx.lineCap = 'round';
+
+      if (childX === nodeX) {
+        ctx.moveTo(nodeX, 0);
+        ctx.lineTo(nodeX, nodeY);
+      } else {
+        ctx.moveTo(childX, 0);
+        ctx.bezierCurveTo(childX, nodeY * 0.5, nodeX, 0, nodeX, nodeY);
+      }
+      ctx.stroke();
+    });
+  }
+
+  // 3. Draw Outgoing Lines to parents below (from y=nodeY to y=rowHeight)
   node.lines.forEach((line) => {
     const targetX = laneOffset + line.toLane * laneWidth;
-    const targetY = rowHeight + rowHeight / 2;
-
     ctx.beginPath();
-    ctx.strokeStyle = node.color;
+    ctx.strokeStyle = line.color || node.color;
     ctx.lineWidth = 1.75;
     ctx.lineCap = 'round';
 
-    if (line.fromLane === line.toLane) {
+    if (nodeX === targetX) {
       ctx.moveTo(nodeX, nodeY);
-      ctx.lineTo(targetX, targetY);
+      ctx.lineTo(nodeX, rowHeight);
     } else {
       ctx.moveTo(nodeX, nodeY);
-      const cp1X = nodeX;
-      const cp1Y = nodeY + rowHeight * 0.5;
-      const cp2X = targetX;
-      const cp2Y = targetY - rowHeight * 0.5;
-      ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, targetX, targetY);
+      ctx.bezierCurveTo(
+        nodeX,
+        nodeY + (rowHeight - nodeY) * 0.5,
+        targetX,
+        nodeY,
+        targetX,
+        rowHeight
+      );
     }
     ctx.stroke();
   });
 
-  // 2. Draw Commit Dot
+  // 4. Draw Commit Node Dot with subtle glow & high-contrast ring
   ctx.beginPath();
   ctx.arc(nodeX, nodeY, isHead ? radius + 1.5 : radius, 0, Math.PI * 2);
   ctx.fillStyle = node.color;
@@ -550,6 +747,8 @@ function drawCommitNode(canvas: HTMLCanvasElement, node: GraphNode, index: numbe
     ctx.lineWidth = 1;
     ctx.stroke();
   }
+
+  ctx.restore();
 }
 
 // Hover Popover Logic
@@ -977,7 +1176,7 @@ function openSettingsModal(): void {
 
   // Save button
   document.getElementById('btn-save-settings')?.addEventListener('click', () => {
-    const newSettings: BranchifySettings = {
+    const newSettings: CommitFlowSettings = {
       density: (document.getElementById('cfg-density') as HTMLSelectElement).value as any,
       theme: (document.getElementById('cfg-theme') as HTMLSelectElement).value as any,
       language: (document.getElementById('cfg-language') as HTMLSelectElement).value as any,
@@ -1103,10 +1302,104 @@ function closePersonalModal(): void {
   personalModal?.classList.remove('open');
 }
 
+// Git Stash Modal Logic
+function openStashModal(): void {
+  renderStashModalBody();
+  stashModal?.classList.add('open');
+}
+
+function closeStashModal(): void {
+  stashModal?.classList.remove('open');
+}
+
+function renderStashModalBody(): void {
+  if (!stashModalBody) return;
+
+  let stashesHtml = '';
+  if (stashes.length === 0) {
+    stashesHtml = `
+      <div style="padding:16px; text-align:center; color:var(--text-muted); font-size:var(--font-size-sm);">
+        <i class="codicon codicon-archive" style="font-size:24px; margin-bottom:6px; display:block;"></i>
+        ${tr('stash.empty')}
+      </div>
+    `;
+  } else {
+    stashesHtml = `
+      <div class="stash-list">
+        ${stashes
+          .map(
+            (s) => `
+          <div class="stash-item">
+            <div class="stash-meta">
+              <span class="stash-title"><span style="color:var(--accent-amber); font-family:var(--vscode-editor-font-family);">${s.ref}</span> ${s.message}</span>
+              <span class="stash-subtitle">${s.date} • <span style="font-family:var(--vscode-editor-font-family);">${s.hash.slice(0, 7)}</span></span>
+            </div>
+            <div class="stash-actions">
+              <button class="btn-stash-action btn-pop" data-ref="${s.ref}" title="${tr('stash.pop')}">
+                <i class="codicon codicon-cloud-download"></i> <span>${tr('stash.pop')}</span>
+              </button>
+              <button class="btn-stash-action btn-apply" data-ref="${s.ref}" title="${tr('stash.apply')}">
+                <i class="codicon codicon-check"></i> <span>${tr('stash.apply')}</span>
+              </button>
+              <button class="btn-stash-action btn-drop" data-ref="${s.ref}" title="${tr('stash.drop')}">
+                <i class="codicon codicon-trash"></i> <span>${tr('stash.drop')}</span>
+              </button>
+            </div>
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+    `;
+  }
+
+  stashModalBody.innerHTML = `
+    <div class="stash-form">
+      <input type="text" id="stash-save-input" class="stash-input" placeholder="${tr('stash.inputPlaceholder')}" />
+      <button id="btn-do-stash-save" class="btn-stash-save">
+        <i class="codicon codicon-add"></i> <span>${tr('stash.saveBtn')}</span>
+      </button>
+    </div>
+    ${stashesHtml}
+  `;
+
+  document.getElementById('btn-do-stash-save')?.addEventListener('click', () => {
+    const input = document.getElementById('stash-save-input') as HTMLInputElement;
+    const msg = input?.value || '';
+    vscode.postMessage({ command: 'stashSave', payload: { message: msg } });
+    if (input) input.value = '';
+  });
+
+  stashModalBody.querySelectorAll('.btn-pop').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const ref = btn.getAttribute('data-ref') || 'stash@{0}';
+      vscode.postMessage({ command: 'stashPop', payload: { ref } });
+    });
+  });
+
+  stashModalBody.querySelectorAll('.btn-apply').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const ref = btn.getAttribute('data-ref') || 'stash@{0}';
+      vscode.postMessage({ command: 'stashApply', payload: { ref } });
+    });
+  });
+
+  stashModalBody.querySelectorAll('.btn-drop').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const ref = btn.getAttribute('data-ref') || 'stash@{0}';
+      vscode.postMessage({ command: 'stashDrop', payload: { ref } });
+    });
+  });
+}
+
 // Event Listeners
 drawerCloseBtn?.addEventListener('click', closeDrawer);
 btnPersonalStats?.addEventListener('click', openPersonalModal);
 personalModalClose?.addEventListener('click', closePersonalModal);
+
+btnStash?.addEventListener('click', openStashModal);
+statStashItem?.addEventListener('click', openStashModal);
+stashModalClose?.addEventListener('click', closeStashModal);
 
 btnSettings?.addEventListener('click', openSettingsModal);
 settingsModalClose?.addEventListener('click', closeSettingsModal);
@@ -1116,6 +1409,7 @@ window.addEventListener('keydown', (e) => {
     closeDrawer();
     closePersonalModal();
     closeSettingsModal();
+    closeStashModal();
     hideHoverPopover();
   }
 });

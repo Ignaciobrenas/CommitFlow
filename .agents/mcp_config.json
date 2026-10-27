@@ -1,9 +1,9 @@
 {
   "mcpServers": {
-    "branchify": {
+    "commitflow": {
       "command": "node",
-      "args": ["bin/branchify-mcp.js"],
-      "description": "Branchify Git Graph & User Impact Context Provider"
+      "args": ["bin/commitflow-mcp.js"],
+      "description": "CommitFlow Git Graph & User Impact Context Provider"
     }
   }
 }

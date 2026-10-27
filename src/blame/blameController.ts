@@ -48,7 +48,7 @@ export class BlameController implements vscode.Disposable {
 
     vscode.workspace.onDidChangeConfiguration(
       (e) => {
-        if (e.affectsConfiguration('branchify.inlineBlame')) {
+        if (e.affectsConfiguration('commitflow.inlineBlame')) {
           this.readConfiguration();
           this.triggerUpdate(vscode.window.activeTextEditor);
         }
@@ -64,7 +64,7 @@ export class BlameController implements vscode.Disposable {
   }
 
   private readConfiguration(): void {
-    const config = vscode.workspace.getConfiguration('branchify.inlineBlame');
+    const config = vscode.workspace.getConfiguration('commitflow.inlineBlame');
     this.isEnabled = config.get<boolean>('enabled', true);
   }
 
@@ -115,7 +115,7 @@ export class BlameController implements vscode.Disposable {
     }
 
     const delay = vscode.workspace
-      .getConfiguration('branchify.inlineBlame')
+      .getConfiguration('commitflow.inlineBlame')
       .get<number>('delay', 120);
 
     this.debounceTimer = setTimeout(() => {

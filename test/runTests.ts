@@ -8,7 +8,7 @@ import { GitClient } from '../src/git/gitClient';
 import { GitHubService } from '../src/git/githubService';
 import { GitCommit } from '../src/git/types';
 
-console.log('🧪 Starting Branchify Extended Test Suite...\n');
+console.log('🧪 Starting CommitFlow Extended Test Suite...\n');
 
 // 1. Test AvatarService
 console.log('▶ Testing AvatarService...');
@@ -62,7 +62,7 @@ console.log('  ✔ LruCache tests passed!');
 // 3. Test GitContentProvider URI Builder
 console.log('\n▶ Testing GitContentProvider URI builder...');
 const diffUri = GitContentProvider.createUri('abc1234', 'src/app.ts', 'C:/repo');
-assert.strictEqual(diffUri.scheme, 'branchify-revision');
+assert.strictEqual(diffUri.scheme, 'commitflow-revision');
 assert.strictEqual(diffUri.authority, 'abc1234');
 assert.ok(diffUri.path.includes('src%2Fapp.ts') || diffUri.path.includes('src/app.ts'));
 console.log('  ✔ GitContentProvider tests passed!');
@@ -91,8 +91,8 @@ assert.strictEqual(commits[0].author.name, 'Ignacio');
 assert.strictEqual(commits[0].subject, 'feat: initial commit');
 console.log('  ✔ GitParser tests passed!');
 
-// 5. Test GraphLayout DAG
-console.log('\n▶ Testing GraphLayout...');
+// 5. Test GraphLayout DAG Multi-Lane Engine
+console.log('\n▶ Testing GraphLayout DAG Multi-Lane Engine...');
 const mockCommits: GitCommit[] = [
   {
     hash: 'commit3',
@@ -158,30 +158,30 @@ console.log('\n▶ Testing GitHub Service...');
 const ghService = GitHubService.getInstance();
 
 // HTTPS format
-const httpsInfo = ghService.parseRemoteUrl('https://github.com/Ignaciobrenas/branchify.git');
+const httpsInfo = ghService.parseRemoteUrl('https://github.com/Ignaciobrenas/commitflow.git');
 assert.ok(httpsInfo !== null, 'Should parse HTTPS GitHub URL');
 assert.strictEqual(httpsInfo?.owner, 'Ignaciobrenas');
-assert.strictEqual(httpsInfo?.repo, 'branchify');
-assert.strictEqual(httpsInfo?.webUrl, 'https://github.com/Ignaciobrenas/branchify');
+assert.strictEqual(httpsInfo?.repo, 'commitflow');
+assert.strictEqual(httpsInfo?.webUrl, 'https://github.com/Ignaciobrenas/commitflow');
 
 // SSH format
-const sshInfo = ghService.parseRemoteUrl('git@github.com:Ignaciobrenas/branchify.git');
+const sshInfo = ghService.parseRemoteUrl('git@github.com:Ignaciobrenas/commitflow.git');
 assert.ok(sshInfo !== null, 'Should parse SSH GitHub URL');
 assert.strictEqual(sshInfo?.owner, 'Ignaciobrenas');
-assert.strictEqual(sshInfo?.repo, 'branchify');
+assert.strictEqual(sshInfo?.repo, 'commitflow');
 
 // Commit & Branch links
 const commitUrl = ghService.getCommitUrl(httpsInfo!, '1171cdd');
-assert.strictEqual(commitUrl, 'https://github.com/Ignaciobrenas/branchify/commit/1171cdd');
+assert.strictEqual(commitUrl, 'https://github.com/Ignaciobrenas/commitflow/commit/1171cdd');
 
 const branchUrl = ghService.getBranchUrl(httpsInfo!, 'origin/feature/auth');
-assert.strictEqual(branchUrl, 'https://github.com/Ignaciobrenas/branchify/tree/feature%2Fauth');
+assert.strictEqual(branchUrl, 'https://github.com/Ignaciobrenas/commitflow/tree/feature%2Fauth');
 
 // Autolink issues
 const linked = ghService.autolinkIssues(httpsInfo!, 'fix: resolve bug in parser (#42)');
 assert.strictEqual(
   linked,
-  'fix: resolve bug in parser ([#42](https://github.com/Ignaciobrenas/branchify/issues/42))'
+  'fix: resolve bug in parser ([#42](https://github.com/Ignaciobrenas/commitflow/issues/42))'
 );
 console.log('  ✔ GitHub Service tests passed!');
 
@@ -269,24 +269,26 @@ console.log('  ✔ Personal Stats tests passed!');
 // 10. Test Internationalization (i18n)
 console.log('\n▶ Testing Internationalization Engine (i18n)...');
 const { t } = require('../src/i18n/locales');
-assert.strictEqual(t('app.name', 'es'), 'Branchify');
-assert.strictEqual(t('app.name', 'en'), 'Branchify');
+assert.strictEqual(t('app.name', 'es'), 'CommitFlow');
+assert.strictEqual(t('app.name', 'en'), 'CommitFlow');
 assert.strictEqual(t('toolbar.myImpact', 'es'), 'Mi Impacto');
 assert.strictEqual(t('toolbar.myImpact', 'en'), 'My Impact');
-assert.strictEqual(t('settings.title', 'es'), 'Ajustes de Branchify');
-assert.strictEqual(t('settings.title', 'en'), 'Branchify Settings');
+assert.strictEqual(t('settings.title', 'es'), 'Ajustes de CommitFlow');
+assert.strictEqual(t('settings.title', 'en'), 'CommitFlow Settings');
 assert.strictEqual(t('blame.viewChanges', 'es'), 'Ver Cambios');
 assert.strictEqual(t('blame.viewChanges', 'en'), 'View Changes');
+assert.strictEqual(t('stash.title', 'es'), 'Gestor de Git Stash');
+assert.strictEqual(t('stash.title', 'en'), 'Git Stash Manager');
 // Fallback & auto detection
 assert.strictEqual(t('toolbar.searchPlaceholder', 'auto', 'es'), 'Buscar commits, autores, hashes...');
 assert.strictEqual(t('toolbar.searchPlaceholder', 'auto', 'en_US'), 'Search commits, authors, hashes...');
 console.log('  ✔ i18n tests passed!');
 
-// 11. Test Branchify MCP Server (Model Context Protocol)
-console.log('\n▶ Testing Branchify MCP Server...');
-const { BranchifyMcpServer } = require('../src/mcp/branchifyMcpServer');
-const mcpServer = new BranchifyMcpServer(process.cwd());
-assert.ok(mcpServer, 'Branchify MCP Server instance created');
+// 11. Test CommitFlow MCP Server (Model Context Protocol)
+console.log('\n▶ Testing CommitFlow MCP Server...');
+const { CommitFlowMcpServer } = require('../src/mcp/commitflowMcpServer');
+const mcpServer = new CommitFlowMcpServer(process.cwd());
+assert.ok(mcpServer, 'CommitFlow MCP Server instance created');
 
 // Test initialize method
 const initResponse = mcpServer['handleJsonRpc']({
@@ -296,8 +298,8 @@ const initResponse = mcpServer['handleJsonRpc']({
   params: {},
 });
 initResponse.then((res: any) => {
-  assert.strictEqual(res.result.serverInfo.name, 'branchify-mcp');
-  assert.strictEqual(res.result.serverInfo.version, '0.2.0');
+  assert.strictEqual(res.result.serverInfo.name, 'commitflow-mcp');
+  assert.strictEqual(res.result.serverInfo.version, '0.3.0');
 });
 
 // Test tools/list method
@@ -309,11 +311,11 @@ const toolsResponse = mcpServer['handleJsonRpc']({
 });
 toolsResponse.then((res: any) => {
   const toolNames = res.result.tools.map((t: any) => t.name);
-  assert.ok(toolNames.includes('branchify_get_user_impact'));
-  assert.ok(toolNames.includes('branchify_get_active_context'));
-  assert.ok(toolNames.includes('branchify_get_commit_history'));
-  assert.ok(toolNames.includes('branchify_get_line_blame'));
-  assert.ok(toolNames.includes('branchify_get_repo_summary'));
+  assert.ok(toolNames.includes('commitflow_get_user_impact'));
+  assert.ok(toolNames.includes('commitflow_get_active_context'));
+  assert.ok(toolNames.includes('commitflow_get_commit_history'));
+  assert.ok(toolNames.includes('commitflow_get_line_blame'));
+  assert.ok(toolNames.includes('commitflow_get_repo_summary'));
 });
 
 // Test resources/list method
@@ -325,9 +327,25 @@ const resResponse = mcpServer['handleJsonRpc']({
 });
 resResponse.then((res: any) => {
   const uris = res.result.resources.map((r: any) => r.uri);
-  assert.ok(uris.includes('branchify://repo/user-context'));
-  assert.ok(uris.includes('branchify://repo/graph-summary'));
+  assert.ok(uris.includes('commitflow://repo/user-context'));
+  assert.ok(uris.includes('commitflow://repo/graph-summary'));
 });
 console.log('  ✔ MCP Server tests passed!');
 
-console.log('\n🎉 ALL 11 BRANCHIFY TEST SUITES PASSED WITH 100% SUCCESS!\n');
+// 12. Test Stash Parser & Integration
+console.log('\n▶ Testing Git Stash Support...');
+assert.strictEqual(typeof gitClient.getStashes, 'function');
+assert.strictEqual(typeof gitClient.stashSave, 'function');
+assert.strictEqual(typeof gitClient.stashPop, 'function');
+assert.strictEqual(typeof gitClient.stashApply, 'function');
+assert.strictEqual(typeof gitClient.stashDrop, 'function');
+console.log('  ✔ Git Stash Client API tests passed!');
+
+// 13. Test Rebase & Merge Execution APIs
+console.log('\n▶ Testing Rebase & Merge Client APIs...');
+assert.strictEqual(typeof gitClient.rebase, 'function');
+assert.strictEqual(typeof gitClient.merge, 'function');
+assert.strictEqual(typeof gitClient.abortRebase, 'function');
+console.log('  ✔ Rebase & Merge Client API tests passed!');
+
+console.log('\n🎉 ALL 13 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');

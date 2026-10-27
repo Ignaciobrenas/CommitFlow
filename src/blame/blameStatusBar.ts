@@ -9,7 +9,7 @@ export class BlameStatusBar implements vscode.Disposable {
       vscode.StatusBarAlignment.Left,
       100
     );
-    this.statusBarItem.name = 'Branchify Line Blame';
+    this.statusBarItem.name = 'CommitFlow Line Blame';
   }
 
   /**
@@ -21,18 +21,18 @@ export class BlameStatusBar implements vscode.Disposable {
       return;
     }
 
-    this.statusBarItem.text = `$(git-commit) ${blame.author.name}, ${blame.author.relativeTime}`;
+    this.statusBarItem.text = `$(git-branch) CommitFlow: ${blame.author.name}, ${blame.author.relativeTime}`;
     this.statusBarItem.tooltip = new vscode.MarkdownString(
       `**Commit:** \`${blame.shortHash}\`\n\n` +
         `**Author:** ${blame.author.name} <${blame.author.email}>\n\n` +
         `**Date:** ${blame.author.date.toLocaleString()}\n\n` +
         `**Message:** ${blame.summary}\n\n` +
-        `*Click to view in Branchify Graph*`
+        `*Click to view in CommitFlow Graph*`
     );
 
     this.statusBarItem.command = {
-      command: 'branchify.openGraph',
-      title: 'Open in Branchify Graph',
+      command: 'commitflow.openGraph',
+      title: 'Open in CommitFlow Graph',
       arguments: [blame.commitHash],
     };
 

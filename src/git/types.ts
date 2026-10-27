@@ -71,12 +71,31 @@ export interface RepoStats {
   topContributors: ContributorStat[];
 }
 
+export interface UpstreamStatus {
+  behind: number;
+  ahead: number;
+  hasMerge: boolean;
+  upstreamBranch: string;
+}
+
 export interface GraphRouteLine {
   fromLane: number;
   toLane: number;
   toHash: string;
   isMerge: boolean;
   isFork: boolean;
+  color?: string;
+}
+
+export interface PassingLane {
+  lane: number;
+  color: string;
+}
+
+export interface IncomingLine {
+  fromLane: number;
+  toLane: number;
+  color: string;
 }
 
 export interface GraphNode {
@@ -84,6 +103,9 @@ export interface GraphNode {
   lane: number;
   color: string;
   lines: GraphRouteLine[];
+  passingLanes?: PassingLane[];
+  incomingLines?: IncomingLine[];
+  isWorkingTree?: boolean;
 }
 
 export interface GitHubRepoInfo {
@@ -112,7 +134,15 @@ export interface UserPersonalStats {
   branches: BranchParticipation[];
 }
 
-export interface BranchifySettings {
+export interface GitStash {
+  index: number;
+  ref: string;
+  hash: string;
+  message: string;
+  date: string;
+}
+
+export interface CommitFlowSettings {
   language: 'auto' | 'es' | 'en';
   density: 'compact' | 'comfortable' | 'spacious';
   theme: 'auto' | 'dark' | 'light';
@@ -127,6 +157,7 @@ export interface BranchifySettings {
   askBeforePull: boolean;
 }
 
+
 export interface GraphDataPayload {
   commits: GraphNode[];
   branches: GitBranch[];
@@ -134,9 +165,12 @@ export interface GraphDataPayload {
   githubRepo?: GitHubRepoInfo | null;
   stats: RepoStats;
   personalStats?: UserPersonalStats;
-  settings?: BranchifySettings;
+  upstreamStatus?: UpstreamStatus | null;
+  stashes?: GitStash[];
+  settings?: CommitFlowSettings;
   systemLanguage?: string;
   totalCommits: number;
+  maxLane?: number;
   hasMore: boolean;
 }
 
@@ -148,6 +182,13 @@ export interface WebviewToExtensionMessage {
     | 'checkoutBranch'
     | 'checkoutCommit'
     | 'pullBranch'
+    | 'rebaseBranch'
+    | 'mergeBranch'
+    | 'abortRebase'
+    | 'stashSave'
+    | 'stashPop'
+    | 'stashApply'
+    | 'stashDrop'
     | 'openFile'
     | 'saveSettings'
     | 'openSettings'
@@ -164,6 +205,7 @@ export interface ExtensionToWebviewMessage {
     | 'graphData'
     | 'commitFiles'
     | 'settingsUpdated'
+    | 'stashesUpdated'
     | 'branchSwitched'
     | 'pullCompleted'
     | 'error'

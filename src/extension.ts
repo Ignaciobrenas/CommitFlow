@@ -11,7 +11,7 @@ let graphProvider: GraphWebviewProvider | undefined;
 let branchWatcher: BranchWatcherService | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  console.log('⚡ [Branchify] Activating Git Graph & Live Blame extension...');
+  console.log('⚡ [CommitFlow] Activating Git Graph & Live Blame extension...');
 
   // 1. Register Virtual Text Document Content Provider for Historical Git Diffs
   const contentProvider = new GitContentProvider();
@@ -52,20 +52,21 @@ export function activate(context: vscode.ExtensionContext): void {
   // 6. Command: Open Full Commit & Branch Graph Panel
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'branchify.openGraph',
+      'commitflow.openGraph',
       (commitHash?: string) => {
         graphProvider?.openFullPanel(commitHash);
       }
     )
   );
 
+
   // 7. Command: Toggle Live Inline Blame
   context.subscriptions.push(
-    vscode.commands.registerCommand('branchify.toggleInlineBlame', () => {
+    vscode.commands.registerCommand('commitflow.toggleInlineBlame', () => {
       if (blameController) {
         const state = blameController.toggle();
         vscode.window.showInformationMessage(
-          `Branchify Live Inline Blame: ${state ? 'ENABLED' : 'DISABLED'}`
+          `CommitFlow Live Inline Blame: ${state ? 'ENABLED' : 'DISABLED'}`
         );
       }
     })
@@ -73,7 +74,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 8. Command: Refresh Graph
   context.subscriptions.push(
-    vscode.commands.registerCommand('branchify.refreshGraph', () => {
+    vscode.commands.registerCommand('commitflow.refreshGraph', () => {
       graphProvider?.refreshData();
     })
   );
@@ -81,7 +82,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // 9. Command: Copy Commit SHA
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'branchify.copyHash',
+      'commitflow.copyHash',
       async (hash?: string | string[]) => {
         const target = Array.isArray(hash) ? hash[0] : hash;
         const finalHash = target || blameController?.getCurrentBlame()?.commitHash;
@@ -97,7 +98,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 10. Command: Show Current Line Commit in Graph
   context.subscriptions.push(
-    vscode.commands.registerCommand('branchify.showLineCommit', () => {
+    vscode.commands.registerCommand('commitflow.showLineCommit', () => {
       const current = blameController?.getCurrentBlame();
       graphProvider?.openFullPanel(current?.commitHash);
     })
@@ -105,7 +106,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 11. Command: Open Changes with Previous Revision (GitLens-like Line Diff)
   context.subscriptions.push(
-    vscode.commands.registerCommand('branchify.openLineDiff', async () => {
+    vscode.commands.registerCommand('commitflow.openLineDiff', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.uri.scheme !== 'file') {
         vscode.window.showWarningMessage('No active file to compare changes.');
@@ -155,7 +156,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 12. Command: Open Commit on GitHub / Remote
   context.subscriptions.push(
-    vscode.commands.registerCommand('branchify.openOnGitHub', async (hash?: string | string[]) => {
+    vscode.commands.registerCommand('commitflow.openOnGitHub', async (hash?: string | string[]) => {
       const target = Array.isArray(hash) ? hash[0] : hash;
       const finalHash = target || blameController?.getCurrentBlame()?.commitHash;
       if (!finalHash || finalHash === '0000000') {
@@ -178,15 +179,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 13. Command: Show My Personal Impact & Branch Stats
   context.subscriptions.push(
-    vscode.commands.registerCommand('branchify.showPersonalStats', () => {
+    vscode.commands.registerCommand('commitflow.showPersonalStats', () => {
       graphProvider?.openFullPanel();
       graphProvider?.showPersonalModal();
     })
   );
 
-  // 14. Command: Open Branchify Settings Modal
+  // 14. Command: Open CommitFlow Settings Modal
   context.subscriptions.push(
-    vscode.commands.registerCommand('branchify.openSettings', () => {
+    vscode.commands.registerCommand('commitflow.openSettings', () => {
       graphProvider?.openFullPanel();
       graphProvider?.showSettingsModal();
     })
@@ -194,7 +195,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 15. Command: Pull Current Branch
   context.subscriptions.push(
-    vscode.commands.registerCommand('branchify.pullCurrentBranch', async () => {
+    vscode.commands.registerCommand('commitflow.pullCurrentBranch', async () => {
       const gitClient = GitClient.getInstance();
       const root = await gitClient.getRepoRoot();
       if (root && branchWatcher) {
@@ -203,16 +204,78 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  // 16. Command: Fetch Remotes
+  // 16. Command: Rebase Current Branch
   context.subscriptions.push(
-    vscode.commands.registerCommand('branchify.fetchRemotes', async () => {
+    vscode.commands.registerCommand('commitflow.rebaseCurrentBranch', async () => {
+      const gitClient = GitClient.getInstance();
+      const root = await gitClient.getRepoRoot();
+      if (root && branchWatcher) {
+        await branchWatcher.executeRebase(root);
+      }
+    })
+  );
+
+  // 17. Command: Merge Current Branch
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.mergeCurrentBranch', async () => {
+      const gitClient = GitClient.getInstance();
+      const root = await gitClient.getRepoRoot();
+      if (root && branchWatcher) {
+        await branchWatcher.executeMerge(root);
+      }
+    })
+  );
+
+  // 18. Command: Save Changes to Stash
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.stashSave', async () => {
+      const gitClient = GitClient.getInstance();
+      const root = await gitClient.getRepoRoot();
+      if (root) {
+        const msg = await vscode.window.showInputBox({
+          prompt: 'Enter optional stash message',
+          placeHolder: 'Work in progress...',
+        });
+        if (msg !== undefined) {
+          try {
+            await gitClient.stashSave(root, msg);
+            vscode.window.showInformationMessage('CommitFlow: Stash saved successfully.');
+            graphProvider?.refreshData();
+          } catch (e: any) {
+            vscode.window.showErrorMessage(`Stash failed: ${e.message}`);
+          }
+        }
+      }
+    })
+  );
+
+  // 19. Command: Pop Latest Stash
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.stashPop', async () => {
+      const gitClient = GitClient.getInstance();
+      const root = await gitClient.getRepoRoot();
+      if (root) {
+        try {
+          await gitClient.stashPop(root);
+          vscode.window.showInformationMessage('CommitFlow: Stash applied and popped.');
+          graphProvider?.refreshData();
+        } catch (e: any) {
+          vscode.window.showErrorMessage(`Stash pop failed: ${e.message}`);
+        }
+      }
+    })
+  );
+
+  // 20. Command: Fetch Remotes
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.fetchRemotes', async () => {
       const gitClient = GitClient.getInstance();
       const root = await gitClient.getRepoRoot();
       if (root) {
         await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
-            title: 'Branchify: Fetching all remotes...',
+            title: 'CommitFlow: Fetching all remotes...',
           },
           async () => {
             const res = await gitClient.fetch(root);
@@ -224,7 +287,7 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  console.log('⚡ [Branchify] Successfully initialized and ready.');
+  console.log('⚡ [CommitFlow] Successfully initialized and ready.');
 }
 
 export function deactivate(): void {

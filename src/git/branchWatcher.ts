@@ -16,7 +16,7 @@ export class BranchWatcherService implements vscode.Disposable {
     // Listen to settings changes affecting watcher
     vscode.workspace.onDidChangeConfiguration(
       (e) => {
-        if (e.affectsConfiguration('branchify.sync')) {
+        if (e.affectsConfiguration('commitflow.sync')) {
           this.setupAutoFetchTimer();
         }
       },
@@ -42,7 +42,7 @@ export class BranchWatcherService implements vscode.Disposable {
       this.fetchTimer = null;
     }
 
-    const config = vscode.workspace.getConfiguration('branchify.sync');
+    const config = vscode.workspace.getConfiguration('commitflow.sync');
     const autoFetch = config.get<boolean>('autoFetch', true);
     const intervalMinutes = config.get<number>('fetchIntervalMinutes', 5);
 
@@ -83,7 +83,7 @@ export class BranchWatcherService implements vscode.Disposable {
       const root = await this.gitClient.getRepoRoot();
       if (!root) return;
 
-      const config = vscode.workspace.getConfiguration('branchify');
+      const config = vscode.workspace.getConfiguration('commitflow');
       const notifyEnabled = config.get<boolean>('sync.notifyOnBranchMerge', true);
       if (!notifyEnabled) return;
 
@@ -105,23 +105,103 @@ export class BranchWatcherService implements vscode.Disposable {
       const mergeText = status.hasMerge ? ' (Merge)' : '';
       const message = `${t('watcher.mergeDetected', lang, sysLang)} '${status.upstreamBranch}'${mergeText}: ${status.behind} ${t('watcher.commitsBehind', lang, sysLang)} ${t('watcher.pullPrompt', lang, sysLang)}`;
 
+      const btnRebase = t('watcher.rebaseNow', lang, sysLang);
+      const btnMerge = t('watcher.mergeNow', lang, sysLang);
       const btnPull = t('watcher.pullNow', lang, sysLang);
       const btnView = t('watcher.viewInGraph', lang, sysLang);
       const btnDismiss = t('watcher.dismiss', lang, sysLang);
 
       vscode.window
-        .showInformationMessage(message, btnPull, btnView, btnDismiss)
+        .showInformationMessage(message, btnRebase, btnMerge, btnPull, btnView, btnDismiss)
         .then(async (selection) => {
-          if (selection === btnPull) {
+          if (selection === btnRebase) {
+            await this.executeRebase(root, status.upstreamBranch, lang, sysLang);
+          } else if (selection === btnMerge) {
+            await this.executeMerge(root, status.upstreamBranch, lang, sysLang);
+          } else if (selection === btnPull) {
             await this.executePull(root, lang, sysLang);
           } else if (selection === btnView) {
-            vscode.commands.executeCommand('branchify.openGraph');
+            vscode.commands.executeCommand('commitflow.openGraph');
           }
         });
     } catch {
     } finally {
       this.isChecking = false;
     }
+  }
+
+  /**
+   * Executes git rebase with progress notification and refreshes UI
+   */
+  public async executeRebase(
+    root: string,
+    upstreamBranch?: string,
+    lang?: Language,
+    sysLang?: string
+  ): Promise<boolean> {
+    const resolvedLang =
+      lang || vscode.workspace.getConfiguration('commitflow').get<Language>('language', 'auto');
+    const resolvedSysLang = sysLang || vscode.env.language;
+
+    return await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: t('watcher.rebasingProgress', resolvedLang, resolvedSysLang),
+        cancellable: false,
+      },
+      async () => {
+        try {
+          const result = await this.gitClient.rebase(root, upstreamBranch);
+          vscode.window.showInformationMessage(
+            `${t('watcher.rebaseSuccess', resolvedLang, resolvedSysLang)} (${result.split('\n')[0] || 'OK'})`
+          );
+          this.onRefreshRequired();
+          return true;
+        } catch (err: any) {
+          vscode.window.showErrorMessage(
+            `${t('watcher.rebaseError', resolvedLang, resolvedSysLang)} ${err.message || String(err)}`
+          );
+          return false;
+        }
+      }
+    );
+  }
+
+  /**
+   * Executes git merge with progress notification and refreshes UI
+   */
+  public async executeMerge(
+    root: string,
+    upstreamBranch?: string,
+    lang?: Language,
+    sysLang?: string
+  ): Promise<boolean> {
+    const resolvedLang =
+      lang || vscode.workspace.getConfiguration('commitflow').get<Language>('language', 'auto');
+    const resolvedSysLang = sysLang || vscode.env.language;
+
+    return await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: t('watcher.mergingProgress', resolvedLang, resolvedSysLang),
+        cancellable: false,
+      },
+      async () => {
+        try {
+          const result = await this.gitClient.merge(root, upstreamBranch);
+          vscode.window.showInformationMessage(
+            `${t('watcher.mergeSuccess', resolvedLang, resolvedSysLang)} (${result.split('\n')[0] || 'OK'})`
+          );
+          this.onRefreshRequired();
+          return true;
+        } catch (err: any) {
+          vscode.window.showErrorMessage(
+            `${t('watcher.mergeError', resolvedLang, resolvedSysLang)} ${err.message || String(err)}`
+          );
+          return false;
+        }
+      }
+    );
   }
 
   /**
@@ -133,7 +213,7 @@ export class BranchWatcherService implements vscode.Disposable {
     sysLang?: string
   ): Promise<boolean> {
     const resolvedLang =
-      lang || vscode.workspace.getConfiguration('branchify').get<Language>('language', 'auto');
+      lang || vscode.workspace.getConfiguration('commitflow').get<Language>('language', 'auto');
     const resolvedSysLang = sysLang || vscode.env.language;
 
     return await vscode.window.withProgress(

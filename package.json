@@ -1,8 +1,8 @@
 {
-  "name": "branchify",
-  "displayName": "Branchify - Git Graph & Deep Live Blame",
-  "description": "High-performance interactive Git commit & branch graph visualizer, real-time deep inline blame with author avatars, and developer productivity tools.",
-  "version": "0.2.0",
+  "name": "commitflow",
+  "displayName": "CommitFlow - Git Graph & Deep Live Blame",
+  "description": "High-performance interactive Git commit & branch graph visualizer, real-time deep inline blame with author avatars, stash manager, and developer productivity tools.",
+  "version": "0.3.0",
   "publisher": "Ignaciobrenas",
   "icon": "resources/icon.png",
   "engines": {
@@ -19,111 +19,137 @@
     "blame",
     "branch",
     "commit",
+    "stash",
+    "rebase",
     "author",
     "avatar",
     "history",
     "diff",
     "productivity"
   ],
-  "homepage": "https://github.com/Ignaciobrenas/branchify#readme",
+  "homepage": "https://github.com/Ignaciobrenas/commitflow#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Ignaciobrenas/branchify"
+    "url": "https://github.com/Ignaciobrenas/commitflow"
   },
   "bugs": {
-    "url": "https://github.com/Ignaciobrenas/branchify/issues"
+    "url": "https://github.com/Ignaciobrenas/commitflow/issues"
   },
   "activationEvents": [
     "onStartupFinished"
   ],
   "bin": {
-    "branchify-mcp": "./bin/branchify-mcp.js"
+    "commitflow-mcp": "./bin/commitflow-mcp.js"
   },
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "branchify.openGraph",
-        "title": "%branchify.command.openGraph%",
-        "category": "Branchify",
+        "command": "commitflow.openGraph",
+        "title": "%commitflow.command.openGraph%",
+        "category": "CommitFlow",
         "icon": "$(git-branch)"
       },
       {
-        "command": "branchify.toggleInlineBlame",
-        "title": "%branchify.command.toggleInlineBlame%",
-        "category": "Branchify"
+        "command": "commitflow.toggleInlineBlame",
+        "title": "%commitflow.command.toggleInlineBlame%",
+        "category": "CommitFlow"
       },
       {
-        "command": "branchify.showLineCommit",
-        "title": "%branchify.command.showLineCommit%",
-        "category": "Branchify",
+        "command": "commitflow.showLineCommit",
+        "title": "%commitflow.command.showLineCommit%",
+        "category": "CommitFlow",
         "icon": "$(git-commit)"
       },
       {
-        "command": "branchify.openLineDiff",
-        "title": "%branchify.command.openLineDiff%",
-        "category": "Branchify",
+        "command": "commitflow.openLineDiff",
+        "title": "%commitflow.command.openLineDiff%",
+        "category": "CommitFlow",
         "icon": "$(git-diff)"
       },
       {
-        "command": "branchify.openOnGitHub",
-        "title": "%branchify.command.openOnGitHub%",
-        "category": "Branchify",
+        "command": "commitflow.openOnGitHub",
+        "title": "%commitflow.command.openOnGitHub%",
+        "category": "CommitFlow",
         "icon": "$(link-external)"
       },
       {
-        "command": "branchify.showPersonalStats",
-        "title": "%branchify.command.showPersonalStats%",
-        "category": "Branchify",
+        "command": "commitflow.showPersonalStats",
+        "title": "%commitflow.command.showPersonalStats%",
+        "category": "CommitFlow",
         "icon": "$(graph-line)"
       },
       {
-        "command": "branchify.pullCurrentBranch",
-        "title": "%branchify.command.pullCurrentBranch%",
-        "category": "Branchify",
+        "command": "commitflow.pullCurrentBranch",
+        "title": "%commitflow.command.pullCurrentBranch%",
+        "category": "CommitFlow",
         "icon": "$(cloud-download)"
       },
       {
-        "command": "branchify.fetchRemotes",
-        "title": "%branchify.command.fetchRemotes%",
-        "category": "Branchify",
+        "command": "commitflow.rebaseCurrentBranch",
+        "title": "%commitflow.command.rebaseCurrentBranch%",
+        "category": "CommitFlow",
+        "icon": "$(git-pull-request-go-to-changes)"
+      },
+      {
+        "command": "commitflow.mergeCurrentBranch",
+        "title": "%commitflow.command.mergeCurrentBranch%",
+        "category": "CommitFlow",
+        "icon": "$(git-merge)"
+      },
+      {
+        "command": "commitflow.stashSave",
+        "title": "%commitflow.command.stashSave%",
+        "category": "CommitFlow",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "commitflow.stashPop",
+        "title": "%commitflow.command.stashPop%",
+        "category": "CommitFlow",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "commitflow.fetchRemotes",
+        "title": "%commitflow.command.fetchRemotes%",
+        "category": "CommitFlow",
         "icon": "$(sync)"
       },
       {
-        "command": "branchify.openSettings",
-        "title": "%branchify.command.openSettings%",
-        "category": "Branchify",
+        "command": "commitflow.openSettings",
+        "title": "%commitflow.command.openSettings%",
+        "category": "CommitFlow",
         "icon": "$(settings-gear)"
       },
       {
-        "command": "branchify.refreshGraph",
-        "title": "%branchify.command.refreshGraph%",
-        "category": "Branchify",
+        "command": "commitflow.refreshGraph",
+        "title": "%commitflow.command.refreshGraph%",
+        "category": "CommitFlow",
         "icon": "$(refresh)"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "branchify-explorer",
-          "title": "Branchify",
+          "id": "commitflow-explorer",
+          "title": "CommitFlow",
           "icon": "resources/icon.png"
         }
       ]
     },
     "views": {
-      "branchify-explorer": [
+      "commitflow-explorer": [
         {
           "type": "webview",
-          "id": "branchify.graphView",
-          "name": "%branchify.view.graphView%"
+          "id": "commitflow.graphView",
+          "name": "%commitflow.view.graphView%"
         }
       ]
     },
     "configuration": {
-      "title": "%branchify.config.title%",
+      "title": "%commitflow.config.title%",
       "properties": {
-        "branchify.language": {
+        "commitflow.language": {
           "type": "string",
           "enum": [
             "auto",
@@ -131,24 +157,24 @@
             "en"
           ],
           "default": "auto",
-          "description": "%branchify.config.language%"
+          "description": "%commitflow.config.language%"
         },
-        "branchify.inlineBlame.enabled": {
+        "commitflow.inlineBlame.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "%branchify.config.inlineBlame.enabled%"
+          "description": "%commitflow.config.inlineBlame.enabled%"
         },
-        "branchify.inlineBlame.delay": {
+        "commitflow.inlineBlame.delay": {
           "type": "number",
           "default": 120,
-          "description": "%branchify.config.inlineBlame.delay%"
+          "description": "%commitflow.config.inlineBlame.delay%"
         },
-        "branchify.avatars.enabled": {
+        "commitflow.avatars.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "%branchify.config.avatars.enabled%"
+          "description": "%commitflow.config.avatars.enabled%"
         },
-        "branchify.avatars.service": {
+        "commitflow.avatars.service": {
           "type": "string",
           "enum": [
             "gravatar",
@@ -156,14 +182,14 @@
             "initials"
           ],
           "default": "gravatar",
-          "description": "%branchify.config.avatars.service%"
+          "description": "%commitflow.config.avatars.service%"
         },
-        "branchify.graph.pageSize": {
+        "commitflow.graph.pageSize": {
           "type": "number",
           "default": 300,
-          "description": "%branchify.config.graph.pageSize%"
+          "description": "%commitflow.config.graph.pageSize%"
         },
-        "branchify.graph.density": {
+        "commitflow.graph.density": {
           "type": "string",
           "enum": [
             "compact",
@@ -171,9 +197,9 @@
             "spacious"
           ],
           "default": "comfortable",
-          "description": "%branchify.config.graph.density%"
+          "description": "%commitflow.config.graph.density%"
         },
-        "branchify.graph.theme": {
+        "commitflow.graph.theme": {
           "type": "string",
           "enum": [
             "auto",
@@ -181,59 +207,66 @@
             "light"
           ],
           "default": "auto",
-          "description": "%branchify.config.graph.theme%"
+          "description": "%commitflow.config.graph.theme%"
         },
-        "branchify.graph.animations": {
+        "commitflow.graph.animations": {
           "type": "boolean",
           "default": true,
-          "description": "%branchify.config.graph.animations%"
+          "description": "%commitflow.config.graph.animations%"
         },
-        "branchify.sync.autoFetch": {
+        "commitflow.sync.autoFetch": {
           "type": "boolean",
           "default": true,
-          "description": "%branchify.config.sync.autoFetch%"
+          "description": "%commitflow.config.sync.autoFetch%"
         },
-        "branchify.sync.fetchIntervalMinutes": {
+        "commitflow.sync.fetchIntervalMinutes": {
           "type": "number",
           "default": 5,
-          "description": "%branchify.config.sync.fetchIntervalMinutes%"
+          "description": "%commitflow.config.sync.fetchIntervalMinutes%"
         },
-        "branchify.sync.notifyOnBranchMerge": {
+        "commitflow.sync.notifyOnBranchMerge": {
           "type": "boolean",
           "default": true,
-          "description": "%branchify.config.sync.notifyOnBranchMerge%"
+          "description": "%commitflow.config.sync.notifyOnBranchMerge%"
         },
-        "branchify.sync.askBeforePull": {
+        "commitflow.sync.askBeforePull": {
           "type": "boolean",
           "default": true,
-          "description": "%branchify.config.sync.askBeforePull%"
+          "description": "%commitflow.config.sync.askBeforePull%"
         }
       }
     },
     "menus": {
+      "editor/title": [
+        {
+          "command": "commitflow.openGraph",
+          "group": "navigation",
+          "when": "!isInEmbeddedEditor"
+        }
+      ],
       "editor/context": [
         {
-          "command": "branchify.showLineCommit",
+          "command": "commitflow.showLineCommit",
           "group": "1_modification",
           "when": "editorTextFocus"
         }
       ],
       "view/title": [
         {
-          "command": "branchify.refreshGraph",
-          "when": "view == branchify.graphView",
+          "command": "commitflow.refreshGraph",
+          "when": "view == commitflow.graphView",
           "group": "navigation"
         },
         {
-          "command": "branchify.openGraph",
-          "when": "view == branchify.graphView",
+          "command": "commitflow.openGraph",
+          "when": "view == commitflow.graphView",
           "group": "navigation"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "branchify.openGraph",
+        "command": "commitflow.openGraph",
         "key": "ctrl+alt+b",
         "mac": "cmd+alt+b"
       }

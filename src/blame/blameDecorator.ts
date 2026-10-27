@@ -27,8 +27,8 @@ export class BlameDecorator implements vscode.Disposable {
     const line = editor.document.lineAt(lineIndex);
     const range = new vscode.Range(line.range.end, line.range.end);
 
-    // Format text: e.g. "Ignacio • 2h ago • feat: add branch graph"
-    const text = `  ${blame.author.name} • ${blame.author.relativeTime} • ${blame.summary}`;
+    // Format text: e.g. "⎇ CommitFlow › Ignacio • 2h ago • feat: add branch graph"
+    const text = `  ⎇ CommitFlow › ${blame.author.name} • ${blame.author.relativeTime} • ${blame.summary}`;
 
     const decoration: vscode.DecorationOptions = {
       range,

@@ -9,6 +9,7 @@ import {
   GitBranch,
   GitCommit,
   GitFileChange,
+  GitStash,
   RepoStats,
   UserPersonalStats,
 } from './types';
@@ -138,7 +139,7 @@ export class GitClient {
         ['rev-parse', '--show-toplevel'],
         targetDir
       );
-      return output.trim();
+      return output.trim().replace(/\\/g, '/');
     } catch {
       return null;
     }
@@ -151,9 +152,10 @@ export class GitClient {
     try {
       const output = await this.execute(['rev-parse', '--git-path', 'HEAD'], cwd);
       const relativeOrAbsolute = output.trim();
-      return path.isAbsolute(relativeOrAbsolute)
+      const resolved = path.isAbsolute(relativeOrAbsolute)
         ? relativeOrAbsolute
         : path.resolve(cwd, relativeOrAbsolute);
+      return resolved.replace(/\\/g, '/');
     } catch {
       return null;
     }
@@ -676,6 +678,29 @@ export class GitClient {
   }
 
   /**
+   * Rebases current branch onto upstream or a specified branch/ref
+   */
+  public async rebase(cwd: string, upstreamBranch?: string): Promise<string> {
+    const target = upstreamBranch || '@{u}';
+    return await this.execute(['rebase', target], cwd);
+  }
+
+  /**
+   * Aborts an active rebase operation
+   */
+  public async abortRebase(cwd: string): Promise<string> {
+    return await this.execute(['rebase', '--abort'], cwd);
+  }
+
+  /**
+   * Merges upstream or a specified branch into the current branch
+   */
+  public async merge(cwd: string, branchName?: string): Promise<string> {
+    const target = branchName || '@{u}';
+    return await this.execute(['merge', target], cwd);
+  }
+
+  /**
    * Fetches latest refs from all remotes
    */
   public async fetch(cwd: string): Promise<string> {
@@ -693,13 +718,26 @@ export class GitClient {
     cwd: string
   ): Promise<{ behind: number; ahead: number; hasMerge: boolean; upstreamBranch: string } | null> {
     try {
-      const upstream = (
-        await this.execute(['rev-parse', '--abbrev-ref', '@{u}'], cwd)
-      ).trim();
+      let upstream = '';
+      try {
+        upstream = (
+          await this.execute(['rev-parse', '--abbrev-ref', '@{u}'], cwd)
+        ).trim();
+      } catch {
+        // Fallback: check if origin/<currentBranch> exists
+        const current = await this.getCurrentBranch(cwd);
+        if (current) {
+          try {
+            await this.execute(['rev-parse', '--verify', `origin/${current}`], cwd);
+            upstream = `origin/${current}`;
+          } catch {}
+        }
+      }
+
       if (!upstream) return null;
 
       const counts = (
-        await this.execute(['rev-list', '--left-right', '--count', 'HEAD...@{u}'], cwd)
+        await this.execute(['rev-list', '--left-right', '--count', `HEAD...${upstream}`], cwd)
       ).trim();
       const [aheadStr, behindStr] = counts.split(/\s+/);
       const ahead = parseInt(aheadStr, 10) || 0;
@@ -708,7 +746,7 @@ export class GitClient {
       let hasMerge = false;
       if (behind > 0) {
         const mergeCheck = (
-          await this.execute(['rev-list', '--merges', '-1', 'HEAD..@{u}'], cwd)
+          await this.execute(['rev-list', '--merges', '-1', `HEAD..${upstream}`], cwd)
         ).trim();
         hasMerge = mergeCheck.length > 0;
       }
@@ -746,5 +784,79 @@ export class GitClient {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Retrieves all saved git stashes
+   */
+  public async getStashes(cwd: string): Promise<GitStash[]> {
+    try {
+      const output = await this.execute(
+        ['stash', 'list', '--format=%gd%x1f%h%x1f%gs%x1f%ci'],
+        cwd
+      );
+      const lines = output.split('\n').filter((l) => l.trim().length > 0);
+      const stashes: GitStash[] = [];
+
+      lines.forEach((line, idx) => {
+        const parts = line.split('\x1f');
+        if (parts.length >= 3) {
+          const ref = parts[0].trim();
+          const hash = parts[1].trim();
+          const message = parts[2].trim();
+          const date = parts[3]?.trim() || '';
+          stashes.push({
+            index: idx,
+            ref,
+            hash,
+            message,
+            date,
+          });
+        }
+      });
+
+      return stashes;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Saves current uncommitted changes to a new stash
+   */
+  public async stashSave(
+    cwd: string,
+    message?: string,
+    includeUntracked = true
+  ): Promise<string> {
+    const args = ['stash', 'push'];
+    if (includeUntracked) {
+      args.push('-u');
+    }
+    if (message && message.trim().length > 0) {
+      args.push('-m', message.trim());
+    }
+    return await this.execute(args, cwd);
+  }
+
+  /**
+   * Applies and removes a stash (default: latest stash@{0})
+   */
+  public async stashPop(cwd: string, stashRef = 'stash@{0}'): Promise<string> {
+    return await this.execute(['stash', 'pop', stashRef], cwd);
+  }
+
+  /**
+   * Applies a stash without dropping it
+   */
+  public async stashApply(cwd: string, stashRef = 'stash@{0}'): Promise<string> {
+    return await this.execute(['stash', 'apply', stashRef], cwd);
+  }
+
+  /**
+   * Drops a specific stash
+   */
+  public async stashDrop(cwd: string, stashRef = 'stash@{0}'): Promise<string> {
+    return await this.execute(['stash', 'drop', stashRef], cwd);
   }
 }

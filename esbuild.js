@@ -58,7 +58,7 @@ async function build() {
 
   // 3. Build Standalone MCP Server Bundle (Node.js)
   const mcpCtx = await esbuild.context({
-    entryPoints: ['src/mcp/branchifyMcpServer.ts'],
+    entryPoints: ['src/mcp/commitflowMcpServer.ts'],
     bundle: true,
     outfile: 'dist/mcp.js',
     alias: { vscode: './test/vscodeMock.ts' },

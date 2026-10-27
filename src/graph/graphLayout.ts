@@ -1,4 +1,4 @@
-import { GitCommit, GraphNode, GraphRouteLine } from '../git/types';
+import { GitCommit, GraphNode, GraphRouteLine, IncomingLine, PassingLane } from '../git/types';
 
 export class GraphLayout {
   // Vibrant, high-contrast accessible color palette for branch lanes
@@ -17,6 +17,11 @@ export class GraphLayout {
 
   /**
    * Computes topological lanes and connecting route lines for a list of commits.
+   * Accurately calculates:
+   * 1. Assigned lane for current commit
+   * 2. Passing lanes (active branches running straight down through this row)
+   * 3. Incoming lines from children above (cubic Bezier curves)
+   * 4. Outgoing lines to parents below (cubic Bezier curves & merges)
    * Handles edge cases: empty lists, octopus merges (3+ parents), disconnected roots, shallow clones.
    */
   public static compute(commits: GitCommit[]): GraphNode[] {
@@ -26,13 +31,13 @@ export class GraphLayout {
 
     const nodes: GraphNode[] = [];
     const activeLanes: (string | null)[] = []; // maps lane index -> expected parent commit hash
-    const knownHashes = new Set(commits.map((c) => c.hash));
+    const incomingMap = new Map<string, { fromLane: number; color: string }[]>();
 
     for (let i = 0; i < commits.length; i++) {
       const commit = commits[i];
       let assignedLane = -1;
 
-      // Check if this commit was expected in an active lane
+      // 1. Check if this commit was expected in an active lane
       for (let l = 0; l < activeLanes.length; l++) {
         if (activeLanes[l] === commit.hash) {
           assignedLane = l;
@@ -50,20 +55,62 @@ export class GraphLayout {
         }
       }
 
+      const safeLane = Math.max(0, assignedLane);
+      const nodeColor =
+        GraphLayout.LANE_COLORS[safeLane % GraphLayout.LANE_COLORS.length];
+
+      // 2. Identify passing lanes at this exact row
+      // (any other active lane whose expected parent is below this row)
+      const passingLanes: PassingLane[] = [];
+      for (let l = 0; l < activeLanes.length; l++) {
+        if (l !== safeLane && activeLanes[l] !== null) {
+          passingLanes.push({
+            lane: l,
+            color: GraphLayout.LANE_COLORS[l % GraphLayout.LANE_COLORS.length],
+          });
+        }
+      }
+
+      // 3. Compute incoming lines from child commits above
+      const incoming: IncomingLine[] = [];
+      const registeredIncoming = incomingMap.get(commit.hash);
+      if (registeredIncoming && registeredIncoming.length > 0) {
+        registeredIncoming.forEach((inc) => {
+          incoming.push({
+            fromLane: inc.fromLane,
+            toLane: safeLane,
+            color: inc.color,
+          });
+        });
+        incomingMap.delete(commit.hash);
+      }
+
+      // 4. Compute outgoing lines to parents below
       const lines: GraphRouteLine[] = [];
       const parents = commit.parentHashes || [];
 
       if (parents.length > 0) {
         // First parent continues on the current lane
         const firstParent = parents[0];
-        activeLanes[assignedLane] = firstParent;
+        activeLanes[safeLane] = firstParent;
 
+        const firstParentColor = nodeColor;
         lines.push({
-          fromLane: assignedLane,
-          toLane: assignedLane,
+          fromLane: safeLane,
+          toLane: safeLane,
           toHash: firstParent,
           isMerge: false,
           isFork: false,
+          color: firstParentColor,
+        });
+
+        // Register incoming connection for firstParent
+        if (!incomingMap.has(firstParent)) {
+          incomingMap.set(firstParent, []);
+        }
+        incomingMap.get(firstParent)!.push({
+          fromLane: safeLane,
+          color: firstParentColor,
         });
 
         // Additional parents (Octopus / multi-parent merges)
@@ -81,17 +128,29 @@ export class GraphLayout {
             }
           }
 
+          const mergeColor =
+            GraphLayout.LANE_COLORS[parentLane % GraphLayout.LANE_COLORS.length];
+
           lines.push({
-            fromLane: assignedLane,
+            fromLane: safeLane,
             toLane: parentLane,
             toHash: mergeParent,
             isMerge: true,
             isFork: false,
+            color: mergeColor,
+          });
+
+          if (!incomingMap.has(mergeParent)) {
+            incomingMap.set(mergeParent, []);
+          }
+          incomingMap.get(mergeParent)!.push({
+            fromLane: parentLane,
+            color: mergeColor,
           });
         }
       } else {
         // Root commit (no parents) frees up the lane
-        activeLanes[assignedLane] = null;
+        activeLanes[safeLane] = null;
       }
 
       // Trim trailing nulls from activeLanes to prevent unbound lane expansion
@@ -102,16 +161,13 @@ export class GraphLayout {
         activeLanes.pop();
       }
 
-      // Ensure lane is never negative
-      const safeLane = Math.max(0, assignedLane);
-      const color =
-        GraphLayout.LANE_COLORS[safeLane % GraphLayout.LANE_COLORS.length];
-
       nodes.push({
         commit,
         lane: safeLane,
-        color,
+        color: nodeColor,
         lines,
+        passingLanes,
+        incomingLines: incoming,
       });
     }
 

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { GitClient } from './gitClient';
 
 export class GitContentProvider implements vscode.TextDocumentContentProvider {
-  public static readonly scheme = 'branchify-revision';
+  public static readonly scheme = 'commitflow-revision';
   private readonly gitClient = GitClient.getInstance();
 
   private _onDidChange = new vscode.EventEmitter<vscode.Uri>();
@@ -16,7 +16,7 @@ export class GitContentProvider implements vscode.TextDocumentContentProvider {
       return '';
     }
 
-    // URI format: branchify-revision://commit/<hash>/<encodedRelativePath>?cwd=<encodedCwd>
+    // URI format: commitflow-revision://commit/<hash>/<encodedRelativePath>?cwd=<encodedCwd>
     const hash = uri.authority === 'empty' ? '' : uri.authority;
     if (!hash || hash === 'EMPTY') {
       return '';

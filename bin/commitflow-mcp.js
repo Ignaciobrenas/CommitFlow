@@ -8,7 +8,7 @@ if (fs.existsSync(distMcp)) {
 } else {
   // If not built yet, run with esbuild register or compile on the fly
   require('esbuild').buildSync({
-    entryPoints: [path.join(__dirname, '..', 'src', 'mcp', 'branchifyMcpServer.ts')],
+    entryPoints: [path.join(__dirname, '..', 'src', 'mcp', 'commitflowMcpServer.ts')],
     outfile: distMcp,
     bundle: true,
     platform: 'node',

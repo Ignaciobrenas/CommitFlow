@@ -5,7 +5,7 @@ import { GraphLayout } from '../src/graph/graphLayout';
 import { GitHubService } from '../src/git/githubService';
 
 async function runLiveAudit() {
-  console.log('🔍 [Branchify Live Audit] Starting real Git repository audit...\n');
+  console.log('🔍 [CommitFlow Live Audit] Starting real Git repository audit...\n');
 
   const repoDir = path.resolve(__dirname, '..');
   const gitClient = GitClient.getInstance();
@@ -39,7 +39,7 @@ async function runLiveAudit() {
   const ghInfo = await gitClient.getGitHubRepoInfo(detectedRoot!);
   assert.ok(ghInfo !== null, 'GitHub remote info should be detected');
   assert.strictEqual(ghInfo?.owner, 'Ignaciobrenas');
-  assert.strictEqual(ghInfo?.repo, 'branchify');
+  assert.ok(ghInfo?.repo === 'branchify' || ghInfo?.repo === 'commitflow', 'Remote repo name should match');
   console.log(`   ✔ GitHub Owner: ${ghInfo?.owner}`);
   console.log(`   ✔ GitHub Repo: ${ghInfo?.repo}`);
   console.log(`   ✔ GitHub Web URL: ${ghInfo?.webUrl}`);
@@ -89,7 +89,7 @@ async function runLiveAudit() {
   activate(mockContext);
 
   assert.ok(mockContext.subscriptions.length >= 6, 'Should register at least 6 subscriptions on activation');
-  console.log(`   ✔ Successfully activated Branchify with ${mockContext.subscriptions.length} active providers & command subscriptions`);
+  console.log(`   ✔ Successfully activated CommitFlow with ${mockContext.subscriptions.length} active providers & command subscriptions`);
 
   deactivate();
   console.log('   ✔ Deactivated cleanly without memory leaks');

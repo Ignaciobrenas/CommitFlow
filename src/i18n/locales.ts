@@ -3,14 +3,15 @@ export type Language = 'auto' | 'es' | 'en';
 export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
   es: {
     // Header & Toolbar
-    'app.name': 'Branchify',
+    'app.name': 'CommitFlow',
     'toolbar.searchPlaceholder': 'Buscar commits, autores, hashes...',
     'toolbar.allBranches': 'Todas las ramas',
     'toolbar.checkout': 'Cambiar a rama seleccionada',
     'toolbar.myImpact': 'Mi Impacto',
-    'toolbar.settings': 'Ajustes de Branchify',
+    'toolbar.settings': 'Ajustes de CommitFlow',
     'toolbar.refresh': 'Refrescar grafo',
     'toolbar.activeBranch': 'Rama activa actual',
+    'toolbar.stash': 'Gestor de Git Stash',
 
     // Stats Bar
     'stats.commits': 'Commits:',
@@ -52,7 +53,7 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'drawer.copyPath': 'Copiar ruta del archivo',
 
     // Settings Modal
-    'settings.title': 'Ajustes de Branchify',
+    'settings.title': 'Ajustes de CommitFlow',
     'settings.tabAppearance': 'Apariencia',
     'settings.tabGraph': 'Grafo y Ramas',
     'settings.tabBlame': 'Live Blame',
@@ -70,7 +71,7 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'settings.animationsLabel': 'Animaciones y Efectos',
     'settings.animationsDesc': 'Activa transiciones suaves de ramas, baliza pulsante y efectos hover.',
     'settings.languageLabel': 'Idioma de la Interfaz',
-    'settings.languageDesc': 'Selecciona el idioma de Branchify o sigue el de VS Code.',
+    'settings.languageDesc': 'Selecciona el idioma de CommitFlow o sigue el de VS Code.',
     'settings.langAuto': 'Automático (idioma de VS Code)',
     'settings.langEs': 'Español (Predeterminado)',
     'settings.langEn': 'English',
@@ -109,28 +110,56 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'blame.openGraph': 'Abrir Grafo',
     'blame.line': 'Línea',
 
-    // Branch Watcher & Pull Notifications
-    'watcher.mergeDetected': 'Branchify: Se ha detectado un merge o nuevos commits en',
+    // Branch Watcher & Sync Notifications
+    'watcher.mergeDetected': 'CommitFlow: Se ha detectado un merge o nuevos commits en',
     'watcher.commitsBehind': 'commits por detrás del upstream.',
-    'watcher.pullPrompt': '¿Deseas hacer git pull para sincronizar tu rama?',
-    'watcher.pullNow': 'Hacer Pull Ahora',
+    'watcher.pullPrompt': '¿Cómo deseas sincronizar tu rama?',
+    'watcher.pullNow': 'Hacer Pull',
+    'watcher.rebaseNow': 'Hacer Rebase',
+    'watcher.mergeNow': 'Hacer Merge',
     'watcher.viewInGraph': 'Ver en Grafo',
     'watcher.dismiss': 'Descartar',
-    'watcher.pullingProgress': 'Branchify: Sincronizando y ejecutando git pull...',
+    'watcher.pullingProgress': 'CommitFlow: Sincronizando y ejecutando git pull...',
     'watcher.pullSuccess': 'Rama sincronizada con éxito mediante git pull.',
     'watcher.pullError': 'Error al ejecutar git pull:',
+    'watcher.rebasingProgress': 'CommitFlow: Ejecutando git rebase...',
+    'watcher.rebaseSuccess': 'Rebase completado con éxito.',
+    'watcher.rebaseError': 'Error al ejecutar git rebase:',
+    'watcher.mergingProgress': 'CommitFlow: Ejecutando git merge...',
+    'watcher.mergeSuccess': 'Merge completado con éxito.',
+    'watcher.mergeError': 'Error al ejecutar git merge:',
+
+    // Upstream Sync Toolbar
+    'sync.upstreamBehind': 'tu rama está por detrás de {upstream}',
+    'sync.commitsBehind': '{count} por detrás',
+    'sync.commitsAhead': '{count} por delante',
+    'sync.rebase': 'Rebase',
+    'sync.merge': 'Merge',
+    'sync.pull': 'Pull',
+    'sync.syncOptions': 'Opciones de sincronización con la rama origen',
+
+    // Git Stash Manager
+    'stash.title': 'Gestor de Git Stash',
+    'stash.saveBtn': 'Guardar en Stash',
+    'stash.inputPlaceholder': 'Mensaje descriptivo opcional para el stash...',
+    'stash.empty': 'No hay stashes guardados en este repositorio.',
+    'stash.pop': 'Pop',
+    'stash.apply': 'Aplicar',
+    'stash.drop': 'Descartar',
+    'stash.stashes': 'Stashes:',
   },
 
   en: {
     // Header & Toolbar
-    'app.name': 'Branchify',
+    'app.name': 'CommitFlow',
     'toolbar.searchPlaceholder': 'Search commits, authors, hashes...',
     'toolbar.allBranches': 'All Branches',
     'toolbar.checkout': 'Checkout Selected Branch',
     'toolbar.myImpact': 'My Impact',
-    'toolbar.settings': 'Branchify Settings',
+    'toolbar.settings': 'CommitFlow Settings',
     'toolbar.refresh': 'Refresh Graph',
     'toolbar.activeBranch': 'Current Active Branch',
+    'toolbar.stash': 'Git Stash Manager',
 
     // Stats Bar
     'stats.commits': 'Commits:',
@@ -172,7 +201,7 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'drawer.copyPath': 'Copy file path',
 
     // Settings Modal
-    'settings.title': 'Branchify Settings',
+    'settings.title': 'CommitFlow Settings',
     'settings.tabAppearance': 'Appearance',
     'settings.tabGraph': 'Graph & Branches',
     'settings.tabBlame': 'Live Blame',
@@ -190,7 +219,7 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'settings.animationsLabel': 'Animations & Motion',
     'settings.animationsDesc': 'Enable smooth branch transitions, pulsing beacons, and hover glow effects.',
     'settings.languageLabel': 'Interface Language',
-    'settings.languageDesc': 'Select Branchify display language or follow VS Code setting.',
+    'settings.languageDesc': 'Select CommitFlow display language or follow VS Code setting.',
     'settings.langAuto': 'Automatic (VS Code Language)',
     'settings.langEs': 'Español (Spanish)',
     'settings.langEn': 'English',
@@ -229,16 +258,43 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'blame.openGraph': 'Open Graph',
     'blame.line': 'Line',
 
-    // Branch Watcher & Pull Notifications
-    'watcher.mergeDetected': 'Branchify: Merge or new commits detected in',
+    // Branch Watcher & Sync Notifications
+    'watcher.mergeDetected': 'CommitFlow: Merge or new commits detected in',
     'watcher.commitsBehind': 'commits behind upstream.',
-    'watcher.pullPrompt': 'Would you like to run git pull to synchronize your branch?',
-    'watcher.pullNow': 'Pull Now',
+    'watcher.pullPrompt': 'How would you like to synchronize your branch?',
+    'watcher.pullNow': 'Pull',
+    'watcher.rebaseNow': 'Rebase',
+    'watcher.mergeNow': 'Merge',
     'watcher.viewInGraph': 'View in Graph',
     'watcher.dismiss': 'Dismiss',
-    'watcher.pullingProgress': 'Branchify: Running git pull and syncing...',
+    'watcher.pullingProgress': 'CommitFlow: Running git pull and syncing...',
     'watcher.pullSuccess': 'Branch successfully synchronized via git pull.',
     'watcher.pullError': 'Failed to execute git pull:',
+    'watcher.rebasingProgress': 'CommitFlow: Rebasing onto upstream...',
+    'watcher.rebaseSuccess': 'Rebase completed successfully.',
+    'watcher.rebaseError': 'Failed to execute git rebase:',
+    'watcher.mergingProgress': 'CommitFlow: Merging upstream into current branch...',
+    'watcher.mergeSuccess': 'Merge completed successfully.',
+    'watcher.mergeError': 'Failed to execute git merge:',
+
+    // Upstream Sync Toolbar
+    'sync.upstreamBehind': 'your branch is behind {upstream}',
+    'sync.commitsBehind': '{count} behind',
+    'sync.commitsAhead': '{count} ahead',
+    'sync.rebase': 'Rebase',
+    'sync.merge': 'Merge',
+    'sync.pull': 'Pull',
+    'sync.syncOptions': 'Sync options with upstream branch',
+
+    // Git Stash Manager
+    'stash.title': 'Git Stash Manager',
+    'stash.saveBtn': 'Save to Stash',
+    'stash.inputPlaceholder': 'Optional descriptive stash message...',
+    'stash.empty': 'No saved stashes in this repository.',
+    'stash.pop': 'Pop',
+    'stash.apply': 'Apply',
+    'stash.drop': 'Drop',
+    'stash.stashes': 'Stashes:',
   },
 };
 

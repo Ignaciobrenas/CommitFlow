@@ -27,7 +27,7 @@ export class BlameHoverProvider implements vscode.HoverProvider {
         return null;
       }
 
-      const config = vscode.workspace.getConfiguration('branchify');
+      const config = vscode.workspace.getConfiguration('commitflow');
       const lang = config.get<Language>('language', 'auto');
       const sysLang = vscode.env.language;
 
@@ -62,16 +62,16 @@ export class BlameHoverProvider implements vscode.HoverProvider {
         const copyArgs = encodeURIComponent(JSON.stringify([blame.commitHash]));
 
         md.appendMarkdown(
-          `[$(git-diff) ${t('blame.viewChanges', lang, sysLang)}](command:branchify.openLineDiff "View Diff with previous revision") &nbsp;|&nbsp; ` +
-            `[$(git-branch) ${t('blame.inspectInGraph', lang, sysLang)}](command:branchify.openGraph?${openArgs} "Open commit in Branchify Graph") &nbsp;|&nbsp; ` +
-            `[$(clippy) ${t('blame.copySha', lang, sysLang)}](command:branchify.copyHash?${copyArgs} "Copy Commit SHA") &nbsp;|&nbsp; ` +
-            `[$(link-external) ${t('blame.openRemote', lang, sysLang)}](command:branchify.openOnGitHub?${openArgs} "Open commit on GitHub / remote")\n`
+          `[$(git-diff) ${t('blame.viewChanges', lang, sysLang)}](command:commitflow.openLineDiff "View Diff with previous revision") &nbsp;|&nbsp; ` +
+            `[$(git-branch) ${t('blame.inspectInGraph', lang, sysLang)}](command:commitflow.openGraph?${openArgs} "Open commit in CommitFlow Graph") &nbsp;|&nbsp; ` +
+            `[$(clippy) ${t('blame.copySha', lang, sysLang)}](command:commitflow.copyHash?${copyArgs} "Copy Commit SHA") &nbsp;|&nbsp; ` +
+            `[$(link-external) ${t('blame.openRemote', lang, sysLang)}](command:commitflow.openOnGitHub?${openArgs} "Open commit on GitHub / remote")\n`
         );
       } else {
         md.appendMarkdown(`*$(edit) ${t('blame.uncommitted', lang, sysLang)}*\n\n`);
         md.appendMarkdown(
-          `[$(git-diff) ${t('blame.compareWithHead', lang, sysLang)}](command:branchify.openLineDiff "Compare with HEAD") &nbsp;|&nbsp; ` +
-            `[$(git-branch) ${t('blame.openGraph', lang, sysLang)}](command:branchify.openGraph "Open Branchify Graph")\n`
+          `[$(git-diff) ${t('blame.compareWithHead', lang, sysLang)}](command:commitflow.openLineDiff "Compare with HEAD") &nbsp;|&nbsp; ` +
+            `[$(git-branch) ${t('blame.openGraph', lang, sysLang)}](command:commitflow.openGraph "Open CommitFlow Graph")\n`
         );
       }
 
