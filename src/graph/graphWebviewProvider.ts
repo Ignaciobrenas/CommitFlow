@@ -268,6 +268,10 @@ export class GraphWebviewProvider
           }
           break;
 
+        case 'openFullPanel':
+          this.openFullPanel();
+          break;
+
         case 'openFile':
           if (root && msg.payload?.filePath) {
             const absPath = path.isAbsolute(msg.payload.filePath)
@@ -577,17 +581,45 @@ export class GraphWebviewProvider
 </head>
 <body class="density-comfortable">
   <!-- Top Header Bar -->
-  <div class="header-bar">
-    <div class="brand-section">
-      <img src="${logoDarkUri}" alt="CommitFlow" class="brand-logo logo-dark-mode" />
-      <img src="${logoLightUri}" alt="CommitFlow" class="brand-logo logo-light-mode" />
-      <span>CommitFlow</span>
+  <div class="header-bar" id="header-bar">
+    <div class="header-row-primary">
+      <div class="brand-section">
+        <img src="${logoDarkUri}" alt="CommitFlow" class="brand-logo logo-dark-mode" />
+        <img src="${logoLightUri}" alt="CommitFlow" class="brand-logo logo-light-mode" />
+        <span class="brand-title">CommitFlow</span>
+      </div>
+
+      <div id="active-branch-pill" class="active-branch-badge" title="Rama activa actual">
+        <div class="branch-pulse-dot"></div>
+        <span class="branch-name">main</span>
+      </div>
+
+      <div class="header-quick-actions">
+        <button id="refresh-btn" class="btn-icon" title="Refrescar grafo">
+          <i class="codicon codicon-refresh"></i>
+        </button>
+        <button id="btn-popout" class="btn-icon" title="Abrir en pestaña completa del editor">
+          <i class="codicon codicon-link-external"></i>
+        </button>
+        <button id="btn-stash" class="btn-icon" title="Gestor de Git Stash">
+          <i class="codicon codicon-archive"></i>
+        </button>
+        <button id="btn-personal-stats" class="btn-icon" title="Ver Mi Impacto">
+          <i class="codicon codicon-graph"></i>
+        </button>
+        <button id="btn-settings" class="btn-icon" title="Ajustes de CommitFlow">
+          <i class="codicon codicon-settings-gear"></i>
+        </button>
+      </div>
     </div>
 
-    <div class="toolbar-controls">
+    <div class="toolbar-controls" id="toolbar-controls">
       <div class="search-input-wrapper">
         <span class="search-icon"><i class="codicon codicon-search"></i></span>
-        <input type="text" id="search-input" class="search-input" placeholder="Buscar commits, autores, hashes..." />
+        <input type="text" id="search-input" class="search-input" placeholder="Buscar..." />
+        <button id="search-clear-btn" class="search-clear-btn" title="Limpiar búsqueda" style="display:none;">
+          <i class="codicon codicon-close"></i>
+        </button>
       </div>
 
       <select id="branch-select" class="branch-select" title="Filtrar por rama">
@@ -597,48 +629,31 @@ export class GraphWebviewProvider
       <button id="btn-checkout" class="btn-icon" title="Cambiar a rama seleccionada">
         <i class="codicon codicon-arrow-swap"></i>
       </button>
-
-      <button id="btn-stash" class="btn-icon" title="Gestor de Git Stash">
-        <i class="codicon codicon-archive"></i>
-      </button>
-
-      <button id="btn-personal-stats" class="btn-icon" title="Ver Mi Impacto">
-        <i class="codicon codicon-graph"></i>
-      </button>
-
-      <button id="btn-settings" class="btn-icon" title="Ajustes de CommitFlow">
-        <i class="codicon codicon-settings-gear"></i>
-      </button>
-
-      <button id="refresh-btn" class="btn-icon" title="Refrescar grafo">
-        <i class="codicon codicon-refresh"></i>
-      </button>
-    </div>
-
-    <div id="active-branch-pill" class="active-branch-badge" title="Rama activa actual">
-      <div class="branch-pulse-dot"></div>
-      <span class="branch-name">main</span>
     </div>
   </div>
 
   <!-- Repository Quick Stats Bar -->
   <div id="stats-bar" class="stats-bar">
-    <div class="stat-item">
+    <div class="stat-item" title="Total de commits en el repositorio">
+      <i class="codicon codicon-git-commit stat-icon"></i>
       <span class="stat-label" id="label-stat-commits">Commits:</span>
       <span class="stat-value" id="stat-total-commits">0</span>
     </div>
     <div class="stat-divider"></div>
-    <div class="stat-item">
+    <div class="stat-item" title="Colaboradores del repositorio">
+      <i class="codicon codicon-organization stat-icon"></i>
       <span class="stat-label" id="label-stat-contributors">Colaboradores:</span>
       <span class="stat-value" id="stat-total-contributors">0</span>
     </div>
     <div class="stat-divider"></div>
-    <div class="stat-item">
+    <div class="stat-item" title="Ramas locales y remotas">
+      <i class="codicon codicon-git-branch stat-icon"></i>
       <span class="stat-label" id="label-stat-branches">Ramas:</span>
       <span class="stat-value" id="stat-total-branches">0</span>
     </div>
     <div class="stat-divider"></div>
-    <div class="stat-item" id="stat-stash-item" style="cursor:pointer;" title="Ver Stashes guardados">
+    <div class="stat-item" id="stat-stash-item" style="cursor:pointer;" title="Stashes guardados (clic para abrir)">
+      <i class="codicon codicon-archive stat-icon"></i>
       <span class="stat-label" id="label-stat-stashes">Stashes:</span>
       <span class="stat-value" id="stat-total-stashes">0</span>
     </div>

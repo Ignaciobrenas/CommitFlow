@@ -196,6 +196,7 @@ export interface WebviewToExtensionMessage {
     | 'openExternal'
     | 'openCommit'
     | 'openDiff'
+    | 'openFullPanel'
     | 'filter';
   payload?: any;
 }

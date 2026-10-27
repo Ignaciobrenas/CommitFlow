@@ -57,8 +57,10 @@ let settings: CommitFlowSettings = {
 
 // DOM Elements
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
+const searchClearBtn = document.getElementById('search-clear-btn') as HTMLButtonElement | null;
 const branchSelect = document.getElementById('branch-select') as HTMLSelectElement;
 const btnCheckout = document.getElementById('btn-checkout') as HTMLButtonElement;
+const btnPopout = document.getElementById('btn-popout') as HTMLButtonElement | null;
 const btnStash = document.getElementById('btn-stash') as HTMLButtonElement;
 const btnPersonalStats = document.getElementById('btn-personal-stats') as HTMLButtonElement;
 const btnSettings = document.getElementById('btn-settings') as HTMLButtonElement;
@@ -69,6 +71,9 @@ const tableContainer = document.getElementById('graph-table-container') as HTMLE
 const drawer = document.getElementById('commit-drawer') as HTMLElement;
 const drawerCloseBtn = document.getElementById('drawer-close-btn') as HTMLButtonElement;
 const hoverPopover = document.getElementById('hover-popover') as HTMLElement;
+
+// Responsive Layout State
+let isCompactLayout = false;
 
 // Modals
 const stashModal = document.getElementById('stash-modal') as HTMLElement;
@@ -92,24 +97,32 @@ const statStashItem = document.getElementById('stat-stash-item');
 const topContributorsRow = document.getElementById('top-contributors-row');
 
 function getRowHeight(): number {
+  if (isCompactLayout) {
+    if (currentDensity === 'compact') return 34;
+    if (currentDensity === 'spacious') return 44;
+    return 38;
+  }
   if (currentDensity === 'compact') return 22;
   if (currentDensity === 'spacious') return 32;
   return 26;
 }
 
 function getLaneWidth(): number {
+  if (isCompactLayout) return 11;
   if (currentDensity === 'compact') return 14;
   if (currentDensity === 'spacious') return 18;
   return 16;
 }
 
 function getLaneOffset(): number {
+  if (isCompactLayout) return 8;
   if (currentDensity === 'compact') return 12;
   if (currentDensity === 'spacious') return 16;
   return 14;
 }
 
 function getNodeRadius(): number {
+  if (isCompactLayout) return 3;
   if (currentDensity === 'compact') return 3;
   if (currentDensity === 'spacious') return 5;
   return 4;
@@ -472,6 +485,7 @@ function renderGraph(): void {
 
   tableContainer.innerHTML = '';
   const fragment = document.createDocumentFragment();
+  const isCompact = isCompactLayout;
   const rowHeight = getRowHeight();
   const laneWidth = getLaneWidth();
   const laneOffset = getLaneOffset();
@@ -488,14 +502,14 @@ function renderGraph(): void {
     });
   });
 
-  const canvasCssWidth = Math.max(80, (maxLane + 1) * laneWidth + laneOffset * 2);
+  const canvasCssWidth = isCompact
+    ? Math.max(22, (maxLane + 1) * laneWidth + laneOffset * 2)
+    : Math.max(48, (maxLane + 1) * laneWidth + laneOffset * 2);
   const dpr = window.devicePixelRatio || 1;
 
   filteredNodes.forEach((node, index) => {
     const row = document.createElement('div');
-    row.className = `commit-row ${
-      selectedNode?.commit.hash === node.commit.hash ? 'selected' : ''
-    }`;
+    const isSelected = selectedNode?.commit.hash === node.commit.hash;
     row.style.height = `${rowHeight}px`;
 
     // 1. Canvas Column with High-DPI support
@@ -508,128 +522,212 @@ function renderGraph(): void {
     canvas.height = Math.round(rowHeight * dpr);
     canvas.style.width = `${canvasCssWidth}px`;
     canvas.style.height = `${rowHeight}px`;
-    drawCommitNode(canvas, node, index, dpr);
+    drawCommitNode(canvas, node, index, dpr, isCompact);
     canvasCol.appendChild(canvas);
 
-    // 2. Info Column (Refs + Subject)
-    const infoCol = document.createElement('div');
-    infoCol.className = 'commit-info-col';
+    if (isCompact) {
+      // Compact 2-line layout (Sidebar mode)
+      row.className = `commit-row compact-card ${isSelected ? 'selected' : ''}`;
 
-    node.commit.refs.forEach((ref) => {
-      const pill = document.createElement('span');
-      pill.className = `ref-pill ${
-        ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
-      }`;
-      const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
-      pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
-        ref.isHead ? `HEAD -> ${ref.name}` : ref.name
-      }`;
-      pill.addEventListener('mouseenter', (e) => {
+      const cardBody = document.createElement('div');
+      cardBody.className = 'commit-card-body';
+
+      // Line 1: Refs + Subject
+      const cardTop = document.createElement('div');
+      cardTop.className = 'commit-card-top';
+
+      node.commit.refs.forEach((ref) => {
+        const pill = document.createElement('span');
+        pill.className = `ref-pill ${
+          ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
+        }`;
+        const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
+        pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
+          ref.isHead ? `HEAD -> ${ref.name}` : ref.name
+        }`;
+        pill.title = ref.name;
+        pill.addEventListener('mouseenter', (e) => {
+          e.stopPropagation();
+          highlightBranchPath(node.commit.hash);
+        });
+        pill.addEventListener('mouseleave', () => {
+          clearBranchPathHighlight();
+        });
+        cardTop.appendChild(pill);
+      });
+
+      const subjectSpan = document.createElement('span');
+      subjectSpan.className = 'commit-subject';
+      subjectSpan.textContent = node.commit.subject;
+      subjectSpan.title = node.commit.subject;
+      cardTop.appendChild(subjectSpan);
+
+      // Line 2: Avatar + Author + Relative Time + Hash
+      const cardBottom = document.createElement('div');
+      cardBottom.className = 'commit-card-bottom';
+
+      const avatarImg = document.createElement('img');
+      avatarImg.className = 'card-author-avatar';
+      avatarImg.src = node.commit.author.avatarUrl;
+      avatarImg.alt = node.commit.author.name;
+      avatarImg.loading = 'lazy';
+      avatarImg.onerror = () => {
+        avatarImg.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="7" fill="%2338bdf8"/><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="%23fff" font-size="7" font-family="sans-serif">?</text></svg>`;
+      };
+
+      const authorName = document.createElement('span');
+      authorName.className = 'card-author-name';
+      authorName.textContent = node.commit.author.name;
+      authorName.title = `${node.commit.author.name} <${node.commit.author.email}>`;
+
+      const dot1 = document.createElement('span');
+      dot1.className = 'card-meta-dot';
+      dot1.textContent = '•';
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'card-time';
+      timeSpan.textContent = node.commit.author.relativeTime;
+
+      const dot2 = document.createElement('span');
+      dot2.className = 'card-meta-dot';
+      dot2.textContent = '•';
+
+      const hashSpan = document.createElement('span');
+      hashSpan.className = 'card-hash';
+      hashSpan.textContent = node.commit.shortHash;
+      hashSpan.title = `SHA: ${node.commit.hash}`;
+
+      cardBottom.appendChild(avatarImg);
+      cardBottom.appendChild(authorName);
+      cardBottom.appendChild(dot1);
+      cardBottom.appendChild(timeSpan);
+      cardBottom.appendChild(dot2);
+      cardBottom.appendChild(hashSpan);
+
+      cardBody.appendChild(cardTop);
+      cardBody.appendChild(cardBottom);
+
+      row.appendChild(canvasCol);
+      row.appendChild(cardBody);
+    } else {
+      // Standard multi-column layout (Wide mode)
+      row.className = `commit-row ${isSelected ? 'selected' : ''}`;
+
+      // 2. Info Column (Refs + Subject)
+      const infoCol = document.createElement('div');
+      infoCol.className = 'commit-info-col';
+
+      node.commit.refs.forEach((ref) => {
+        const pill = document.createElement('span');
+        pill.className = `ref-pill ${
+          ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
+        }`;
+        const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
+        pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
+          ref.isHead ? `HEAD -> ${ref.name}` : ref.name
+        }`;
+        pill.addEventListener('mouseenter', (e) => {
+          e.stopPropagation();
+          highlightBranchPath(node.commit.hash);
+        });
+        pill.addEventListener('mouseleave', () => {
+          clearBranchPathHighlight();
+        });
+        infoCol.appendChild(pill);
+      });
+
+      const subjectSpan = document.createElement('span');
+      subjectSpan.className = 'commit-subject';
+      subjectSpan.textContent = node.commit.subject;
+      subjectSpan.title = node.commit.subject;
+      infoCol.appendChild(subjectSpan);
+
+      // 3. Author Column
+      const authorCol = document.createElement('div');
+      authorCol.className = 'commit-author-col';
+      authorCol.title = `${node.commit.author.name} <${node.commit.author.email}>`;
+
+      const avatarImg = document.createElement('img');
+      avatarImg.className = 'author-avatar';
+      avatarImg.src = node.commit.author.avatarUrl;
+      avatarImg.alt = node.commit.author.name;
+      avatarImg.loading = 'lazy';
+      avatarImg.onerror = () => {
+        avatarImg.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="10" fill="%2338bdf8"/><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="%23fff" font-size="9" font-family="sans-serif">?</text></svg>`;
+      };
+
+      const authorNameSpan = document.createElement('span');
+      authorNameSpan.className = 'author-name';
+      authorNameSpan.textContent = node.commit.author.name;
+
+      authorCol.appendChild(avatarImg);
+      authorCol.appendChild(authorNameSpan);
+
+      // 4. Meta Column (Time & Hash)
+      const metaCol = document.createElement('div');
+      metaCol.className = 'commit-meta-col';
+
+      const timeSpan = document.createElement('span');
+      timeSpan.textContent = node.commit.author.relativeTime;
+
+      const hashBadge = document.createElement('span');
+      hashBadge.className = 'commit-hash-badge';
+      hashBadge.textContent = node.commit.shortHash;
+
+      metaCol.appendChild(timeSpan);
+      metaCol.appendChild(hashBadge);
+
+      // 5. Row Quick Actions Bar on Hover (GitLens signature)
+      const rowActions = document.createElement('div');
+      rowActions.className = 'row-actions-bar';
+
+      const btnCopySha = document.createElement('button');
+      btnCopySha.className = 'btn-row-action';
+      btnCopySha.title = tr('action.copySha');
+      btnCopySha.innerHTML = `<i class="codicon codicon-copy"></i>`;
+      btnCopySha.addEventListener('click', (e) => {
         e.stopPropagation();
-        highlightBranchPath(node.commit.hash);
+        vscode.postMessage({ command: 'copyToClipboard', payload: node.commit.hash });
       });
-      pill.addEventListener('mouseleave', () => {
-        clearBranchPathHighlight();
+
+      const btnCopyMsg = document.createElement('button');
+      btnCopyMsg.className = 'btn-row-action';
+      btnCopyMsg.title = tr('action.copyMsg');
+      btnCopyMsg.innerHTML = `<i class="codicon codicon-comment"></i>`;
+      btnCopyMsg.addEventListener('click', (e) => {
+        e.stopPropagation();
+        vscode.postMessage({ command: 'copyToClipboard', payload: node.commit.subject });
       });
-      infoCol.appendChild(pill);
-    });
 
-    const subjectSpan = document.createElement('span');
-    subjectSpan.className = 'commit-subject';
-    subjectSpan.textContent = node.commit.subject;
-    subjectSpan.title = node.commit.subject;
-    infoCol.appendChild(subjectSpan);
+      const btnCheckoutRow = document.createElement('button');
+      btnCheckoutRow.className = 'btn-row-action';
+      btnCheckoutRow.title = tr('action.checkout');
+      btnCheckoutRow.innerHTML = `<i class="codicon codicon-arrow-swap"></i>`;
+      btnCheckoutRow.addEventListener('click', (e) => {
+        e.stopPropagation();
+        vscode.postMessage({ command: 'checkoutCommit', payload: node.commit.hash });
+      });
 
-    // 3. Author Column
-    const authorCol = document.createElement('div');
-    authorCol.className = 'commit-author-col';
-    authorCol.title = `${node.commit.author.name} <${node.commit.author.email}>`;
+      const btnInspect = document.createElement('button');
+      btnInspect.className = 'btn-row-action';
+      btnInspect.title = tr('action.inspect');
+      btnInspect.innerHTML = `<i class="codicon codicon-eye"></i>`;
+      btnInspect.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectCommit(node);
+      });
 
-    const avatarImg = document.createElement('img');
-    avatarImg.className = 'author-avatar';
-    avatarImg.src = node.commit.author.avatarUrl;
-    avatarImg.alt = node.commit.author.name;
-    avatarImg.loading = 'lazy';
-    avatarImg.onerror = () => {
-      avatarImg.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="10" fill="%2338bdf8"/><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="%23fff" font-size="9" font-family="sans-serif">?</text></svg>`;
-    };
+      rowActions.appendChild(btnCopySha);
+      rowActions.appendChild(btnCopyMsg);
+      rowActions.appendChild(btnCheckoutRow);
+      rowActions.appendChild(btnInspect);
 
-    const authorNameSpan = document.createElement('span');
-    authorNameSpan.className = 'author-name';
-    authorNameSpan.textContent = node.commit.author.name;
-
-    authorCol.appendChild(avatarImg);
-    authorCol.appendChild(authorNameSpan);
-
-    // 4. Meta Column (Time & Hash)
-    const metaCol = document.createElement('div');
-    metaCol.className = 'commit-meta-col';
-
-    const timeSpan = document.createElement('span');
-    timeSpan.textContent = node.commit.author.relativeTime;
-
-    const hashBadge = document.createElement('span');
-    hashBadge.className = 'commit-hash-badge';
-    hashBadge.textContent = node.commit.shortHash;
-
-    metaCol.appendChild(timeSpan);
-    metaCol.appendChild(hashBadge);
-
-    // 5. Row Quick Actions Bar on Hover (GitLens signature)
-    const rowActions = document.createElement('div');
-    rowActions.className = 'row-actions-bar';
-
-    // Copy SHA
-    const btnCopySha = document.createElement('button');
-    btnCopySha.className = 'btn-row-action';
-    btnCopySha.title = tr('action.copySha');
-    btnCopySha.innerHTML = `<i class="codicon codicon-copy"></i>`;
-    btnCopySha.addEventListener('click', (e) => {
-      e.stopPropagation();
-      vscode.postMessage({ command: 'copyToClipboard', payload: node.commit.hash });
-    });
-
-    // Copy Message
-    const btnCopyMsg = document.createElement('button');
-    btnCopyMsg.className = 'btn-row-action';
-    btnCopyMsg.title = tr('action.copyMsg');
-    btnCopyMsg.innerHTML = `<i class="codicon codicon-comment"></i>`;
-    btnCopyMsg.addEventListener('click', (e) => {
-      e.stopPropagation();
-      vscode.postMessage({ command: 'copyToClipboard', payload: node.commit.subject });
-    });
-
-    // Checkout
-    const btnCheckoutRow = document.createElement('button');
-    btnCheckoutRow.className = 'btn-row-action';
-    btnCheckoutRow.title = tr('action.checkout');
-    btnCheckoutRow.innerHTML = `<i class="codicon codicon-arrow-swap"></i>`;
-    btnCheckoutRow.addEventListener('click', (e) => {
-      e.stopPropagation();
-      vscode.postMessage({ command: 'checkoutCommit', payload: node.commit.hash });
-    });
-
-    // Inspect
-    const btnInspect = document.createElement('button');
-    btnInspect.className = 'btn-row-action';
-    btnInspect.title = tr('action.inspect');
-    btnInspect.innerHTML = `<i class="codicon codicon-eye"></i>`;
-    btnInspect.addEventListener('click', (e) => {
-      e.stopPropagation();
-      selectCommit(node);
-    });
-
-    rowActions.appendChild(btnCopySha);
-    rowActions.appendChild(btnCopyMsg);
-    rowActions.appendChild(btnCheckoutRow);
-    rowActions.appendChild(btnInspect);
-
-    // Assemble row
-    row.appendChild(canvasCol);
-    row.appendChild(infoCol);
-    row.appendChild(authorCol);
-    row.appendChild(metaCol);
-    row.appendChild(rowActions);
+      row.appendChild(canvasCol);
+      row.appendChild(infoCol);
+      row.appendChild(authorCol);
+      row.appendChild(metaCol);
+      row.appendChild(rowActions);
+    }
 
     // Row Click & Hover handlers
     row.addEventListener('click', () => selectCommit(node));
@@ -652,7 +750,8 @@ function drawCommitNode(
   canvas: HTMLCanvasElement,
   node: GraphNode,
   index: number,
-  dpr = 1
+  dpr = 1,
+  isCompact = false
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -666,7 +765,7 @@ function drawCommitNode(
   const radius = getNodeRadius();
 
   const nodeX = laneOffset + node.lane * laneWidth;
-  const nodeY = rowHeight / 2;
+  const nodeY = isCompact ? 13 : rowHeight / 2;
   const isHead = node.commit.refs.some((r) => r.isHead);
 
   // 1. Draw Passing Lanes (Continuous straight lines from y=0 to y=rowHeight)
@@ -1404,6 +1503,19 @@ stashModalClose?.addEventListener('click', closeStashModal);
 btnSettings?.addEventListener('click', openSettingsModal);
 settingsModalClose?.addEventListener('click', closeSettingsModal);
 
+btnPopout?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'openFullPanel' });
+});
+
+searchClearBtn?.addEventListener('click', () => {
+  if (searchInput) {
+    searchInput.value = '';
+    searchQuery = '';
+    searchClearBtn.style.display = 'none';
+    applyFilters();
+  }
+});
+
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeDrawer();
@@ -1416,6 +1528,9 @@ window.addEventListener('keydown', (e) => {
 
 searchInput?.addEventListener('input', (e) => {
   searchQuery = (e.target as HTMLInputElement).value;
+  if (searchClearBtn) {
+    searchClearBtn.style.display = searchQuery ? 'flex' : 'none';
+  }
   applyFilters();
 });
 
@@ -1436,6 +1551,39 @@ btnCheckout?.addEventListener('click', () => {
 btnRefresh?.addEventListener('click', () => {
   vscode.postMessage({ command: 'requestData' });
 });
+
+// Real-Time Container & Sidebar Responsiveness
+function checkLayoutMode(): void {
+  const width = document.body.clientWidth;
+  const wasCompact = isCompactLayout;
+  isCompactLayout = width <= 360;
+
+  if (isCompactLayout) {
+    document.body.classList.add('layout-sidebar-compact');
+  } else {
+    document.body.classList.remove('layout-sidebar-compact');
+  }
+
+  if (width <= 240) {
+    document.body.classList.add('layout-nano');
+  } else {
+    document.body.classList.remove('layout-nano');
+  }
+
+  if (wasCompact !== isCompactLayout && allNodes.length > 0) {
+    renderTable();
+  }
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+  const resizeObserver = new ResizeObserver(() => {
+    checkLayoutMode();
+  });
+  resizeObserver.observe(document.body);
+} else {
+  window.addEventListener('resize', checkLayoutMode);
+}
+checkLayoutMode();
 
 // Initial handshake
 vscode.postMessage({ command: 'ready' });
