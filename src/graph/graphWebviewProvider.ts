@@ -135,15 +135,22 @@ export class GraphWebviewProvider
         .getConfiguration('branchify.graph')
         .get<number>('pageSize', 300);
 
-      const [commits, branches, currentBranch, githubRepo] = await Promise.all([
+      const [commits, branches, currentBranch, githubRepo, userIdentity] = await Promise.all([
         this.gitClient.getCommits(root, limit),
         this.gitClient.getBranches(root),
         this.gitClient.getCurrentBranch(root),
         this.gitClient.getGitHubRepoInfo(root),
+        this.gitClient.getUserIdentity(root),
       ]);
 
       const graphNodes = GraphLayout.compute(commits);
       const stats = this.gitClient.computeRepoStats(commits, branches);
+      const personalStats = this.gitClient.computePersonalStats(
+        commits,
+        branches,
+        userIdentity.name,
+        userIdentity.email
+      );
 
       const payload = {
         commits: graphNodes,
@@ -151,6 +158,7 @@ export class GraphWebviewProvider
         currentBranch,
         githubRepo,
         stats,
+        personalStats,
         totalCommits: graphNodes.length,
         hasMore: false,
       };
@@ -323,6 +331,10 @@ export class GraphWebviewProvider
         ⮂
       </button>
 
+      <button id="btn-personal-stats" class="btn-icon btn-personal-stats" title="View Your Personal Contribution & Branches Analytics">
+        👤 My Impact
+      </button>
+
       <button id="refresh-btn" class="btn-icon" title="Refresh Graph">
         ↻
       </button>
@@ -361,6 +373,22 @@ export class GraphWebviewProvider
       <div class="state-container">
         <div class="spinner"></div>
         <div>Initializing Branchify Graph...</div>
+      </div>
+    </div>
+
+    <!-- Personal Contribution & Branch Participation Modal -->
+    <div id="personal-modal" class="personal-modal-overlay">
+      <div class="personal-modal-card">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">📊</span>
+            <span style="font-weight: 700; font-size: 14px;">Your Personal Contribution & Branch Impact</span>
+          </div>
+          <button id="personal-modal-close" class="btn-icon" title="Close">✕</button>
+        </div>
+        <div id="personal-modal-body" class="personal-modal-body">
+          <!-- Dynamically populated -->
+        </div>
       </div>
     </div>
 

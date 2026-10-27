@@ -2,6 +2,7 @@ import * as cp from 'child_process';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
+  BranchParticipation,
   ContributorStat,
   GitAuthor,
   GitBlameLine,
@@ -9,6 +10,7 @@ import {
   GitCommit,
   GitFileChange,
   RepoStats,
+  UserPersonalStats,
 } from './types';
 import { GitParser } from './gitParser';
 import { AvatarService } from '../avatars/avatarService';
@@ -525,6 +527,115 @@ export class GitClient {
       totalContributors: authorCounts.size,
       activeBranches: branches.length,
       topContributors,
+    };
+  }
+
+  /**
+   * Retrieves the current user identity from git config
+   */
+  public async getUserIdentity(cwd: string): Promise<{ name: string; email: string }> {
+    let name = '';
+    let email = '';
+
+    try {
+      name = (await this.execute(['config', 'user.name'], cwd)).trim();
+    } catch {}
+
+    try {
+      email = (await this.execute(['config', 'user.email'], cwd)).trim();
+    } catch {}
+
+    return { name: name || 'You', email: email || '' };
+  }
+
+  /**
+   * Computes personalized contribution analytics for the current developer:
+   * - Total commits authored by you
+   * - Percentage of repository authored by you
+   * - All branches you participated in and personal commit counts per branch
+   */
+  public computePersonalStats(
+    commits: GitCommit[],
+    branches: GitBranch[],
+    userName: string,
+    userEmail: string
+  ): UserPersonalStats {
+    const targetEmail = userEmail.toLowerCase().trim();
+    const targetName = userName.toLowerCase().trim();
+
+    const isMe = (c: GitCommit) => {
+      const cEmail = c.author.email.toLowerCase().trim();
+      const cName = c.author.name.toLowerCase().trim();
+      if (targetEmail && cEmail === targetEmail) return true;
+      if (targetName && cName === targetName) return true;
+      return false;
+    };
+
+    const myCommits = commits.filter(isMe);
+    const myTotalCommits = myCommits.length;
+    const repoTotalCommits = commits.length;
+    const commitPercentage =
+      repoTotalCommits > 0 ? Math.round((myTotalCommits / repoTotalCommits) * 100) : 0;
+
+    // Build commit map for fast ancestor tracing
+    const commitMap = new Map<string, GitCommit>();
+    commits.forEach((c) => commitMap.set(c.hash, c));
+
+    const participatedBranches: BranchParticipation[] = [];
+
+    for (const b of branches) {
+      // Trace reachable commits from branch tip
+      const visited = new Set<string>();
+      const queue = [b.commitHash];
+      let branchTotal = 0;
+      let branchMine = 0;
+
+      while (queue.length > 0) {
+        const hash = queue.shift()!;
+        if (visited.has(hash)) continue;
+        visited.add(hash);
+
+        const commit = commitMap.get(hash);
+        if (commit) {
+          branchTotal++;
+          if (isMe(commit)) {
+            branchMine++;
+          }
+          for (const parent of commit.parentHashes) {
+            if (!visited.has(parent)) {
+              queue.push(parent);
+            }
+          }
+        }
+      }
+
+      // If you participated in this branch, record it
+      if (branchMine > 0 || isMe({ author: b.lastAuthor } as any)) {
+        const myCount = Math.max(branchMine, isMe({ author: b.lastAuthor } as any) ? 1 : 0);
+        const total = Math.max(branchTotal, 1);
+        participatedBranches.push({
+          branchName: b.name,
+          isCurrent: b.isCurrent,
+          isRemote: b.isRemote,
+          myCommitsCount: myCount,
+          totalCommitsCount: total,
+          percentage: Math.round((myCount / total) * 100),
+        });
+      }
+    }
+
+    // Sort branches by most commits by you
+    participatedBranches.sort((a, b) => b.myCommitsCount - a.myCommitsCount);
+
+    return {
+      userName,
+      userEmail,
+      avatarUrl: this.avatarService.getAvatarUrl(userName, userEmail),
+      myTotalCommits,
+      repoTotalCommits,
+      commitPercentage,
+      participatedBranchesCount: participatedBranches.length,
+      branches: participatedBranches,
     };
   }
 

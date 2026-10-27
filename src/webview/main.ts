@@ -76,6 +76,26 @@ interface GitHubRepoInfo {
   webUrl: string;
 }
 
+interface BranchParticipation {
+  branchName: string;
+  isCurrent: boolean;
+  isRemote: boolean;
+  myCommitsCount: number;
+  totalCommitsCount: number;
+  percentage: number;
+}
+
+interface UserPersonalStats {
+  userName: string;
+  userEmail: string;
+  avatarUrl: string;
+  myTotalCommits: number;
+  repoTotalCommits: number;
+  commitPercentage: number;
+  participatedBranchesCount: number;
+  branches: BranchParticipation[];
+}
+
 declare function acquireVsCodeApi(): {
   postMessage(msg: any): void;
   getState(): any;
@@ -89,6 +109,7 @@ let allNodes: GraphNode[] = [];
 let filteredNodes: GraphNode[] = [];
 let branches: GitBranch[] = [];
 let repoStats: RepoStats | null = null;
+let personalStats: UserPersonalStats | null = null;
 let githubRepo: GitHubRepoInfo | null = null;
 let currentBranchName = '';
 let selectedNode: GraphNode | null = null;
@@ -100,10 +121,16 @@ const searchInput = document.getElementById('search-input') as HTMLInputElement;
 const branchSelect = document.getElementById('branch-select') as HTMLSelectElement;
 const btnCheckout = document.getElementById('btn-checkout') as HTMLButtonElement;
 const refreshBtn = document.getElementById('refresh-btn') as HTMLButtonElement;
+const btnPersonalStats = document.getElementById('btn-personal-stats') as HTMLButtonElement;
 const activeBranchPill = document.getElementById('active-branch-pill') as HTMLElement;
 const tableContainer = document.getElementById('graph-table-container') as HTMLElement;
 const drawer = document.getElementById('commit-drawer') as HTMLElement;
 const drawerCloseBtn = document.getElementById('drawer-close-btn') as HTMLButtonElement;
+
+// Personal Modal DOM Elements
+const personalModal = document.getElementById('personal-modal') as HTMLElement;
+const personalModalClose = document.getElementById('personal-modal-close') as HTMLButtonElement;
+const personalModalBody = document.getElementById('personal-modal-body') as HTMLElement;
 
 // Stats DOM Elements
 const statTotalCommits = document.getElementById('stat-total-commits');
@@ -125,6 +152,7 @@ window.addEventListener('message', (event) => {
       branches = message.payload.branches || [];
       currentBranchName = message.payload.currentBranch || '';
       repoStats = message.payload.stats || null;
+      personalStats = message.payload.personalStats || null;
       githubRepo = message.payload.githubRepo || null;
       updateStatsBar();
       updateBranchesDropdown();
@@ -156,6 +184,33 @@ function updateStatsBar(): void {
   if (statTotalCommits) statTotalCommits.textContent = repoStats.totalCommits.toString();
   if (statTotalContributors) statTotalContributors.textContent = repoStats.totalContributors.toString();
   if (statTotalBranches) statTotalBranches.textContent = repoStats.activeBranches.toString();
+
+  // Highlight your personal contribution share in the stats bar
+  const existingMyPill = document.getElementById('my-personal-stats-pill');
+  if (existingMyPill) existingMyPill.remove();
+
+  if (personalStats) {
+    const statsBar = document.getElementById('stats-bar');
+    if (statsBar) {
+      const myPill = document.createElement('div');
+      myPill.id = 'my-personal-stats-pill';
+      myPill.style.display = 'flex';
+      myPill.style.alignItems = 'center';
+      myPill.style.gap = '5px';
+      myPill.style.cursor = 'pointer';
+      myPill.style.color = 'var(--accent-cyan)';
+      myPill.style.fontWeight = '600';
+      myPill.style.background = 'rgba(56, 189, 248, 0.1)';
+      myPill.style.border = '1px solid rgba(56, 189, 248, 0.25)';
+      myPill.style.borderRadius = '9999px';
+      myPill.style.padding = '1px 8px';
+      myPill.style.fontSize = '10px';
+      myPill.title = 'Click to view your personal branch & commit analytics';
+      myPill.innerHTML = `<span>👤 You:</span> <span>${personalStats.myTotalCommits} commits (${personalStats.commitPercentage}%)</span>`;
+      myPill.addEventListener('click', openPersonalModal);
+      statsBar.insertBefore(myPill, topContributorsRow);
+    }
+  }
 
   if (topContributorsRow && repoStats.topContributors) {
     topContributorsRow.innerHTML = '';
@@ -581,13 +636,120 @@ function closeDrawer(): void {
     .forEach((r) => r.classList.remove('selected'));
 }
 
+function openPersonalModal(): void {
+  if (!personalModal || !personalModalBody) return;
+
+  if (!personalStats) {
+    personalModalBody.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted);">No contribution metrics available yet.</div>`;
+    personalModal.classList.add('open');
+    return;
+  }
+
+  const {
+    userName,
+    userEmail,
+    avatarUrl,
+    myTotalCommits,
+    repoTotalCommits,
+    commitPercentage,
+    participatedBranchesCount,
+    branches: myBranches,
+  } = personalStats;
+
+  personalModalBody.innerHTML = `
+    <!-- User Hero Banner -->
+    <div class="personal-hero-banner">
+      <img class="personal-hero-avatar" src="${avatarUrl}" alt="${userName}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'52\\' height=\\'52\\'><circle cx=\\'26\\' cy=\\'26\\' r=\\'26\\' fill=\\'%2338bdf8\\'/><text x=\\'50%\\' y=\\'54%\\' text-anchor=\\'middle\\' dominant-baseline=\\'middle\\' fill=\\'%23fff\\' font-size=\\'20\\' font-family=\\'sans-serif\\'>?</text></svg>'" />
+      <div>
+        <div class="personal-hero-name">${userName}</div>
+        <div class="personal-hero-email">${userEmail || 'Configured via Git'}</div>
+        <div class="personal-hero-badge">Verified Contributor</div>
+      </div>
+    </div>
+
+    <!-- Metrics Grid -->
+    <div class="personal-metrics-grid">
+      <div class="metric-card">
+        <div class="metric-num">${myTotalCommits}</div>
+        <div class="metric-sub">Your Commits (${commitPercentage}%)</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-num">${repoTotalCommits}</div>
+        <div class="metric-sub">Total Repo Commits</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-num">${participatedBranchesCount}</div>
+        <div class="metric-sub">Branches Involved</div>
+      </div>
+    </div>
+
+    <!-- Branch Participation Chart -->
+    <div>
+      <div class="section-title" style="margin-bottom: 10px;">
+        <span>Your Participation by Branch</span>
+        <span style="font-size:11px; color:var(--accent-cyan);">${myBranches.length} Active</span>
+      </div>
+      <div class="branch-bars-container">
+        ${
+          myBranches.length === 0
+            ? '<div style="color:var(--text-muted); font-size:12px; padding:8px;">No branch contributions detected yet.</div>'
+            : myBranches
+                .map(
+                  (b) => `
+          <div class="branch-bar-row" data-branch="${b.branchName}" style="cursor:pointer;" title="Click to filter graph by ${b.branchName}">
+            <div class="branch-bar-header">
+              <span class="branch-bar-name">
+                <span>${b.isCurrent ? '● ' : '🌿 '}</span>
+                <span>${b.branchName}</span>
+                ${b.isCurrent ? '<span class="status-badge status-A" style="font-size:9px;">HEAD</span>' : ''}
+              </span>
+              <span class="branch-bar-stats">
+                <strong>${b.myCommitsCount}</strong> / ${b.totalCommitsCount} commits (${b.percentage}%)
+              </span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" style="width: ${Math.max(b.percentage, 6)}%;"></div>
+            </div>
+          </div>
+        `
+                )
+                .join('')
+        }
+      </div>
+    </div>
+  `;
+
+  personalModalBody.querySelectorAll('.branch-bar-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const branch = row.getAttribute('data-branch');
+      if (branch && branchSelect) {
+        branchSelect.value = branch;
+        selectedBranchFilter = branch;
+        applyFilters();
+        closePersonalModal();
+      }
+    });
+  });
+
+  personalModal.classList.add('open');
+}
+
+function closePersonalModal(): void {
+  personalModal?.classList.remove('open');
+}
+
 // Drawer Close
 drawerCloseBtn?.addEventListener('click', closeDrawer);
 
-// Escape key closes drawer
+// Personal Modal Triggers
+btnPersonalStats?.addEventListener('click', openPersonalModal);
+personalModalClose?.addEventListener('click', closePersonalModal);
+
+// Escape key closes drawer and modal
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeDrawer();
+    closePersonalModal();
   }
 });
 

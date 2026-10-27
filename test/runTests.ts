@@ -232,4 +232,38 @@ assert.strictEqual(nullBlame, null, 'Empty blame output should return null');
 
 console.log('  ✔ Edge cases and fault tolerance tests passed!');
 
-console.log('\n🎉 ALL 8 BRANCHIFY TEST SUITES PASSED WITH 100% SUCCESS!\n');
+// 9. Test Personal Stats & Branch Participation calculation
+console.log('\n▶ Testing Personal Stats & Branch Participation calculation...');
+const mockBranches = [
+  {
+    name: 'main',
+    fullName: 'refs/heads/main',
+    isRemote: false,
+    isCurrent: true,
+    commitHash: 'commit3',
+    lastAuthor: mockCommits[0].author,
+  },
+  {
+    name: 'feature',
+    fullName: 'refs/heads/feature',
+    isRemote: false,
+    isCurrent: false,
+    commitHash: 'commit1-branch',
+    lastAuthor: mockCommits[1].author,
+  },
+];
+
+const myPersonalStats = gitClient.computePersonalStats(
+  mockCommits,
+  mockBranches,
+  'Ignacio',
+  'ignacio@test.com'
+);
+assert.strictEqual(myPersonalStats.myTotalCommits, 3);
+assert.strictEqual(myPersonalStats.commitPercentage, 75);
+assert.ok(myPersonalStats.branches.length >= 1, 'Should find branches with personal commits');
+assert.strictEqual(myPersonalStats.branches[0].branchName, 'main');
+assert.strictEqual(myPersonalStats.branches[0].myCommitsCount, 3);
+console.log('  ✔ Personal Stats tests passed!');
+
+console.log('\n🎉 ALL 9 BRANCHIFY TEST SUITES PASSED WITH 100% SUCCESS!\n');

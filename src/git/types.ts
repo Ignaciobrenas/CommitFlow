@@ -92,12 +92,33 @@ export interface GitHubRepoInfo {
   webUrl: string;
 }
 
+export interface BranchParticipation {
+  branchName: string;
+  isCurrent: boolean;
+  isRemote: boolean;
+  myCommitsCount: number;
+  totalCommitsCount: number;
+  percentage: number;
+}
+
+export interface UserPersonalStats {
+  userName: string;
+  userEmail: string;
+  avatarUrl: string;
+  myTotalCommits: number;
+  repoTotalCommits: number;
+  commitPercentage: number;
+  participatedBranchesCount: number;
+  branches: BranchParticipation[];
+}
+
 export interface GraphDataPayload {
   commits: GraphNode[];
   branches: GitBranch[];
   currentBranch?: string;
   githubRepo?: GitHubRepoInfo | null;
   stats: RepoStats;
+  personalStats?: UserPersonalStats;
   totalCommits: number;
   hasMore: boolean;
 }
