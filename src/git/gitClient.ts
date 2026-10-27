@@ -1,14 +1,23 @@
 import * as cp from 'child_process';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { GitAuthor, GitBlameLine, GitBranch, GitCommit } from './types';
+import {
+  ContributorStat,
+  GitAuthor,
+  GitBlameLine,
+  GitBranch,
+  GitCommit,
+  GitFileChange,
+  RepoStats,
+} from './types';
 import { GitParser } from './gitParser';
 import { AvatarService } from '../avatars/avatarService';
+import { LruCache } from '../utils/lruCache';
 
 export class GitClient {
   private static instance: GitClient;
   private readonly avatarService = AvatarService.getInstance();
-  private readonly blameCache = new Map<string, GitBlameLine>();
+  private readonly blameCache = new LruCache<string, GitBlameLine>(500);
 
   public static getInstance(): GitClient {
     if (!GitClient.instance) {
@@ -62,7 +71,13 @@ export class GitClient {
         if (code === 0) {
           resolve(stdout);
         } else {
-          reject(new Error(`Git command failed [code ${code}]: ${stderr.trim() || stdout.trim()}`));
+          reject(
+            new Error(
+              `Git command failed [code ${code}]: ${
+                stderr.trim() || stdout.trim()
+              }`
+            )
+          );
         }
       });
     });
@@ -78,7 +93,10 @@ export class GitClient {
     }
 
     try {
-      const output = await this.execute(['rev-parse', '--show-toplevel'], targetDir);
+      const output = await this.execute(
+        ['rev-parse', '--show-toplevel'],
+        targetDir
+      );
       return output.trim();
     } catch {
       return null;
@@ -93,7 +111,8 @@ export class GitClient {
     limit = 300,
     skip = 0
   ): Promise<GitCommit[]> {
-    const format = '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%ct%x1f%D%x1f%s%x1f%b%x1e';
+    const format =
+      '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%ct%x1f%D%x1f%s%x1f%b%x1e';
     const args = [
       'log',
       '--all',
@@ -145,7 +164,6 @@ export class GitClient {
       const authorEmail = (authorEmailRaw || '').replace(/^<|>$/g, '').trim();
       const authorDate = new Date(parseInt(authorDateRaw, 10) * 1000);
 
-      // Parse ahead / behind numbers
       let ahead = 0;
       let behind = 0;
       if (track) {
@@ -184,7 +202,10 @@ export class GitClient {
    */
   public async getCurrentBranch(cwd: string): Promise<string> {
     try {
-      const output = await this.execute(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+      const output = await this.execute(
+        ['rev-parse', '--abbrev-ref', 'HEAD'],
+        cwd
+      );
       return output.trim();
     } catch {
       return '';
@@ -202,6 +223,11 @@ export class GitClient {
     const cwd = path.dirname(filePath);
     const fileName = path.basename(filePath);
     const cacheKey = `${filePath}#${line}`;
+
+    const cached = this.blameCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
 
     const args = [
       'blame',
@@ -225,6 +251,13 @@ export class GitClient {
       }
       return null;
     }
+  }
+
+  /**
+   * Invalidates cached blame entries when a file is saved or changed
+   */
+  public invalidateBlameForFile(filePath: string): void {
+    this.blameCache.deleteMatching((key) => key.startsWith(filePath));
   }
 
   /**
@@ -254,7 +287,9 @@ export class GitClient {
       } else if (trimmed.startsWith('author ')) {
         authorName = trimmed.replace('author ', '');
       } else if (trimmed.startsWith('author-mail ')) {
-        authorEmail = trimmed.replace('author-mail ', '').replace(/^<|>$/g, '');
+        authorEmail = trimmed
+          .replace('author-mail ', '')
+          .replace(/^<|>$/g, '');
       } else if (trimmed.startsWith('author-time ')) {
         authorTime = parseInt(trimmed.replace('author-time ', ''), 10);
       } else if (trimmed.startsWith('summary ')) {
@@ -289,18 +324,94 @@ export class GitClient {
   }
 
   /**
-   * Retrieves files changed in a commit
+   * Retrieves detailed list of changed files for a commit (status: M, A, D, R)
    */
-  public async getCommitFiles(cwd: string, hash: string): Promise<string[]> {
+  public async getCommitFilesDetailed(
+    cwd: string,
+    hash: string
+  ): Promise<GitFileChange[]> {
     try {
       const output = await this.execute(
-        ['diff-tree', '--no-commit-id', '--name-only', '-r', hash],
+        ['diff-tree', '--no-commit-id', '--name-status', '-r', '-m', '--root', hash],
         cwd
       );
-      return output.split('\n').map((s) => s.trim()).filter(Boolean);
+
+      const lines = output.split('\n').filter((l) => l.trim().length > 0);
+      const changes: GitFileChange[] = [];
+
+      for (const line of lines) {
+        const parts = line.split(/\t+/);
+        if (parts.length < 2) continue;
+
+        const rawStatus = parts[0].trim();
+        const statusCode = (rawStatus[0] || 'M') as GitFileChange['status'];
+
+        if (statusCode === 'R' && parts.length >= 3) {
+          changes.push({
+            status: 'R',
+            oldPath: parts[1].trim(),
+            path: parts[2].trim(),
+          });
+        } else {
+          changes.push({
+            status: statusCode,
+            path: parts[1].trim(),
+          });
+        }
+      }
+
+      return changes;
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Computes repository statistics and top contributors
+   */
+  public computeRepoStats(
+    commits: GitCommit[],
+    branches: GitBranch[]
+  ): RepoStats {
+    const authorCounts = new Map<
+      string,
+      { name: string; email: string; avatarUrl: string; count: number }
+    >();
+
+    for (const commit of commits) {
+      const email = commit.author.email.toLowerCase().trim();
+      const existing = authorCounts.get(email);
+      if (existing) {
+        existing.count++;
+      } else {
+        authorCounts.set(email, {
+          name: commit.author.name,
+          email: commit.author.email,
+          avatarUrl: commit.author.avatarUrl,
+          count: 1,
+        });
+      }
+    }
+
+    const totalCommits = commits.length;
+    const sorted = Array.from(authorCounts.values()).sort(
+      (a, b) => b.count - a.count
+    );
+
+    const topContributors: ContributorStat[] = sorted.slice(0, 5).map((c) => ({
+      name: c.name,
+      email: c.email,
+      avatarUrl: c.avatarUrl,
+      commitsCount: c.count,
+      percentage: totalCommits > 0 ? Math.round((c.count / totalCommits) * 100) : 0,
+    }));
+
+    return {
+      totalCommits,
+      totalContributors: authorCounts.size,
+      activeBranches: branches.length,
+      topContributors,
+    };
   }
 
   /**

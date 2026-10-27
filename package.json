@@ -151,7 +151,7 @@
     "watch": "tsc -watch -p ./",
     "build": "node esbuild.js --production",
     "dev": "node esbuild.js --watch",
-    "test": "node -e \"require('esbuild').buildSync({entryPoints:['test/runTests.ts'],outfile:'dist/test.js',bundle:true,platform:'node'}); require('./dist/test.js')\"",
+    "test": "node -e \"require('esbuild').buildSync({entryPoints:['test/runTests.ts'],outfile:'dist/test.js',bundle:true,platform:'node',alias:{'vscode':'./test/vscodeMock.ts'}}); require('./dist/test.js')\"",
     "package": "vsce package"
   },
   "devDependencies": {

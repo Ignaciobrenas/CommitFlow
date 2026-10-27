@@ -1,15 +1,29 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { GitClient } from '../git/gitClient';
 import { GraphLayout } from './graphLayout';
-import { ExtensionToWebviewMessage, WebviewToExtensionMessage } from '../git/types';
+import { GitContentProvider } from '../git/gitContentProvider';
+import {
+  ExtensionToWebviewMessage,
+  WebviewToExtensionMessage,
+} from '../git/types';
 
-export class GraphWebviewProvider implements vscode.WebviewViewProvider {
+export class GraphWebviewProvider
+  implements vscode.WebviewViewProvider, vscode.Disposable
+{
   public static readonly viewType = 'branchify.graphView';
   private view?: vscode.WebviewView;
   private panel?: vscode.WebviewPanel;
   private readonly gitClient = GitClient.getInstance();
+  private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  constructor(private readonly extensionUri: vscode.Uri) {
+    // Watch for Git HEAD changes to auto-refresh when checking out branches
+    const watcher = vscode.workspace.createFileSystemWatcher('**/.git/HEAD');
+    watcher.onDidChange(() => this.refreshData(), this, this.disposables);
+    watcher.onDidCreate(() => this.refreshData(), this, this.disposables);
+    this.disposables.push(watcher);
+  }
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -57,7 +71,11 @@ export class GraphWebviewProvider implements vscode.WebviewViewProvider {
         }
       );
 
-      this.panel.iconPath = vscode.Uri.joinPath(this.extensionUri, 'resources', 'icon.png');
+      this.panel.iconPath = vscode.Uri.joinPath(
+        this.extensionUri,
+        'resources',
+        'icon.png'
+      );
       this.panel.webview.html = this.getHtmlForWebview(this.panel.webview);
       this.setupMessageListener(this.panel.webview);
 
@@ -108,11 +126,13 @@ export class GraphWebviewProvider implements vscode.WebviewViewProvider {
       ]);
 
       const graphNodes = GraphLayout.compute(commits);
+      const stats = this.gitClient.computeRepoStats(commits, branches);
 
       const payload = {
         commits: graphNodes,
         branches,
         currentBranch,
+        stats,
         totalCommits: graphNodes.length,
         hasMore: false,
       };
@@ -135,10 +155,31 @@ export class GraphWebviewProvider implements vscode.WebviewViewProvider {
 
   private setupMessageListener(webview: vscode.Webview): void {
     webview.onDidReceiveMessage(async (msg: WebviewToExtensionMessage) => {
+      const root = await this.gitClient.getRepoRoot();
+
       switch (msg.command) {
         case 'ready':
         case 'requestData':
           await this.refreshData();
+          break;
+
+        case 'requestCommitFiles':
+          if (root && msg.payload?.commitHash) {
+            const files = await this.gitClient.getCommitFilesDetailed(
+              root,
+              msg.payload.commitHash
+            );
+            webview.postMessage({
+              command: 'commitFiles',
+              payload: { commitHash: msg.payload.commitHash, files },
+            } as ExtensionToWebviewMessage);
+          }
+          break;
+
+        case 'openDiff':
+          if (root && msg.payload) {
+            await this.openFileDiff(root, msg.payload);
+          }
           break;
 
         case 'copyToClipboard':
@@ -149,21 +190,66 @@ export class GraphWebviewProvider implements vscode.WebviewViewProvider {
           break;
 
         case 'checkoutBranch':
-          if (msg.payload) {
-            const root = await this.gitClient.getRepoRoot();
-            if (root) {
-              try {
-                await this.gitClient.checkoutBranch(root, msg.payload);
-                vscode.window.showInformationMessage(`Switched to branch: ${msg.payload}`);
-                await this.refreshData();
-              } catch (e: any) {
-                vscode.window.showErrorMessage(`Checkout failed: ${e.message}`);
-              }
+          if (msg.payload && root) {
+            try {
+              await this.gitClient.checkoutBranch(root, msg.payload);
+              vscode.window.showInformationMessage(
+                `Switched to branch: ${msg.payload}`
+              );
+              await this.refreshData();
+            } catch (e: any) {
+              vscode.window.showErrorMessage(`Checkout failed: ${e.message}`);
             }
           }
           break;
       }
     });
+  }
+
+  /**
+   * Opens the native VS Code diff editor for a specific commit and file
+   */
+  private async openFileDiff(
+    root: string,
+    payload: {
+      commitHash: string;
+      filePath: string;
+      status: 'A' | 'M' | 'D' | 'R' | 'C' | 'U';
+    }
+  ): Promise<void> {
+    const { commitHash, filePath, status } = payload;
+    const baseName = path.basename(filePath);
+
+    let leftUri: vscode.Uri;
+    let rightUri: vscode.Uri;
+    let title: string;
+
+    if (status === 'A') {
+      leftUri = GitContentProvider.createUri('EMPTY', filePath, root);
+      rightUri = GitContentProvider.createUri(commitHash, filePath, root);
+      title = `${baseName} (Added in ${commitHash.slice(0, 7)})`;
+    } else if (status === 'D') {
+      leftUri = GitContentProvider.createUri(`${commitHash}~1`, filePath, root);
+      rightUri = GitContentProvider.createUri('EMPTY', filePath, root);
+      title = `${baseName} (Deleted in ${commitHash.slice(0, 7)})`;
+    } else {
+      leftUri = GitContentProvider.createUri(`${commitHash}~1`, filePath, root);
+      rightUri = GitContentProvider.createUri(commitHash, filePath, root);
+      title = `${baseName} (${commitHash.slice(0, 7)} vs Parent)`;
+    }
+
+    try {
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        leftUri,
+        rightUri,
+        title
+      );
+    } catch (err: any) {
+      vscode.window.showErrorMessage(
+        `Unable to open diff for ${filePath}: ${err.message}`
+      );
+    }
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
@@ -201,18 +287,44 @@ export class GraphWebviewProvider implements vscode.WebviewViewProvider {
         <input type="text" id="search-input" class="search-input" placeholder="Search commits, authors, hashes..." />
       </div>
 
-      <select id="branch-select" class="branch-select">
+      <select id="branch-select" class="branch-select" title="Filter by Branch">
         <option value="all">All Branches</option>
       </select>
+
+      <button id="btn-checkout" class="btn-icon" title="Checkout Selected Branch">
+        ⮂
+      </button>
 
       <button id="refresh-btn" class="btn-icon" title="Refresh Graph">
         ↻
       </button>
     </div>
 
-    <div id="active-branch-pill" class="active-branch-badge">
+    <div id="active-branch-pill" class="active-branch-badge" title="Current Active Branch">
       <div class="branch-pulse-dot"></div>
       <span class="branch-name">main</span>
+    </div>
+  </div>
+
+  <!-- Repository Quick Stats Bar -->
+  <div id="stats-bar" class="stats-bar">
+    <div class="stat-item">
+      <span class="stat-label">Commits:</span>
+      <span class="stat-value" id="stat-total-commits">0</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-label">Contributors:</span>
+      <span class="stat-value" id="stat-total-contributors">0</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-label">Branches:</span>
+      <span class="stat-value" id="stat-total-branches">0</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="top-contributors-row" id="top-contributors-row">
+      <!-- Avatars of top contributors injected here -->
     </div>
   </div>
 
@@ -227,7 +339,7 @@ export class GraphWebviewProvider implements vscode.WebviewViewProvider {
     <!-- Slide-in Commit Inspector Drawer -->
     <div id="commit-drawer" class="commit-drawer">
       <div class="drawer-header">
-        <span style="font-weight: 600; font-size: 13px;">Commit Details</span>
+        <span style="font-weight: 600; font-size: 13px;">Commit Details & Diffs</span>
         <button id="drawer-close-btn" class="btn-icon" title="Close Drawer">✕</button>
       </div>
       <div id="drawer-body" class="drawer-body">
@@ -240,11 +352,16 @@ export class GraphWebviewProvider implements vscode.WebviewViewProvider {
 </body>
 </html>`;
   }
+
+  public dispose(): void {
+    vscode.Disposable.from(...this.disposables).dispose();
+  }
 }
 
 function getNonce(): string {
   let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const possible =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   for (let i = 0; i < 32; i++) {
     text += possible.charAt(Math.floor(Math.random() * possible.length));
   }

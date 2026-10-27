@@ -29,6 +29,18 @@ export class BlameController implements vscode.Disposable {
       this.disposables
     );
 
+    // Invalidate blame cache on file save and refresh
+    vscode.workspace.onDidSaveTextDocument(
+      (doc) => {
+        this.gitClient.invalidateBlameForFile(doc.uri.fsPath);
+        if (vscode.window.activeTextEditor?.document === doc) {
+          this.triggerUpdate(vscode.window.activeTextEditor);
+        }
+      },
+      null,
+      this.disposables
+    );
+
     vscode.workspace.onDidChangeConfiguration(
       (e) => {
         if (e.affectsConfiguration('branchify.inlineBlame')) {

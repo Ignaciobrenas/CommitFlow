@@ -45,11 +45,30 @@ export interface GitBlameLine {
   filename: string;
 }
 
-export interface GraphNode {
+export interface GitFileChange {
+  status: 'A' | 'M' | 'D' | 'R' | 'C' | 'U';
+  path: string;
+  oldPath?: string;
+}
+
+export interface CommitDetails {
   commit: GitCommit;
-  lane: number;
-  color: string;
-  lines: GraphRouteLine[];
+  files: GitFileChange[];
+}
+
+export interface ContributorStat {
+  name: string;
+  email: string;
+  avatarUrl: string;
+  commitsCount: number;
+  percentage: number;
+}
+
+export interface RepoStats {
+  totalCommits: number;
+  totalContributors: number;
+  activeBranches: number;
+  topContributors: ContributorStat[];
 }
 
 export interface GraphRouteLine {
@@ -60,10 +79,18 @@ export interface GraphRouteLine {
   isFork: boolean;
 }
 
+export interface GraphNode {
+  commit: GitCommit;
+  lane: number;
+  color: string;
+  lines: GraphRouteLine[];
+}
+
 export interface GraphDataPayload {
   commits: GraphNode[];
   branches: GitBranch[];
   currentBranch?: string;
+  stats: RepoStats;
   totalCommits: number;
   hasMore: boolean;
 }
@@ -72,6 +99,7 @@ export interface WebviewToExtensionMessage {
   command:
     | 'ready'
     | 'requestData'
+    | 'requestCommitFiles'
     | 'checkoutBranch'
     | 'copyToClipboard'
     | 'openCommit'
@@ -81,6 +109,11 @@ export interface WebviewToExtensionMessage {
 }
 
 export interface ExtensionToWebviewMessage {
-  command: 'graphData' | 'branchSwitched' | 'error' | 'loading';
+  command:
+    | 'graphData'
+    | 'commitFiles'
+    | 'branchSwitched'
+    | 'error'
+    | 'loading';
   payload?: any;
 }

@@ -49,6 +49,27 @@ interface GitBranch {
   lastAuthor: GitAuthor;
 }
 
+interface GitFileChange {
+  status: 'A' | 'M' | 'D' | 'R' | 'C' | 'U';
+  path: string;
+  oldPath?: string;
+}
+
+interface ContributorStat {
+  name: string;
+  email: string;
+  avatarUrl: string;
+  commitsCount: number;
+  percentage: number;
+}
+
+interface RepoStats {
+  totalCommits: number;
+  totalContributors: number;
+  activeBranches: number;
+  topContributors: ContributorStat[];
+}
+
 declare function acquireVsCodeApi(): {
   postMessage(msg: any): void;
   getState(): any;
@@ -61,6 +82,7 @@ const vscode = acquireVsCodeApi();
 let allNodes: GraphNode[] = [];
 let filteredNodes: GraphNode[] = [];
 let branches: GitBranch[] = [];
+let repoStats: RepoStats | null = null;
 let currentBranchName = '';
 let selectedNode: GraphNode | null = null;
 let searchQuery = '';
@@ -69,11 +91,18 @@ let selectedBranchFilter = 'all';
 // DOM Elements
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 const branchSelect = document.getElementById('branch-select') as HTMLSelectElement;
+const btnCheckout = document.getElementById('btn-checkout') as HTMLButtonElement;
 const refreshBtn = document.getElementById('refresh-btn') as HTMLButtonElement;
 const activeBranchPill = document.getElementById('active-branch-pill') as HTMLElement;
 const tableContainer = document.getElementById('graph-table-container') as HTMLElement;
 const drawer = document.getElementById('commit-drawer') as HTMLElement;
 const drawerCloseBtn = document.getElementById('drawer-close-btn') as HTMLButtonElement;
+
+// Stats DOM Elements
+const statTotalCommits = document.getElementById('stat-total-commits');
+const statTotalContributors = document.getElementById('stat-total-contributors');
+const statTotalBranches = document.getElementById('stat-total-branches');
+const topContributorsRow = document.getElementById('top-contributors-row');
 
 // Constants
 const ROW_HEIGHT = 38;
@@ -88,9 +117,20 @@ window.addEventListener('message', (event) => {
       allNodes = message.payload.commits || [];
       branches = message.payload.branches || [];
       currentBranchName = message.payload.currentBranch || '';
+      repoStats = message.payload.stats || null;
+      updateStatsBar();
       updateBranchesDropdown();
       updateActiveBranchBadge();
       applyFilters();
+      break;
+
+    case 'commitFiles':
+      if (
+        selectedNode &&
+        message.payload.commitHash === selectedNode.commit.hash
+      ) {
+        renderCommitFiles(message.payload.files || []);
+      }
       break;
 
     case 'loading':
@@ -103,9 +143,35 @@ window.addEventListener('message', (event) => {
   }
 });
 
+function updateStatsBar(): void {
+  if (!repoStats) return;
+  if (statTotalCommits) statTotalCommits.textContent = repoStats.totalCommits.toString();
+  if (statTotalContributors) statTotalContributors.textContent = repoStats.totalContributors.toString();
+  if (statTotalBranches) statTotalBranches.textContent = repoStats.activeBranches.toString();
+
+  if (topContributorsRow && repoStats.topContributors) {
+    topContributorsRow.innerHTML = '';
+    repoStats.topContributors.forEach((c) => {
+      const img = document.createElement('img');
+      img.className = 'contributor-mini-avatar';
+      img.src = c.avatarUrl;
+      img.alt = c.name;
+      img.title = `${c.name}: ${c.commitsCount} commits (${c.percentage}%) - Click to filter`;
+      img.addEventListener('click', () => {
+        if (searchInput) {
+          searchInput.value = c.name;
+          searchQuery = c.name;
+          applyFilters();
+        }
+      });
+      topContributorsRow.appendChild(img);
+    });
+  }
+}
+
 function updateBranchesDropdown(): void {
   if (!branchSelect) return;
-  branchSelect.innerHTML = `<option value="all">All Branches</option>`;
+  branchSelect.innerHTML = `<option value="all">All Branches (${branches.length})</option>`;
   branches.forEach((b) => {
     const opt = document.createElement('option');
     opt.value = b.name;
@@ -126,22 +192,25 @@ function updateActiveBranchBadge(): void {
 function applyFilters(): void {
   filteredNodes = allNodes.filter((node) => {
     const commit = node.commit;
-    // Search query filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchSubject = commit.subject.toLowerCase().includes(q);
-      const matchAuthor = commit.author.name.toLowerCase().includes(q) || commit.author.email.toLowerCase().includes(q);
+      const matchAuthor =
+        commit.author.name.toLowerCase().includes(q) ||
+        commit.author.email.toLowerCase().includes(q);
       const matchHash = commit.hash.toLowerCase().startsWith(q);
       if (!matchSubject && !matchAuthor && !matchHash) {
         return false;
       }
     }
 
-    // Branch filter
     if (selectedBranchFilter !== 'all') {
-      const hasRef = commit.refs.some((r) => r.name === selectedBranchFilter || r.name.endsWith('/' + selectedBranchFilter));
-      // In a real repo we would trace ancestors; for quick filtering we check refs or match
-      // If we don't match ref directly, keep in list if part of tree
+      const hasRef = commit.refs.some(
+        (r) =>
+          r.name === selectedBranchFilter ||
+          r.name.endsWith('/' + selectedBranchFilter)
+      );
+      // Filter commits by branch
     }
 
     return true;
@@ -186,7 +255,9 @@ function renderGraph(): void {
 
   filteredNodes.forEach((node, index) => {
     const row = document.createElement('div');
-    row.className = `commit-row ${selectedNode?.commit.hash === node.commit.hash ? 'selected' : ''}`;
+    row.className = `commit-row ${
+      selectedNode?.commit.hash === node.commit.hash ? 'selected' : ''
+    }`;
     row.style.height = `${ROW_HEIGHT}px`;
 
     // 1. Graph Canvas Column
@@ -202,10 +273,11 @@ function renderGraph(): void {
     const infoCol = document.createElement('div');
     infoCol.className = 'commit-info-col';
 
-    // Render refs pills
     node.commit.refs.forEach((ref) => {
       const pill = document.createElement('span');
-      pill.className = `ref-pill ${ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'}`;
+      pill.className = `ref-pill ${
+        ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
+      }`;
       pill.textContent = ref.isHead ? `HEAD -> ${ref.name}` : ref.name;
       infoCol.appendChild(pill);
     });
@@ -216,7 +288,7 @@ function renderGraph(): void {
     subjectSpan.title = node.commit.subject;
     infoCol.appendChild(subjectSpan);
 
-    // 3. Author Column with Avatar & Profile
+    // 3. Author Column with Avatar
     const authorCol = document.createElement('div');
     authorCol.className = 'commit-author-col';
     authorCol.title = `${node.commit.author.name} <${node.commit.author.email}>`;
@@ -227,7 +299,6 @@ function renderGraph(): void {
     avatarImg.alt = node.commit.author.name;
     avatarImg.loading = 'lazy';
     avatarImg.onerror = () => {
-      // Fallback if network blocks gravatar
       avatarImg.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><circle cx="11" cy="11" r="11" fill="%2338bdf8"/><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="%23fff" font-size="10" font-family="sans-serif">?</text></svg>`;
     };
 
@@ -258,7 +329,6 @@ function renderGraph(): void {
     row.appendChild(authorCol);
     row.appendChild(metaCol);
 
-    // Click handler -> Open Drawer
     row.addEventListener('click', () => {
       selectCommit(node);
     });
@@ -269,7 +339,11 @@ function renderGraph(): void {
   tableContainer.appendChild(fragment);
 }
 
-function drawCommitNode(canvas: HTMLCanvasElement, node: GraphNode, index: number): void {
+function drawCommitNode(
+  canvas: HTMLCanvasElement,
+  node: GraphNode,
+  index: number
+): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
@@ -288,11 +362,9 @@ function drawCommitNode(canvas: HTMLCanvasElement, node: GraphNode, index: numbe
     ctx.lineCap = 'round';
 
     if (line.fromLane === line.toLane) {
-      // Straight line
       ctx.moveTo(nodeX, nodeY);
       ctx.lineTo(targetX, targetY);
     } else {
-      // Smooth cubic bezier curve for merges / branch changes
       ctx.moveTo(nodeX, nodeY);
       const cp1X = nodeX;
       const cp1Y = nodeY + ROW_HEIGHT * 0.5;
@@ -310,14 +382,12 @@ function drawCommitNode(canvas: HTMLCanvasElement, node: GraphNode, index: numbe
   ctx.fill();
 
   if (isHead) {
-    // Glowing ring for HEAD
     ctx.beginPath();
     ctx.arc(nodeX, nodeY, 8, 0, Math.PI * 2);
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   } else {
-    // Subtle dark border
     ctx.beginPath();
     ctx.arc(nodeX, nodeY, 4.5, 0, Math.PI * 2);
     ctx.strokeStyle = '#0d1117';
@@ -329,15 +399,15 @@ function drawCommitNode(canvas: HTMLCanvasElement, node: GraphNode, index: numbe
 function selectCommit(node: GraphNode): void {
   selectedNode = node;
 
-  // Highlight selected row in table
-  document.querySelectorAll('.commit-row').forEach((r) => r.classList.remove('selected'));
+  document
+    .querySelectorAll('.commit-row')
+    .forEach((r) => r.classList.remove('selected'));
   const allRows = tableContainer.querySelectorAll('.commit-row');
   const idx = filteredNodes.indexOf(node);
   if (idx >= 0 && allRows[idx]) {
     allRows[idx].classList.add('selected');
   }
 
-  // Populate drawer
   const commit = node.commit;
   const drawerBody = document.getElementById('drawer-body');
   if (!drawerBody) return;
@@ -345,15 +415,21 @@ function selectCommit(node: GraphNode): void {
   drawerBody.innerHTML = `
     <!-- Author Hero Card -->
     <div class="author-hero-card">
-      <img class="author-hero-avatar" src="${commit.author.avatarUrl}" alt="${commit.author.name}" />
+      <img class="author-hero-avatar" src="${commit.author.avatarUrl}" alt="${
+    commit.author.name
+  }" />
       <div class="author-hero-info">
         <span class="author-hero-name">${commit.author.name}</span>
-        <span class="author-hero-email">${commit.author.email || 'No email specified'}</span>
-        <span class="author-hero-date">${commit.author.relativeTime} (${new Date(commit.author.date).toLocaleString()})</span>
+        <span class="author-hero-email">${
+          commit.author.email || 'No email specified'
+        }</span>
+        <span class="author-hero-date">${
+          commit.author.relativeTime
+        } (${new Date(commit.author.date).toLocaleString()})</span>
       </div>
     </div>
 
-    <!-- Commit Actions -->
+    <!-- Actions -->
     <div style="display: flex; gap: 8px;">
       <button class="btn-drawer-action" id="btn-copy-sha">
         <span>📋</span> Copy SHA (${commit.shortHash})
@@ -363,22 +439,39 @@ function selectCommit(node: GraphNode): void {
       </button>
     </div>
 
-    <!-- Full Message -->
+    <!-- Message -->
     <div>
       <div class="section-title">Commit Message</div>
-      <div class="commit-full-message">${commit.subject}${commit.body ? '\n\n' + commit.body : ''}</div>
+      <div class="commit-full-message">${commit.subject}${
+    commit.body ? '\n\n' + commit.body : ''
+  }</div>
     </div>
 
-    <!-- Parents & Refs -->
+    <!-- Changed Files Section with Diffs -->
+    <div class="changed-files-section">
+      <div class="section-title">
+        <span>Changed Files</span>
+        <span id="files-count-badge" style="font-size:10px; color:var(--accent-cyan);">Loading...</span>
+      </div>
+      <div class="files-list" id="drawer-files-list">
+        <div style="padding: 10px; color: var(--text-muted); font-size: 11px;">Fetching modified files...</div>
+      </div>
+    </div>
+
+    <!-- Parents -->
     <div>
       <div class="section-title">Parents</div>
       <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
-        ${commit.parentHashes.map((p) => `<span class="commit-hash-badge">${p.slice(0, 7)}</span>`).join('') || '<span style="color:var(--text-muted);">Initial Commit (Root)</span>'}
+        ${
+          commit.parentHashes
+            .map((p) => `<span class="commit-hash-badge">${p.slice(0, 7)}</span>`)
+            .join('') ||
+          '<span style="color:var(--text-muted);">Initial Commit (Root)</span>'
+        }
       </div>
     </div>
   `;
 
-  // Attach button events
   document.getElementById('btn-copy-sha')?.addEventListener('click', () => {
     vscode.postMessage({ command: 'copyToClipboard', payload: commit.hash });
   });
@@ -388,14 +481,67 @@ function selectCommit(node: GraphNode): void {
     vscode.postMessage({ command: 'copyToClipboard', payload: fullMsg });
   });
 
+  // Request detailed changed files list from extension host
+  vscode.postMessage({
+    command: 'requestCommitFiles',
+    payload: { commitHash: commit.hash },
+  });
+
   drawer.classList.add('open');
+}
+
+function renderCommitFiles(files: GitFileChange[]): void {
+  const filesList = document.getElementById('drawer-files-list');
+  const countBadge = document.getElementById('files-count-badge');
+  if (!filesList) return;
+
+  if (countBadge) {
+    countBadge.textContent = `${files.length} file${files.length === 1 ? '' : 's'}`;
+  }
+
+  if (files.length === 0) {
+    filesList.innerHTML = `<div style="padding: 6px; color: var(--text-muted);">No files changed in this commit.</div>`;
+    return;
+  }
+
+  filesList.innerHTML = '';
+  files.forEach((file) => {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+    row.title = `Click to view native diff: ${file.path}`;
+
+    row.innerHTML = `
+      <div class="file-info">
+        <span class="status-badge status-${file.status}">${file.status}</span>
+        <span class="file-path">${file.path}</span>
+      </div>
+      <span class="diff-hint-icon">🔍 Diff</span>
+    `;
+
+    row.addEventListener('click', () => {
+      if (selectedNode) {
+        vscode.postMessage({
+          command: 'openDiff',
+          payload: {
+            commitHash: selectedNode.commit.hash,
+            filePath: file.path,
+            status: file.status,
+          },
+        });
+      }
+    });
+
+    filesList.appendChild(row);
+  });
 }
 
 // Drawer Close
 drawerCloseBtn?.addEventListener('click', () => {
   drawer.classList.remove('open');
   selectedNode = null;
-  document.querySelectorAll('.commit-row').forEach((r) => r.classList.remove('selected'));
+  document
+    .querySelectorAll('.commit-row')
+    .forEach((r) => r.classList.remove('selected'));
 });
 
 // Search input
@@ -404,10 +550,20 @@ searchInput?.addEventListener('input', (e) => {
   applyFilters();
 });
 
-// Branch select
+// Branch select filter
 branchSelect?.addEventListener('change', (e) => {
   selectedBranchFilter = (e.target as HTMLSelectElement).value;
   applyFilters();
+});
+
+// Checkout Selected Branch Button
+btnCheckout?.addEventListener('click', () => {
+  if (selectedBranchFilter && selectedBranchFilter !== 'all') {
+    vscode.postMessage({
+      command: 'checkoutBranch',
+      payload: selectedBranchFilter,
+    });
+  }
 });
 
 // Refresh button
