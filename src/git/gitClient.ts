@@ -134,7 +134,7 @@ export class GitClient {
    */
   public async getBranches(cwd: string): Promise<GitBranch[]> {
     const format =
-      '%(refname)%(refname:short)%00%(HEAD)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(authorname)%00%(authoremail)%00%(authordate:unix)';
+      '%(refname)%00%(refname:short)%00%(HEAD)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(authorname)%00%(authoremail)%00%(authordate:unix)';
     const output = await this.execute(
       ['for-each-ref', `--format=${format}`, 'refs/heads', 'refs/remotes'],
       cwd
@@ -145,12 +145,13 @@ export class GitClient {
 
     for (const line of lines) {
       const parts = line.split('\0');
-      if (parts.length < 8) {
+      if (parts.length < 9) {
         continue;
       }
 
       const [
         refname,
+        shortName,
         isHead,
         commitHash,
         upstream,
@@ -161,7 +162,7 @@ export class GitClient {
       ] = parts;
 
       const isRemote = refname.startsWith('refs/remotes/');
-      const name = refname.replace(/^refs\/(heads|remotes)\//, '');
+      const name = shortName.trim() || refname.replace(/^refs\/(heads|remotes)\//, '');
       const authorEmail = (authorEmailRaw || '').replace(/^<|>$/g, '').trim();
       const authorDate = new Date(parseInt(authorDateRaw, 10) * 1000);
 
