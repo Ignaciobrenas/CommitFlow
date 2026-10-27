@@ -266,4 +266,68 @@ assert.strictEqual(myPersonalStats.branches[0].branchName, 'main');
 assert.strictEqual(myPersonalStats.branches[0].myCommitsCount, 3);
 console.log('  ✔ Personal Stats tests passed!');
 
-console.log('\n🎉 ALL 9 BRANCHIFY TEST SUITES PASSED WITH 100% SUCCESS!\n');
+// 10. Test Internationalization (i18n)
+console.log('\n▶ Testing Internationalization Engine (i18n)...');
+const { t } = require('../src/i18n/locales');
+assert.strictEqual(t('app.name', 'es'), 'Branchify');
+assert.strictEqual(t('app.name', 'en'), 'Branchify');
+assert.strictEqual(t('toolbar.myImpact', 'es'), 'Mi Impacto');
+assert.strictEqual(t('toolbar.myImpact', 'en'), 'My Impact');
+assert.strictEqual(t('settings.title', 'es'), 'Ajustes de Branchify');
+assert.strictEqual(t('settings.title', 'en'), 'Branchify Settings');
+assert.strictEqual(t('blame.viewChanges', 'es'), 'Ver Cambios');
+assert.strictEqual(t('blame.viewChanges', 'en'), 'View Changes');
+// Fallback & auto detection
+assert.strictEqual(t('toolbar.searchPlaceholder', 'auto', 'es'), 'Buscar commits, autores, hashes...');
+assert.strictEqual(t('toolbar.searchPlaceholder', 'auto', 'en_US'), 'Search commits, authors, hashes...');
+console.log('  ✔ i18n tests passed!');
+
+// 11. Test Branchify MCP Server (Model Context Protocol)
+console.log('\n▶ Testing Branchify MCP Server...');
+const { BranchifyMcpServer } = require('../src/mcp/branchifyMcpServer');
+const mcpServer = new BranchifyMcpServer(process.cwd());
+assert.ok(mcpServer, 'Branchify MCP Server instance created');
+
+// Test initialize method
+const initResponse = mcpServer['handleJsonRpc']({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'initialize',
+  params: {},
+});
+initResponse.then((res: any) => {
+  assert.strictEqual(res.result.serverInfo.name, 'branchify-mcp');
+  assert.strictEqual(res.result.serverInfo.version, '0.2.0');
+});
+
+// Test tools/list method
+const toolsResponse = mcpServer['handleJsonRpc']({
+  jsonrpc: '2.0',
+  id: 2,
+  method: 'tools/list',
+  params: {},
+});
+toolsResponse.then((res: any) => {
+  const toolNames = res.result.tools.map((t: any) => t.name);
+  assert.ok(toolNames.includes('branchify_get_user_impact'));
+  assert.ok(toolNames.includes('branchify_get_active_context'));
+  assert.ok(toolNames.includes('branchify_get_commit_history'));
+  assert.ok(toolNames.includes('branchify_get_line_blame'));
+  assert.ok(toolNames.includes('branchify_get_repo_summary'));
+});
+
+// Test resources/list method
+const resResponse = mcpServer['handleJsonRpc']({
+  jsonrpc: '2.0',
+  id: 3,
+  method: 'resources/list',
+  params: {},
+});
+resResponse.then((res: any) => {
+  const uris = res.result.resources.map((r: any) => r.uri);
+  assert.ok(uris.includes('branchify://repo/user-context'));
+  assert.ok(uris.includes('branchify://repo/graph-summary'));
+});
+console.log('  ✔ MCP Server tests passed!');
+
+console.log('\n🎉 ALL 11 BRANCHIFY TEST SUITES PASSED WITH 100% SUCCESS!\n');

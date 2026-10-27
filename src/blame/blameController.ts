@@ -12,6 +12,11 @@ export class BlameController implements vscode.Disposable {
   private debounceTimer: NodeJS.Timeout | null = null;
   private cts: vscode.CancellationTokenSource | null = null;
   private isEnabled = true;
+  private currentBlame: GitBlameLine | null = null;
+
+  public getCurrentBlame(): GitBlameLine | null {
+    return this.currentBlame;
+  }
 
   constructor() {
     this.readConfiguration();
@@ -137,14 +142,17 @@ export class BlameController implements vscode.Disposable {
       }
 
       if (blame) {
+        this.currentBlame = blame;
         this.decorator.applyDecoration(editor, blame);
         this.statusBar.update(blame);
       } else {
+        this.currentBlame = null;
         this.decorator.clear(editor);
         this.statusBar.update(null);
       }
     } catch (err) {
       if (!(err instanceof vscode.CancellationError)) {
+        this.currentBlame = null;
         this.decorator.clear(editor);
         this.statusBar.update(null);
       }

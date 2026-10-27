@@ -18,6 +18,19 @@ async function build() {
     fs.copyFileSync(cssSrc, cssDest);
   }
 
+  // Copy @vscode/codicons assets to dist
+  const codiconDir = path.join(__dirname, 'node_modules', '@vscode', 'codicons', 'dist');
+  if (fs.existsSync(codiconDir)) {
+    const codiconCssSrc = path.join(codiconDir, 'codicon.css');
+    const codiconTtfSrc = path.join(codiconDir, 'codicon.ttf');
+    if (fs.existsSync(codiconCssSrc)) {
+      fs.copyFileSync(codiconCssSrc, path.join(distDir, 'codicon.css'));
+    }
+    if (fs.existsSync(codiconTtfSrc)) {
+      fs.copyFileSync(codiconTtfSrc, path.join(distDir, 'codicon.ttf'));
+    }
+  }
+
   // 1. Build Extension Host Bundle (Node.js)
   const extensionCtx = await esbuild.context({
     entryPoints: ['src/extension.ts'],
@@ -43,13 +56,27 @@ async function build() {
     minify: isProduction,
   });
 
+  // 3. Build Standalone MCP Server Bundle (Node.js)
+  const mcpCtx = await esbuild.context({
+    entryPoints: ['src/mcp/branchifyMcpServer.ts'],
+    bundle: true,
+    outfile: 'dist/mcp.js',
+    alias: { vscode: './test/vscodeMock.ts' },
+    format: 'cjs',
+    platform: 'node',
+    target: 'node18',
+    sourcemap: !isProduction,
+    minify: isProduction,
+  });
+
   if (isWatch) {
-    console.log('👀 Watching for changes in extension and webview...');
-    await Promise.all([extensionCtx.watch(), webviewCtx.watch()]);
+    console.log('👀 Watching for changes in extension, webview and mcp...');
+    await Promise.all([extensionCtx.watch(), webviewCtx.watch(), mcpCtx.watch()]);
   } else {
-    await Promise.all([extensionCtx.rebuild(), webviewCtx.rebuild()]);
+    await Promise.all([extensionCtx.rebuild(), webviewCtx.rebuild(), mcpCtx.rebuild()]);
     await extensionCtx.dispose();
     await webviewCtx.dispose();
+    await mcpCtx.dispose();
     console.log(`✅ Build complete! [Production: ${isProduction}]`);
   }
 }

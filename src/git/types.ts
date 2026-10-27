@@ -112,6 +112,21 @@ export interface UserPersonalStats {
   branches: BranchParticipation[];
 }
 
+export interface BranchifySettings {
+  language: 'auto' | 'es' | 'en';
+  density: 'compact' | 'comfortable' | 'spacious';
+  theme: 'auto' | 'dark' | 'light';
+  animations: boolean;
+  pageSize: number;
+  inlineBlameEnabled: boolean;
+  inlineBlameDelay: number;
+  avatarService: 'gravatar' | 'github' | 'initials';
+  autoFetch: boolean;
+  fetchIntervalMinutes: number;
+  notifyOnBranchMerge: boolean;
+  askBeforePull: boolean;
+}
+
 export interface GraphDataPayload {
   commits: GraphNode[];
   branches: GitBranch[];
@@ -119,6 +134,8 @@ export interface GraphDataPayload {
   githubRepo?: GitHubRepoInfo | null;
   stats: RepoStats;
   personalStats?: UserPersonalStats;
+  settings?: BranchifySettings;
+  systemLanguage?: string;
   totalCommits: number;
   hasMore: boolean;
 }
@@ -129,6 +146,11 @@ export interface WebviewToExtensionMessage {
     | 'requestData'
     | 'requestCommitFiles'
     | 'checkoutBranch'
+    | 'checkoutCommit'
+    | 'pullBranch'
+    | 'openFile'
+    | 'saveSettings'
+    | 'openSettings'
     | 'copyToClipboard'
     | 'openExternal'
     | 'openCommit'
@@ -141,7 +163,9 @@ export interface ExtensionToWebviewMessage {
   command:
     | 'graphData'
     | 'commitFiles'
+    | 'settingsUpdated'
     | 'branchSwitched'
+    | 'pullCompleted'
     | 'error'
     | 'loading';
   payload?: any;

@@ -1,22 +1,96 @@
 /* ==========================================================================
-   Branchify Modern Dark Cyber / Glassmorphic Theme (VS Code Integrated)
+   Branchify - Modern Adaptive Design System (Light/Dark, Responsive, Codicons)
    ========================================================================== */
 
+@import url('./codicon.css');
+
 :root {
+  /* VS Code Native Integration */
+  --vscode-font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+  --vscode-editor-font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+
+  /* Theme: Dark (Default) */
   --bg-primary: var(--vscode-editor-background, #0d1117);
   --bg-secondary: var(--vscode-sideBar-background, #161b22);
-  --bg-glass: rgba(255, 255, 255, 0.03);
-  --bg-hover: rgba(255, 255, 255, 0.06);
-  --bg-active: rgba(56, 189, 248, 0.12);
-  --border-subtle: rgba(255, 255, 255, 0.08);
+  --bg-tertiary: var(--vscode-editorGroupHeader-tabsBackground, #21262d);
+  --bg-glass: rgba(255, 255, 255, 0.04);
+  --bg-hover: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.07));
+  --bg-active: var(--vscode-list-activeSelectionBackground, rgba(56, 189, 248, 0.15));
+  --border-subtle: var(--vscode-widget-border, rgba(255, 255, 255, 0.08));
   --border-hover: rgba(56, 189, 248, 0.4);
   --text-primary: var(--vscode-editor-foreground, #e6edf3);
   --text-muted: var(--vscode-descriptionForeground, #8b949e);
+  --focus-ring: var(--vscode-focusBorder, #007fd4);
+
+  /* Branch Palette */
   --accent-cyan: #38bdf8;
   --accent-emerald: #10b981;
   --accent-amber: #f59e0b;
   --accent-violet: #8b5cf6;
-  --row-height: 38px;
+  --accent-rose: #f43f5e;
+  --accent-blue: #3b82f6;
+
+  /* Density Default: Comfortable */
+  --row-height: 26px;
+  --font-size-base: 12px;
+  --font-size-sm: 11px;
+  --font-size-xs: 10px;
+  --avatar-size: 20px;
+  --lane-width: 16px;
+  --lane-offset: 14px;
+}
+
+/* Light Theme Variables */
+body.theme-light,
+body.vscode-light:not(.theme-dark) {
+  --bg-primary: var(--vscode-editor-background, #ffffff);
+  --bg-secondary: var(--vscode-sideBar-background, #f6f8fa);
+  --bg-tertiary: var(--vscode-editorGroupHeader-tabsBackground, #eaeef2);
+  --bg-glass: rgba(0, 0, 0, 0.03);
+  --bg-hover: var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.05));
+  --bg-active: var(--vscode-list-activeSelectionBackground, rgba(9, 105, 218, 0.12));
+  --border-subtle: var(--vscode-widget-border, rgba(0, 0, 0, 0.09));
+  --border-hover: rgba(9, 105, 218, 0.4);
+  --text-primary: var(--vscode-editor-foreground, #24292f);
+  --text-muted: var(--vscode-descriptionForeground, #57606a);
+
+  --accent-cyan: #0969da;
+  --accent-emerald: #1a7f37;
+  --accent-amber: #9a6700;
+  --accent-violet: #8250df;
+  --accent-rose: #cf222e;
+  --accent-blue: #0969da;
+}
+
+/* Density Variants */
+body.density-compact {
+  --row-height: 22px;
+  --font-size-base: 11px;
+  --font-size-sm: 10px;
+  --font-size-xs: 9px;
+  --avatar-size: 18px;
+  --lane-width: 14px;
+  --lane-offset: 12px;
+}
+
+body.density-comfortable {
+  --row-height: 26px;
+  --font-size-base: 12px;
+  --font-size-sm: 11px;
+  --font-size-xs: 10px;
+  --avatar-size: 20px;
+  --lane-width: 16px;
+  --lane-offset: 14px;
+}
+
+body.density-spacious {
+  --row-height: 32px;
+  --font-size-base: 13px;
+  --font-size-sm: 12px;
+  --font-size-xs: 11px;
+  --avatar-size: 22px;
+  --lane-width: 18px;
+  --lane-offset: 16px;
 }
 
 * {
@@ -29,9 +103,10 @@
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  font-size: 13px;
-  overflow: hidden;
+  font-family: var(--vscode-font-family);
+  font-size: var(--font-size-base);
+  overflow-x: hidden;
+  overflow-y: hidden;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -39,154 +114,202 @@ body {
 
 /* Scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
+  background: rgba(125, 125, 125, 0.25);
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(125, 125, 125, 0.45);
 }
 
-/* Header & Controls */
+/* Header & Compact Toolbar */
 .header-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  padding: 4px 10px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-subtle);
-  gap: 12px;
+  gap: 8px;
   flex-shrink: 0;
+  min-height: 32px;
 }
 
 .brand-section {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-weight: 700;
-  font-size: 14px;
-  letter-spacing: -0.02em;
+  font-size: var(--font-size-base);
+  letter-spacing: -0.01em;
   color: var(--text-primary);
+  flex-shrink: 0;
+  user-select: none;
 }
 
 .brand-logo {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: contain;
 }
 
 .toolbar-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   flex: 1;
-  max-width: 600px;
+  max-width: 640px;
+  min-width: 0;
 }
 
 .search-input-wrapper {
   position: relative;
   flex: 1;
+  min-width: 90px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
 }
 
 .search-input {
   width: 100%;
   background: var(--bg-glass);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  padding: 5px 10px 5px 28px;
+  border-radius: 4px;
+  padding: 3px 6px 3px 24px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .search-input:focus {
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 0 1px var(--accent-cyan), 0 0 12px rgba(56, 189, 248, 0.2);
-}
-
-.search-icon {
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
-  pointer-events: none;
+  border-color: var(--focus-ring);
+  background: var(--bg-primary);
 }
 
 .branch-select {
   background: var(--bg-glass);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  padding: 5px 10px;
+  border-radius: 4px;
+  padding: 3px 6px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
   outline: none;
   cursor: pointer;
-  max-width: 180px;
+  max-width: 140px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
+.branch-select:focus {
+  border-color: var(--focus-ring);
+}
+
+/* Button & Icon Buttons */
 .btn-icon {
   background: transparent;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--text-primary);
-  padding: 5px 8px;
+  padding: 3px 6px;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  gap: 4px;
+  font-size: var(--font-size-sm);
+  transition: all 0.15s ease;
+  user-select: none;
+  flex-shrink: 0;
 }
 
 .btn-icon:hover {
   background: var(--bg-hover);
-  border-color: var(--accent-cyan);
+  border-color: var(--border-hover);
+}
+
+.btn-icon:active {
+  transform: scale(0.96);
 }
 
 .active-branch-badge {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  border: 1px solid rgba(16, 185, 129, 0.35);
   color: var(--accent-emerald);
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 9999px;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
 }
 
+/* Branch Beacon Pulse Animation */
 .branch-pulse-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background-color: var(--accent-emerald);
-  box-shadow: 0 0 8px var(--accent-emerald);
+  box-shadow: 0 0 6px var(--accent-emerald);
+  animation: branchBeacon 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes branchBeacon {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.15);
+    box-shadow: 0 0 0 5px rgba(16, 185, 129, 0);
+  }
 }
 
 /* Repository Stats Bar */
 .stats-bar {
   display: flex;
   align-items: center;
-  padding: 4px 16px;
-  background: rgba(0, 0, 0, 0.15);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  gap: 12px;
-  font-size: 11px;
+  padding: 2px 10px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+  gap: 10px;
+  font-size: var(--font-size-xs);
   flex-shrink: 0;
+  min-height: 22px;
+  overflow-x: hidden;
 }
 
 .stat-item {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .stat-label {
@@ -200,33 +323,34 @@ body {
 
 .stat-divider {
   width: 1px;
-  height: 12px;
-  background: rgba(255, 255, 255, 0.1);
+  height: 10px;
+  background: var(--border-subtle);
 }
 
 .top-contributors-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .contributor-mini-avatar {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--border-subtle);
   cursor: pointer;
   transition: transform 0.15s ease;
 }
 
 .contributor-mini-avatar:hover {
-  transform: scale(1.3);
+  transform: scale(1.35);
   z-index: 10;
   border-color: var(--accent-cyan);
 }
 
-/* Main Content Layout */
+/* Main Viewport & Table Container */
 .main-viewport {
   display: flex;
   flex: 1;
@@ -237,19 +361,22 @@ body {
 .graph-table-container {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
 }
 
-/* Graph Rows */
+/* Commit Row */
 .commit-row {
   display: flex;
   align-items: center;
   height: var(--row-height);
-  padding: 0 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  padding: 0 8px;
+  border-bottom: 1px solid rgba(125, 125, 125, 0.08);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.12s ease;
   user-select: none;
+  position: relative;
+  overflow: hidden;
 }
 
 .commit-row:hover {
@@ -263,7 +390,7 @@ body {
 
 /* Graph Canvas Column */
 .graph-canvas-col {
-  width: 120px;
+  width: 90px;
   height: var(--row-height);
   position: relative;
   flex-shrink: 0;
@@ -278,20 +405,22 @@ body {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  padding-right: 12px;
+  padding-right: 8px;
+  overflow: hidden;
 }
 
 .ref-pill {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
-  padding: 1px 7px;
-  border-radius: 4px;
+  padding: 0 5px;
+  border-radius: 3px;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  line-height: 16px;
 }
 
 .ref-pill.head {
@@ -303,13 +432,13 @@ body {
 .ref-pill.branch {
   background: rgba(139, 92, 246, 0.15);
   border: 1px solid var(--accent-violet);
-  color: #c4b5fd;
+  color: var(--accent-violet);
 }
 
 .ref-pill.tag {
   background: rgba(245, 158, 11, 0.15);
   border: 1px solid var(--accent-amber);
-  color: #fde68a;
+  color: var(--accent-amber);
 }
 
 .commit-subject {
@@ -317,15 +446,15 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-base);
 }
 
 /* Author Column */
 .commit-author-col {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 170px;
+  gap: 6px;
+  width: 140px;
   flex-shrink: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -333,57 +462,126 @@ body {
 }
 
 .author-avatar {
-  width: 22px;
-  height: 22px;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--border-subtle);
 }
 
 .author-name {
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Time & Hash Column */
+/* Meta Column (Time & Hash) */
 .commit-meta-col {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 140px;
+  gap: 8px;
+  width: 120px;
   justify-content: flex-end;
   flex-shrink: 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
 .commit-hash-badge {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-family: var(--vscode-editor-font-family);
+  background: var(--bg-glass);
+  padding: 1px 4px;
+  border-radius: 3px;
   border: 1px solid var(--border-subtle);
-  color: #93c5fd;
-  font-size: 11px;
+  color: var(--accent-cyan);
+  font-size: var(--font-size-xs);
+  letter-spacing: -0.02em;
 }
 
-/* Inspector Drawer (Commit Details & Diffs) */
+/* Row Quick Actions on Hover (GitLens signature) */
+.row-actions-bar {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%) translateX(8px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 1px 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  z-index: 20;
+}
+
+.commit-row:hover .row-actions-bar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+
+.btn-row-action {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.12s ease;
+}
+
+.btn-row-action:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Floating Hover Popover */
+.hover-popover {
+  position: absolute;
+  z-index: 100;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+  transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 320px;
+  font-size: var(--font-size-sm);
+}
+
+.hover-popover.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Commit Details Drawer */
 .commit-drawer {
   position: absolute;
   top: 0;
   right: 0;
-  width: 440px;
+  width: 420px;
+  max-width: 100%;
   height: 100%;
   background: var(--bg-secondary);
   border-left: 1px solid var(--border-subtle);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
   transform: translateX(100%);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 50;
 }
 
@@ -395,91 +593,64 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .drawer-body {
   flex: 1;
   overflow-y: auto;
-  padding: 18px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .author-hero-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: 10px;
+  padding: 10px;
   background: var(--bg-glass);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .author-hero-avatar {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  border: 2px solid var(--accent-cyan);
-}
-
-.author-hero-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.author-hero-name {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.author-hero-email {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.author-hero-date {
-  color: var(--accent-cyan);
-  font-size: 11px;
-  margin-top: 2px;
+  border: 1px solid var(--accent-cyan);
 }
 
 .commit-full-message {
-  padding: 12px;
+  padding: 10px;
   background: var(--bg-glass);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 1.5;
+  border-radius: 6px;
+  font-size: var(--font-size-base);
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.changed-files-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .section-title {
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 4px;
 }
 
 .files-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 240px;
+  gap: 3px;
+  max-height: 220px;
   overflow-y: auto;
 }
 
@@ -487,13 +658,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: var(--bg-glass);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 6px;
-  font-size: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.12s ease;
 }
 
 .file-row:hover {
@@ -501,162 +672,57 @@ body {
   border-color: var(--border-hover);
 }
 
-.file-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-}
-
 .status-badge {
   font-size: 10px;
   font-weight: 700;
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 3px;
-  font-family: monospace;
 }
 
-.status-badge.status-M {
-  background: rgba(56, 189, 248, 0.15);
-  color: var(--accent-cyan);
-}
+.status-M { color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+.status-A { color: #10b981; background: rgba(16, 185, 129, 0.12); }
+.status-D { color: #f43f5e; background: rgba(244, 63, 94, 0.12); }
+.status-R { color: #8b5cf6; background: rgba(139, 92, 246, 0.12); }
 
-.status-badge.status-A {
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--accent-emerald);
-}
-
-.status-badge.status-D {
-  background: rgba(244, 63, 94, 0.15);
-  color: #f43f5e;
-}
-
-.status-badge.status-R {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--accent-amber);
-}
-
-.file-path {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 11px;
-}
-
-.diff-hint-icon {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.file-row:hover .diff-hint-icon {
-  color: var(--accent-cyan);
-}
-
-.btn-drawer-action {
-  background: var(--bg-glass);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  color: var(--text-primary);
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.2s ease;
-}
-
-.btn-drawer-action:hover {
-  background: var(--accent-cyan);
-  color: #000;
-  border-color: var(--accent-cyan);
-}
-
-/* Empty State / Loading */
-.state-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 12px;
-  color: var(--text-muted);
-}
-
-.spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid rgba(56, 189, 248, 0.2);
-  border-top-color: var(--accent-cyan);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ==========================================================================
-   Personal Contributions & Branch Participation Modal Styles
-   ========================================================================== */
-
-.btn-personal-stats {
-  gap: 5px;
-  background: rgba(56, 189, 248, 0.08);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  color: var(--accent-cyan);
-  font-weight: 600;
-  padding: 4px 10px;
-}
-
-.btn-personal-stats:hover {
-  background: rgba(56, 189, 248, 0.18);
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
-}
-
-.personal-modal-overlay {
+/* Modals (Settings & Personal) */
+.modal-overlay {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
+  z-index: 100;
+  padding: 16px;
 }
 
-.personal-modal-overlay.open {
+.modal-overlay.open {
   opacity: 1;
   pointer-events: auto;
 }
 
-.personal-modal-card {
-  width: 90%;
-  max-width: 580px;
-  max-height: 85vh;
+.modal-card {
+  width: min(580px, 94vw);
+  max-height: 90vh;
   background: var(--bg-secondary);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.15);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  transform: scale(0.95);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  transform: scale(0.96);
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 
-.personal-modal-overlay.open .personal-modal-card {
+.modal-overlay.open .modal-card {
   transform: scale(1);
 }
 
@@ -664,154 +730,169 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.02);
 }
 
-.personal-modal-body {
-  padding: 20px;
+.modal-body {
+  padding: 16px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-}
-
-/* User Identity Banner */
-.personal-hero-banner {
-  display: flex;
-  align-items: center;
   gap: 16px;
-  padding: 14px 18px;
-  background: var(--bg-glass);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
 }
 
-.personal-hero-avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: 2px solid var(--accent-cyan);
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
+/* Settings Form Controls */
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
 }
 
-.personal-hero-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.personal-hero-email {
-  font-size: 12px;
+.settings-tab-btn {
+  background: transparent;
+  border: none;
   color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.personal-hero-badge {
-  display: inline-block;
-  font-size: 10px;
+.settings-tab-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-hover);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid var(--accent-emerald);
-  color: var(--accent-emerald);
-  padding: 2px 8px;
-  border-radius: 9999px;
-  margin-top: 4px;
 }
 
-/* Metric Gauges Grid */
-.personal-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+.settings-group {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
-.metric-card {
-  background: var(--bg-glass);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  transition: all 0.2s ease;
-}
-
-.metric-card:hover {
-  border-color: var(--accent-cyan);
-  background: var(--bg-hover);
-}
-
-.metric-num {
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--accent-cyan);
-  line-height: 1.2;
-}
-
-.metric-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 4px;
-}
-
-/* Branch Participation Bars */
-.branch-bars-container {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.branch-bar-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--bg-glass);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  padding: 8px 12px;
-  border-radius: 6px;
-  transition: border-color 0.15s ease;
-}
-
-.branch-bar-row:hover {
-  border-color: var(--border-hover);
-}
-
-.branch-bar-header {
+.setting-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  gap: 16px;
 }
 
-.branch-bar-name {
-  font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--text-primary);
+.setting-info {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.branch-bar-stats {
-  font-size: 11px;
+.setting-title {
+  font-weight: 600;
+  font-size: var(--font-size-base);
+}
+
+.setting-desc {
+  font-size: var(--font-size-xs);
   color: var(--text-muted);
 }
 
-.progress-track {
-  width: 100%;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-  overflow: hidden;
+.setting-control select,
+.setting-control input[type="number"] {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  outline: none;
 }
 
-.progress-fill {
-  height: 100%;
-  border-radius: 3px;
-  background: linear-gradient(90deg, #38bdf8, #8b5cf6);
-  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+.setting-control select:focus,
+.setting-control input:focus {
+  border-color: var(--focus-ring);
+}
+
+/* Toggle Switch UI */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(125, 125, 125, 0.3);
+  transition: 0.2s ease;
+  border-radius: 20px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s ease;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--accent-cyan);
+}
+
+input:checked + .slider:before {
+  transform: translateX(16px);
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 360px) {
+  .brand-section span {
+    display: none;
+  }
+  .commit-author-col span {
+    display: none;
+  }
+  .commit-author-col {
+    width: 24px;
+  }
+  .commit-drawer {
+    width: 100% !important;
+  }
+  .active-branch-badge {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 580px) {
+  .commit-drawer {
+    width: 100% !important;
+  }
+  .commit-author-col span {
+    display: none;
+  }
+  .commit-author-col {
+    width: 28px;
+  }
+  .stats-bar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 4px 8px;
+  }
 }

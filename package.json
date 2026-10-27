@@ -2,7 +2,7 @@
   "name": "branchify",
   "displayName": "Branchify - Git Graph & Deep Live Blame",
   "description": "High-performance interactive Git commit & branch graph visualizer, real-time deep inline blame with author avatars, and developer productivity tools.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "Ignaciobrenas",
   "icon": "resources/icon.png",
   "engines": {
@@ -36,29 +36,68 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "bin": {
+    "branchify-mcp": "./bin/branchify-mcp.js"
+  },
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "branchify.openGraph",
-        "title": "Open Commit & Branch Graph",
+        "title": "%branchify.command.openGraph%",
         "category": "Branchify",
         "icon": "$(git-branch)"
       },
       {
         "command": "branchify.toggleInlineBlame",
-        "title": "Toggle Live Inline Blame",
+        "title": "%branchify.command.toggleInlineBlame%",
         "category": "Branchify"
       },
       {
         "command": "branchify.showLineCommit",
-        "title": "Show Commit Details for Current Line",
+        "title": "%branchify.command.showLineCommit%",
         "category": "Branchify",
         "icon": "$(git-commit)"
       },
       {
+        "command": "branchify.openLineDiff",
+        "title": "%branchify.command.openLineDiff%",
+        "category": "Branchify",
+        "icon": "$(git-diff)"
+      },
+      {
+        "command": "branchify.openOnGitHub",
+        "title": "%branchify.command.openOnGitHub%",
+        "category": "Branchify",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "branchify.showPersonalStats",
+        "title": "%branchify.command.showPersonalStats%",
+        "category": "Branchify",
+        "icon": "$(graph-line)"
+      },
+      {
+        "command": "branchify.pullCurrentBranch",
+        "title": "%branchify.command.pullCurrentBranch%",
+        "category": "Branchify",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "branchify.fetchRemotes",
+        "title": "%branchify.command.fetchRemotes%",
+        "category": "Branchify",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "branchify.openSettings",
+        "title": "%branchify.command.openSettings%",
+        "category": "Branchify",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "branchify.refreshGraph",
-        "title": "Refresh Graph",
+        "title": "%branchify.command.refreshGraph%",
         "category": "Branchify",
         "icon": "$(refresh)"
       }
@@ -77,27 +116,37 @@
         {
           "type": "webview",
           "id": "branchify.graphView",
-          "name": "Commit & Branch Graph"
+          "name": "%branchify.view.graphView%"
         }
       ]
     },
     "configuration": {
-      "title": "Branchify",
+      "title": "%branchify.config.title%",
       "properties": {
+        "branchify.language": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "es",
+            "en"
+          ],
+          "default": "auto",
+          "description": "%branchify.config.language%"
+        },
         "branchify.inlineBlame.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Show author and commit information at the end of the current active line."
+          "description": "%branchify.config.inlineBlame.enabled%"
         },
         "branchify.inlineBlame.delay": {
           "type": "number",
           "default": 120,
-          "description": "Debounce delay (ms) before computing inline blame after cursor movement."
+          "description": "%branchify.config.inlineBlame.delay%"
         },
         "branchify.avatars.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable author profile picture and avatar resolution in hover and graph cards."
+          "description": "%branchify.config.avatars.enabled%"
         },
         "branchify.avatars.service": {
           "type": "string",
@@ -107,12 +156,57 @@
             "initials"
           ],
           "default": "gravatar",
-          "description": "Avatar provider to resolve author profile pictures by email."
+          "description": "%branchify.config.avatars.service%"
         },
         "branchify.graph.pageSize": {
           "type": "number",
           "default": 300,
-          "description": "Maximum number of commits loaded per page in the graph view."
+          "description": "%branchify.config.graph.pageSize%"
+        },
+        "branchify.graph.density": {
+          "type": "string",
+          "enum": [
+            "compact",
+            "comfortable",
+            "spacious"
+          ],
+          "default": "comfortable",
+          "description": "%branchify.config.graph.density%"
+        },
+        "branchify.graph.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "dark",
+            "light"
+          ],
+          "default": "auto",
+          "description": "%branchify.config.graph.theme%"
+        },
+        "branchify.graph.animations": {
+          "type": "boolean",
+          "default": true,
+          "description": "%branchify.config.graph.animations%"
+        },
+        "branchify.sync.autoFetch": {
+          "type": "boolean",
+          "default": true,
+          "description": "%branchify.config.sync.autoFetch%"
+        },
+        "branchify.sync.fetchIntervalMinutes": {
+          "type": "number",
+          "default": 5,
+          "description": "%branchify.config.sync.fetchIntervalMinutes%"
+        },
+        "branchify.sync.notifyOnBranchMerge": {
+          "type": "boolean",
+          "default": true,
+          "description": "%branchify.config.sync.notifyOnBranchMerge%"
+        },
+        "branchify.sync.askBeforePull": {
+          "type": "boolean",
+          "default": true,
+          "description": "%branchify.config.sync.askBeforePull%"
         }
       }
     },
@@ -152,6 +246,8 @@
     "build": "node esbuild.js --production",
     "dev": "node esbuild.js --watch",
     "test": "node -e \"require('esbuild').buildSync({entryPoints:['test/runTests.ts'],outfile:'dist/test.js',bundle:true,platform:'node',alias:{'vscode':'./test/vscodeMock.ts'}}); require('./dist/test.js')\"",
+    "test:live": "node -e \"require('esbuild').buildSync({entryPoints:['test/verifyLiveIntegration.ts'],outfile:'dist/verifyLive.js',bundle:true,platform:'node',alias:{'vscode':'./test/vscodeMock.ts'}}); require('./dist/verifyLive.js')\"",
+    "mcp": "node dist/mcp.js",
     "package": "vsce package"
   },
   "devDependencies": {
@@ -160,5 +256,8 @@
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.24.0",
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@vscode/codicons": "^0.0.46-24"
   }
 }

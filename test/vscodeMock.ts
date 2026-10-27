@@ -150,6 +150,18 @@ export class Disposable {
   }
 }
 
+export enum ConfigurationTarget {
+  Global = 1,
+  Workspace = 2,
+  WorkspaceFolder = 3,
+}
+
+export enum ProgressLocation {
+  SourceControl = 1,
+  Window = 10,
+  Notification = 15,
+}
+
 export class CancellationError extends Error {}
 
 export class CancellationTokenSource {
@@ -175,6 +187,8 @@ export default {
   StatusBarAlignment,
   EventEmitter,
   Disposable,
+  ConfigurationTarget,
+  ProgressLocation,
   CancellationError,
   CancellationTokenSource,
 };

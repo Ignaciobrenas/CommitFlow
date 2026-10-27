@@ -660,4 +660,91 @@ export class GitClient {
   public async checkoutBranch(cwd: string, branchName: string): Promise<void> {
     await this.execute(['checkout', branchName], cwd);
   }
+
+  /**
+   * Checkouts a specific commit hash (detached HEAD)
+   */
+  public async checkoutCommit(cwd: string, hash: string): Promise<void> {
+    await this.execute(['checkout', hash], cwd);
+  }
+
+  /**
+   * Pulls the latest commits for the current branch from its upstream tracking branch
+   */
+  public async pull(cwd: string): Promise<string> {
+    return await this.execute(['pull'], cwd);
+  }
+
+  /**
+   * Fetches latest refs from all remotes
+   */
+  public async fetch(cwd: string): Promise<string> {
+    try {
+      return await this.execute(['fetch', '--all', '--prune'], cwd);
+    } catch (e: any) {
+      return e.message || String(e);
+    }
+  }
+
+  /**
+   * Checks upstream sync status (ahead, behind, and if incoming commits contain merges)
+   */
+  public async getUpstreamStatus(
+    cwd: string
+  ): Promise<{ behind: number; ahead: number; hasMerge: boolean; upstreamBranch: string } | null> {
+    try {
+      const upstream = (
+        await this.execute(['rev-parse', '--abbrev-ref', '@{u}'], cwd)
+      ).trim();
+      if (!upstream) return null;
+
+      const counts = (
+        await this.execute(['rev-list', '--left-right', '--count', 'HEAD...@{u}'], cwd)
+      ).trim();
+      const [aheadStr, behindStr] = counts.split(/\s+/);
+      const ahead = parseInt(aheadStr, 10) || 0;
+      const behind = parseInt(behindStr, 10) || 0;
+
+      let hasMerge = false;
+      if (behind > 0) {
+        const mergeCheck = (
+          await this.execute(['rev-list', '--merges', '-1', 'HEAD..@{u}'], cwd)
+        ).trim();
+        hasMerge = mergeCheck.length > 0;
+      }
+
+      return { behind, ahead, hasMerge, upstreamBranch: upstream };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Retrieves uncommitted working tree changes (staged and unstaged)
+   */
+  public async getWorkingTreeChanges(cwd: string): Promise<GitFileChange[]> {
+    try {
+      const output = await this.execute(['status', '--porcelain=v1', '-u'], cwd);
+      const lines = output.split('\n').filter((l) => l.trim().length > 0);
+      const changes: GitFileChange[] = [];
+
+      for (const line of lines) {
+        if (line.length < 3) continue;
+        const code = line.slice(0, 2).trim();
+        const filePath = line.slice(3).trim();
+
+        let status: GitFileChange['status'] = 'M';
+        if (code.includes('?')) status = 'A';
+        else if (code.includes('A')) status = 'A';
+        else if (code.includes('D')) status = 'D';
+        else if (code.includes('R')) status = 'R';
+
+        changes.push({ status, path: filePath });
+      }
+
+      return changes;
+    } catch {
+      return [];
+    }
+  }
 }

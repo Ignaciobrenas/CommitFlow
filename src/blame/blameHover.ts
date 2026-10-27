@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GitClient } from '../git/gitClient';
+import { t, Language } from '../i18n/locales';
 
 export class BlameHoverProvider implements vscode.HoverProvider {
   private readonly gitClient = GitClient.getInstance();
@@ -26,31 +27,53 @@ export class BlameHoverProvider implements vscode.HoverProvider {
         return null;
       }
 
+      const config = vscode.workspace.getConfiguration('branchify');
+      const lang = config.get<Language>('language', 'auto');
+      const sysLang = vscode.env.language;
+
       const md = new vscode.MarkdownString();
       md.supportHtml = true;
       md.isTrusted = true;
 
-      // Author header with avatar
-      const avatarHtml = `<img src="${blame.author.avatarUrl}" width="24" height="24" style="border-radius:50%; vertical-align:middle; margin-right:8px;" />`;
-      md.appendMarkdown(`### ${avatarHtml} **${blame.author.name}**\n\n`);
+      const isUncommitted = blame.commitHash === '0000000' || /^0+$/.test(blame.commitHash);
 
+      // 1. Author header with avatar
+      const avatarHtml = `<img src="${blame.author.avatarUrl}" width="20" height="20" style="border-radius:50%; vertical-align:middle; margin-right:6px;" />`;
+      md.appendMarkdown(`${avatarHtml} **${blame.author.name}** `);
+
+      if (blame.author.email) {
+        md.appendMarkdown(`<span style="color:var(--vscode-descriptionForeground); font-size:11px;">&lt;${blame.author.email}&gt;</span> `);
+      }
+
+      md.appendMarkdown(`\n\n`);
       md.appendMarkdown(
-        `*${blame.author.email ? `<${blame.author.email}> • ` : ''}${blame.author.relativeTime} (${blame.author.date.toLocaleDateString()})*\n\n`
+        `<span style="color:var(--vscode-descriptionForeground); font-size:11px;">$(clock) ${blame.author.relativeTime} &bull; ${blame.author.date.toLocaleString()} &bull; ${t('blame.line', lang, sysLang)} ${blame.line}</span>\n\n`
       );
 
-      md.appendMarkdown(`> ${blame.summary}\n\n`);
+      // 2. Commit Message
+      md.appendMarkdown(`> **${blame.summary}**\n\n`);
       md.appendMarkdown(`---\n\n`);
-      md.appendMarkdown(`**Commit:** \`${blame.shortHash}\` &nbsp;&nbsp; `);
 
-      const openArgs = encodeURIComponent(JSON.stringify([blame.commitHash]));
-      md.appendMarkdown(
-        `[$(git-branch) View in Branchify](command:branchify.openGraph?${openArgs} "Open commit in Branchify Graph") &nbsp;|&nbsp; `
-      );
+      // 3. GitLens-style Action Toolbar
+      if (!isUncommitted) {
+        md.appendMarkdown(`**Commit:** \`${blame.shortHash}\` &nbsp;&nbsp;\n\n`);
 
-      const copyArgs = encodeURIComponent(JSON.stringify([blame.commitHash]));
-      md.appendMarkdown(
-        `[$(clippy) Copy SHA](command:branchify.copyHash?${copyArgs} "Copy Commit SHA")\n`
-      );
+        const openArgs = encodeURIComponent(JSON.stringify([blame.commitHash]));
+        const copyArgs = encodeURIComponent(JSON.stringify([blame.commitHash]));
+
+        md.appendMarkdown(
+          `[$(git-diff) ${t('blame.viewChanges', lang, sysLang)}](command:branchify.openLineDiff "View Diff with previous revision") &nbsp;|&nbsp; ` +
+            `[$(git-branch) ${t('blame.inspectInGraph', lang, sysLang)}](command:branchify.openGraph?${openArgs} "Open commit in Branchify Graph") &nbsp;|&nbsp; ` +
+            `[$(clippy) ${t('blame.copySha', lang, sysLang)}](command:branchify.copyHash?${copyArgs} "Copy Commit SHA") &nbsp;|&nbsp; ` +
+            `[$(link-external) ${t('blame.openRemote', lang, sysLang)}](command:branchify.openOnGitHub?${openArgs} "Open commit on GitHub / remote")\n`
+        );
+      } else {
+        md.appendMarkdown(`*$(edit) ${t('blame.uncommitted', lang, sysLang)}*\n\n`);
+        md.appendMarkdown(
+          `[$(git-diff) ${t('blame.compareWithHead', lang, sysLang)}](command:branchify.openLineDiff "Compare with HEAD") &nbsp;|&nbsp; ` +
+            `[$(git-branch) ${t('blame.openGraph', lang, sysLang)}](command:branchify.openGraph "Open Branchify Graph")\n`
+        );
+      }
 
       const lineRange = document.lineAt(position.line).range;
       return new vscode.Hover(md, lineRange);

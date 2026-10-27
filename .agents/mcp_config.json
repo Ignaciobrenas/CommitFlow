@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "branchify": {
+      "command": "node",
+      "args": ["bin/branchify-mcp.js"],
+      "description": "Branchify Git Graph & User Impact Context Provider"
+    }
+  }
+}

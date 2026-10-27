@@ -4,6 +4,7 @@ import { GitClient } from '../git/gitClient';
 import { GraphLayout } from './graphLayout';
 import { GitContentProvider } from '../git/gitContentProvider';
 import {
+  BranchifySettings,
   ExtensionToWebviewMessage,
   WebviewToExtensionMessage,
 } from '../git/types';
@@ -98,6 +99,28 @@ export class GraphWebviewProvider
     this.refreshData();
   }
 
+  public showPersonalModal(): void {
+    const activeWebviews = [this.view?.webview, this.panel?.webview].filter(
+      (w): w is vscode.Webview => w !== undefined
+    );
+    activeWebviews.forEach((w) => {
+      try {
+        w.postMessage({ command: 'openPersonalModal' });
+      } catch {}
+    });
+  }
+
+  public showSettingsModal(): void {
+    const activeWebviews = [this.view?.webview, this.panel?.webview].filter(
+      (w): w is vscode.Webview => w !== undefined
+    );
+    activeWebviews.forEach((w) => {
+      try {
+        w.postMessage({ command: 'openSettingsModal' });
+      } catch {}
+    });
+  }
+
   /**
    * Refreshes the Git data and sends to all active webviews
    */
@@ -131,17 +154,17 @@ export class GraphWebviewProvider
         return;
       }
 
-      const limit = vscode.workspace
-        .getConfiguration('branchify.graph')
-        .get<number>('pageSize', 300);
+      const config = vscode.workspace.getConfiguration('branchify');
+      const limit = config.get<number>('graph.pageSize', 300);
 
-      const [commits, branches, currentBranch, githubRepo, userIdentity] = await Promise.all([
-        this.gitClient.getCommits(root, limit),
-        this.gitClient.getBranches(root),
-        this.gitClient.getCurrentBranch(root),
-        this.gitClient.getGitHubRepoInfo(root),
-        this.gitClient.getUserIdentity(root),
-      ]);
+      const [commits, branches, currentBranch, githubRepo, userIdentity] =
+        await Promise.all([
+          this.gitClient.getCommits(root, limit),
+          this.gitClient.getBranches(root),
+          this.gitClient.getCurrentBranch(root),
+          this.gitClient.getGitHubRepoInfo(root),
+          this.gitClient.getUserIdentity(root),
+        ]);
 
       const graphNodes = GraphLayout.compute(commits);
       const stats = this.gitClient.computeRepoStats(commits, branches);
@@ -152,6 +175,21 @@ export class GraphWebviewProvider
         userIdentity.email
       );
 
+      const settingsPayload: BranchifySettings = {
+        language: config.get<'auto' | 'es' | 'en'>('language', 'auto'),
+        density: config.get<'compact' | 'comfortable' | 'spacious'>('graph.density', 'comfortable'),
+        theme: config.get<'auto' | 'dark' | 'light'>('graph.theme', 'auto'),
+        animations: config.get<boolean>('graph.animations', true),
+        pageSize: limit,
+        inlineBlameEnabled: config.get<boolean>('inlineBlame.enabled', true),
+        inlineBlameDelay: config.get<number>('inlineBlame.delay', 120),
+        avatarService: config.get<'gravatar' | 'github' | 'initials'>('avatars.service', 'gravatar'),
+        autoFetch: config.get<boolean>('sync.autoFetch', true),
+        fetchIntervalMinutes: config.get<number>('sync.fetchIntervalMinutes', 5),
+        notifyOnBranchMerge: config.get<boolean>('sync.notifyOnBranchMerge', true),
+        askBeforePull: config.get<boolean>('sync.askBeforePull', true),
+      };
+
       const payload = {
         commits: graphNodes,
         branches,
@@ -159,6 +197,8 @@ export class GraphWebviewProvider
         githubRepo,
         stats,
         personalStats,
+        settings: settingsPayload,
+        systemLanguage: vscode.env.language,
         totalCommits: graphNodes.length,
         hasMore: false,
       };
@@ -212,6 +252,20 @@ export class GraphWebviewProvider
           }
           break;
 
+        case 'openFile':
+          if (root && msg.payload?.filePath) {
+            const absPath = path.isAbsolute(msg.payload.filePath)
+              ? msg.payload.filePath
+              : path.resolve(root, msg.payload.filePath);
+            try {
+              const doc = await vscode.workspace.openTextDocument(absPath);
+              await vscode.window.showTextDocument(doc);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to open file: ${err.message}`);
+            }
+          }
+          break;
+
         case 'copyToClipboard':
           if (msg.payload) {
             await vscode.env.clipboard.writeText(msg.payload);
@@ -238,12 +292,65 @@ export class GraphWebviewProvider
             }
           }
           break;
+
+        case 'checkoutCommit':
+          if (msg.payload && root) {
+            try {
+              await this.gitClient.checkoutCommit(root, msg.payload);
+              vscode.window.showInformationMessage(
+                `Checked out commit: ${msg.payload.slice(0, 7)}`
+              );
+              await this.refreshData();
+            } catch (e: any) {
+              vscode.window.showErrorMessage(`Checkout failed: ${e.message}`);
+            }
+          }
+          break;
+
+        case 'pullBranch':
+          if (root) {
+            try {
+              await this.gitClient.pull(root);
+              vscode.window.showInformationMessage('Pull completed successfully.');
+              await this.refreshData();
+            } catch (e: any) {
+              vscode.window.showErrorMessage(`Pull failed: ${e.message}`);
+            }
+          }
+          break;
+
+        case 'saveSettings':
+          if (msg.payload) {
+            const cfg = vscode.workspace.getConfiguration('branchify');
+            const s: BranchifySettings = msg.payload;
+            await Promise.all([
+              cfg.update('language', s.language, vscode.ConfigurationTarget.Global),
+              cfg.update('graph.density', s.density, vscode.ConfigurationTarget.Global),
+              cfg.update('graph.theme', s.theme, vscode.ConfigurationTarget.Global),
+              cfg.update('graph.animations', s.animations, vscode.ConfigurationTarget.Global),
+              cfg.update('graph.pageSize', s.pageSize, vscode.ConfigurationTarget.Global),
+              cfg.update('inlineBlame.enabled', s.inlineBlameEnabled, vscode.ConfigurationTarget.Global),
+              cfg.update('inlineBlame.delay', s.inlineBlameDelay, vscode.ConfigurationTarget.Global),
+              cfg.update('avatars.service', s.avatarService, vscode.ConfigurationTarget.Global),
+              cfg.update('sync.autoFetch', s.autoFetch, vscode.ConfigurationTarget.Global),
+              cfg.update('sync.fetchIntervalMinutes', s.fetchIntervalMinutes, vscode.ConfigurationTarget.Global),
+              cfg.update('sync.notifyOnBranchMerge', s.notifyOnBranchMerge, vscode.ConfigurationTarget.Global),
+            ]);
+
+            webview.postMessage({
+              command: 'settingsUpdated',
+              payload: s,
+            } as ExtensionToWebviewMessage);
+
+            vscode.window.showInformationMessage('Branchify: Settings saved successfully!');
+          }
+          break;
       }
     });
   }
 
   /**
-   * Opens the native VS Code diff editor for a specific commit and file
+   * Opens native VS Code diff editor for a specific commit and file
    */
   private async openFileDiff(
     root: string,
@@ -295,6 +402,9 @@ export class GraphWebviewProvider
     const styleUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview.css')
     );
+    const codiconCssUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'dist', 'codicon.css')
+    );
     const logoUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'resources', 'icon.png')
     );
@@ -305,12 +415,14 @@ export class GraphWebviewProvider
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} https: data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} https: data:;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="${codiconCssUri}" rel="stylesheet" />
   <link href="${styleUri}" rel="stylesheet" />
   <title>Branchify Graph</title>
 </head>
-<body>
+<body class="density-comfortable">
+  <!-- Top Header Bar -->
   <div class="header-bar">
     <div class="brand-section">
       <img src="${logoUri}" alt="Branchify" class="brand-logo" />
@@ -319,28 +431,32 @@ export class GraphWebviewProvider
 
     <div class="toolbar-controls">
       <div class="search-input-wrapper">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="search-input" class="search-input" placeholder="Search commits, authors, hashes..." />
+        <span class="search-icon"><i class="codicon codicon-search"></i></span>
+        <input type="text" id="search-input" class="search-input" placeholder="Buscar commits, autores, hashes..." />
       </div>
 
-      <select id="branch-select" class="branch-select" title="Filter by Branch">
-        <option value="all">All Branches</option>
+      <select id="branch-select" class="branch-select" title="Filtrar por rama">
+        <option value="all">Todas las ramas</option>
       </select>
 
-      <button id="btn-checkout" class="btn-icon" title="Checkout Selected Branch">
-        ⮂
+      <button id="btn-checkout" class="btn-icon" title="Cambiar a rama seleccionada">
+        <i class="codicon codicon-arrow-swap"></i>
       </button>
 
-      <button id="btn-personal-stats" class="btn-icon btn-personal-stats" title="View Your Personal Contribution & Branches Analytics">
-        👤 My Impact
+      <button id="btn-personal-stats" class="btn-icon" title="Ver Mi Impacto">
+        <i class="codicon codicon-graph"></i>
       </button>
 
-      <button id="refresh-btn" class="btn-icon" title="Refresh Graph">
-        ↻
+      <button id="btn-settings" class="btn-icon" title="Ajustes de Branchify">
+        <i class="codicon codicon-settings-gear"></i>
+      </button>
+
+      <button id="refresh-btn" class="btn-icon" title="Refrescar grafo">
+        <i class="codicon codicon-refresh"></i>
       </button>
     </div>
 
-    <div id="active-branch-pill" class="active-branch-badge" title="Current Active Branch">
+    <div id="active-branch-pill" class="active-branch-badge" title="Rama activa actual">
       <div class="branch-pulse-dot"></div>
       <span class="branch-name">main</span>
     </div>
@@ -349,58 +465,70 @@ export class GraphWebviewProvider
   <!-- Repository Quick Stats Bar -->
   <div id="stats-bar" class="stats-bar">
     <div class="stat-item">
-      <span class="stat-label">Commits:</span>
+      <span class="stat-label" id="label-stat-commits">Commits:</span>
       <span class="stat-value" id="stat-total-commits">0</span>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-item">
-      <span class="stat-label">Contributors:</span>
+      <span class="stat-label" id="label-stat-contributors">Colaboradores:</span>
       <span class="stat-value" id="stat-total-contributors">0</span>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-item">
-      <span class="stat-label">Branches:</span>
+      <span class="stat-label" id="label-stat-branches">Ramas:</span>
       <span class="stat-value" id="stat-total-branches">0</span>
     </div>
     <div class="stat-divider"></div>
-    <div class="top-contributors-row" id="top-contributors-row">
-      <!-- Avatars of top contributors injected here -->
-    </div>
+    <div class="top-contributors-row" id="top-contributors-row"></div>
   </div>
 
+  <!-- Main Viewport -->
   <div class="main-viewport">
     <div id="graph-table-container" class="graph-table-container">
-      <div class="state-container">
-        <div class="spinner"></div>
-        <div>Initializing Branchify Graph...</div>
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
+        <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
+        <div>Iniciando Branchify Graph...</div>
       </div>
     </div>
 
-    <!-- Personal Contribution & Branch Participation Modal -->
-    <div id="personal-modal" class="personal-modal-overlay">
-      <div class="personal-modal-card">
+    <!-- Floating Hover Popover -->
+    <div id="hover-popover" class="hover-popover"></div>
+
+    <!-- Personal Contribution Modal -->
+    <div id="personal-modal" class="modal-overlay">
+      <div class="modal-card">
         <div class="modal-header">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 16px;">📊</span>
-            <span style="font-weight: 700; font-size: 14px;">Your Personal Contribution & Branch Impact</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-graph" style="font-size:16px; color:var(--accent-cyan);"></i>
+            <span id="personal-modal-title" style="font-weight:700; font-size:var(--font-size-base);">Tu Contribución e Impacto Personal</span>
           </div>
-          <button id="personal-modal-close" class="btn-icon" title="Close">✕</button>
+          <button id="personal-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
         </div>
-        <div id="personal-modal-body" class="personal-modal-body">
-          <!-- Dynamically populated -->
+        <div id="personal-modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-settings-gear" style="font-size:16px; color:var(--accent-cyan);"></i>
+            <span id="settings-modal-title" style="font-weight:700; font-size:var(--font-size-base);">Ajustes de Branchify</span>
+          </div>
+          <button id="settings-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
         </div>
+        <div id="settings-modal-body" class="modal-body"></div>
       </div>
     </div>
 
     <!-- Slide-in Commit Inspector Drawer -->
     <div id="commit-drawer" class="commit-drawer">
       <div class="drawer-header">
-        <span style="font-weight: 600; font-size: 13px;">Commit Details & Diffs</span>
-        <button id="drawer-close-btn" class="btn-icon" title="Close Drawer">✕</button>
+        <span id="drawer-title" style="font-weight:600; font-size:var(--font-size-base);">Detalles del Commit y Archivos</span>
+        <button id="drawer-close-btn" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
       </div>
-      <div id="drawer-body" class="drawer-body">
-        <!-- Rendered dynamically on click -->
-      </div>
+      <div id="drawer-body" class="drawer-body"></div>
     </div>
   </div>
 
