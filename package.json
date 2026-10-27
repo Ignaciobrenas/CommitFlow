@@ -1,0 +1,164 @@
+{
+  "name": "branchify",
+  "displayName": "Branchify - Git Graph & Deep Live Blame",
+  "description": "High-performance interactive Git commit & branch graph visualizer, real-time deep inline blame with author avatars, and developer productivity tools.",
+  "version": "0.1.0",
+  "publisher": "Ignaciobrenas",
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "graph",
+    "blame",
+    "branch",
+    "commit",
+    "author",
+    "avatar",
+    "history",
+    "diff",
+    "productivity"
+  ],
+  "homepage": "https://github.com/Ignaciobrenas/branchify#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ignaciobrenas/branchify"
+  },
+  "bugs": {
+    "url": "https://github.com/Ignaciobrenas/branchify/issues"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "branchify.openGraph",
+        "title": "Open Commit & Branch Graph",
+        "category": "Branchify",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "branchify.toggleInlineBlame",
+        "title": "Toggle Live Inline Blame",
+        "category": "Branchify"
+      },
+      {
+        "command": "branchify.showLineCommit",
+        "title": "Show Commit Details for Current Line",
+        "category": "Branchify",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "branchify.refreshGraph",
+        "title": "Refresh Graph",
+        "category": "Branchify",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "branchify-explorer",
+          "title": "Branchify",
+          "icon": "resources/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "branchify-explorer": [
+        {
+          "type": "webview",
+          "id": "branchify.graphView",
+          "name": "Commit & Branch Graph"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Branchify",
+      "properties": {
+        "branchify.inlineBlame.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show author and commit information at the end of the current active line."
+        },
+        "branchify.inlineBlame.delay": {
+          "type": "number",
+          "default": 120,
+          "description": "Debounce delay (ms) before computing inline blame after cursor movement."
+        },
+        "branchify.avatars.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable author profile picture and avatar resolution in hover and graph cards."
+        },
+        "branchify.avatars.service": {
+          "type": "string",
+          "enum": [
+            "gravatar",
+            "github",
+            "initials"
+          ],
+          "default": "gravatar",
+          "description": "Avatar provider to resolve author profile pictures by email."
+        },
+        "branchify.graph.pageSize": {
+          "type": "number",
+          "default": 300,
+          "description": "Maximum number of commits loaded per page in the graph view."
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "branchify.showLineCommit",
+          "group": "1_modification",
+          "when": "editorTextFocus"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "branchify.refreshGraph",
+          "when": "view == branchify.graphView",
+          "group": "navigation"
+        },
+        {
+          "command": "branchify.openGraph",
+          "when": "view == branchify.graphView",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "branchify.openGraph",
+        "key": "ctrl+alt+b",
+        "mac": "cmd+alt+b"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build": "node esbuild.js --production",
+    "dev": "node esbuild.js --watch",
+    "test": "node -e \"require('esbuild').buildSync({entryPoints:['test/runTests.ts'],outfile:'dist/test.js',bundle:true,platform:'node'}); require('./dist/test.js')\"",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3"
+  }
+}
