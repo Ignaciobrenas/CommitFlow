@@ -108,6 +108,29 @@ async function runLiveAudit() {
   assert.ok(fileHistory.length >= 1, 'Should find commits for package.json');
   console.log(`   ✔ package.json history count: ${fileHistory.length} revisions`);
 
+  // 11. Verify Real Git Stash Reader
+  console.log('\n11. Auditing Git Stash reader on Live Repo...');
+  const liveStashes = await gitClient.getStashes(detectedRoot!);
+  assert.ok(Array.isArray(liveStashes), 'Stashes should return an array');
+  console.log(`   ✔ Git Stash check: ${liveStashes.length} stashes found`);
+
+  // 12. Verify Instant Changelog Generator
+  console.log('\n12. Auditing Instant Markdown Changelog generator...');
+  const changelogMd = await gitClient.generateChangelog(detectedRoot!, 5);
+  assert.ok(changelogMd.includes('# Release Changelog'), 'Changelog should contain Release Changelog header');
+  assert.ok(changelogMd.includes(commits[0].shortHash), 'Changelog should include latest commit shortHash');
+  console.log(`   ✔ Changelog Markdown generated successfully (${changelogMd.split('\n').length} lines)`);
+
+  // 13. Verify Multi-Theme Chromatic Graph Computations
+  console.log('\n13. Auditing Multi-Theme Graph DAG computations...');
+  const testThemes = ['cyberpunk', 'dracula', 'github', 'neon-pink', 'neon-green', 'neon-blue'] as const;
+  for (const th of testThemes) {
+    const nodes = GraphLayout.compute(commits, th);
+    assert.strictEqual(nodes.length, commits.length);
+    assert.ok(nodes[0].color, `Node should have assigned color in ${th}`);
+  }
+  console.log('   ✔ All 6 new themes computed custom chromatic lanes successfully');
+
   console.log('\n======================================================');
   console.log('🎉 LIVE VERIFICATION COMPLETED WITH 100% SUCCESS!');
   console.log('   All Git readers, parsers, and services WORK FLAWLESSLY.');
