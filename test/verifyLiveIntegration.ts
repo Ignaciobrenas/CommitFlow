@@ -39,7 +39,11 @@ async function runLiveAudit() {
   const ghInfo = await gitClient.getGitHubRepoInfo(detectedRoot!);
   assert.ok(ghInfo !== null, 'GitHub remote info should be detected');
   assert.strictEqual(ghInfo?.owner, 'Ignaciobrenas');
-  assert.ok(ghInfo?.repo === 'branchify' || ghInfo?.repo === 'commitflow', 'Remote repo name should match');
+  assert.ok(
+    ghInfo?.repo?.toLowerCase() === 'commitflow' ||
+      ghInfo?.repo?.toLowerCase() === 'branchify',
+    'Remote repo name should match CommitFlow'
+  );
   console.log(`   ✔ GitHub Owner: ${ghInfo?.owner}`);
   console.log(`   ✔ GitHub Repo: ${ghInfo?.repo}`);
   console.log(`   ✔ GitHub Web URL: ${ghInfo?.webUrl}`);
@@ -93,6 +97,16 @@ async function runLiveAudit() {
 
   deactivate();
   console.log('   ✔ Deactivated cleanly without memory leaks');
+
+  // 10. Verify Worktrees and Remote Repo Info
+  console.log('\n10. Auditing Worktrees and File History on Live Repo...');
+  const worktrees = await gitClient.getWorktrees(detectedRoot!);
+  assert.ok(worktrees.length >= 1, 'Should find at least 1 worktree (main repo)');
+  console.log(`   ✔ Worktree count: ${worktrees.length} (Branch: ${worktrees[0].branch}, WIP: ${worktrees[0].hasWip})`);
+
+  const fileHistory = await gitClient.getFileCommitHistory(detectedRoot!, 'package.json', 5);
+  assert.ok(fileHistory.length >= 1, 'Should find commits for package.json');
+  console.log(`   ✔ package.json history count: ${fileHistory.length} revisions`);
 
   console.log('\n======================================================');
   console.log('🎉 LIVE VERIFICATION COMPLETED WITH 100% SUCCESS!');

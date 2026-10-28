@@ -1,16 +1,16 @@
 <p align="center">
-  <img src="resources/logo-dark.png" width="280" alt="CommitFlow Logo" />
+  <img src="resources/logo-dark.png" width="320" alt="CommitFlow Logo" />
 </p>
 
 <h1 align="center">CommitFlow</h1>
 
 <p align="center">
-  <strong>High-Performance Git Commit & Branch Graph Visualizer with GitLens-Grade Multi-Lane DAG, Real-Time Deep Line Blame, Stash Manager, Upstream Rebase/Merge/Pull & Author Avatar Insights for Visual Studio Code.</strong>
+  <strong>The Ultimate Git Graph, Visual History, PR Launchpad & Multi-WIP Developer Hub for Visual Studio Code.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ignaciobrenas/commitflow/actions"><img src="https://img.shields.io/badge/CI-Passing-10b981?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI Status" /></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.3.0-38bdf8?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
+  <a href="https://github.com/Ignaciobrenas/CommitFlow/actions"><img src="https://img.shields.io/badge/CI-Passing-10b981?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI Status" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.4.0-38bdf8?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-8b5cf6?style=for-the-badge" alt="License" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.6_Strict-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" /></a>
 </p>
@@ -19,52 +19,54 @@
 
 ## ⚡ Overview
 
-**CommitFlow** is an enterprise-grade Visual Studio Code extension built for developers who demand lightning-fast Git history visualization, zero-lag inline authorship auditing, native file diff inspections, interactive stash management, upstream branch synchronizations, and deep branch intelligence directly inside their editor.
+**CommitFlow** is a modern, high-performance Visual Studio Code extension built for software engineers who need instantaneous Git history visualization, deep inline blame, visual file evolution tracking, centralized PR triage, multi-worktree parallel workflows, and fast zero-push code sharing.
 
-Unlike legacy Git extensions that freeze the UI or consume hundreds of megabytes in large monorepos, CommitFlow features a **dual-runtime decoupled architecture** with **HTML5 Canvas virtual windowing**, **multi-tier LRU caching with document save invalidation**, and **cooperative process cancellation**.
-
-CommitFlow is fully compatible with **Windows, macOS, Linux, and WSL (Windows Subsystem for Linux)** with automated path normalization.
+Whether you place CommitFlow in the **Bottom Panel (terminal dock)**, the **Left Primary Sidebar**, or the **Right Secondary Sidebar**, CommitFlow dynamically adapts its layout with dedicated ergonomic optimizations.
 
 ---
 
-## ✨ Key Features
+## 🚀 What's New in v0.4.0
 
-### 1. 🌿 GitLens-Grade Interactive Commit & Branch Graph (Webview)
-* **True Continuous Multi-Lane DAG:** Automatically assigns distinct chromatic lanes to branches, computing cubic Bézier curves for incoming forks, outgoing merges, and continuous passing lane bypass lines.
-* **Retina High-DPI Canvas Rendering:** Pixel-perfect crisp lines and glowing commit beacons scaled to `window.devicePixelRatio`.
-* **Interactive Branch Pathway Highlighting:** Hover over any commit or branch badge to illuminate its entire lineage and history while gently dimming unrelated branches.
-* **Theme-Adaptive Transparent Logos:** Automatically displays the white transparent logo in Dark/High Contrast themes and the tech emblem logo in Light themes.
-* **Instant Filtering & Search:** Search by author, email, commit subject, or SHA hash in real time with zero latency.
-* **Commit Inspector Drawer:** Slide-in drawer with author metadata, parent commit references, full commit bodies, and one-click SHA copying.
-* **One-Click Branch Checkout:** Instant branch switching directly from the toolbar or graph view.
+### 1. 🎛️ Adaptive Layout Mode Switcher (Bottom Panel / Left / Right / Auto)
+* **Custom Layouts for Every Placement:** Click the `$(layout)` button to switch between:
+  * 💻 **Bottom Panel (Wide/Horizontal):** Two-column horizontal split screen with wide commit graph, side-by-side inspector, and inline stats.
+  * 📱 **Left Sidebar:** Classical vertical sidebar with drawers sliding to the right.
+  * 📱 **Right Sidebar:** Mirrored drawer architecture that slides inwards to the left, preventing off-screen cutoffs on narrow displays.
+  * 🔄 **Auto (Responsive):** Real-time `ResizeObserver` detects container dimensions and automatically chooses the best layout.
 
-### 2. ⚡ Upstream Sync Bar & Single-Click Rebase/Merge/Pull
-* **Upstream Synchronization Indicator:** Detects when your current branch is ahead or behind its upstream tracking branch.
-* **Interactive One-Click Actions:** Direct `[Rebase]`, `[Merge]`, and `[Pull]` buttons in the graph toolbar when commits are pending.
-* **Interactive Merge & Change Notifications:** Non-intrusive notifications when remote changes or merged branches are detected, with one-click resolution.
+### 2. 🔒 Private Repositories Deep Support
+* **Multi-Platform Integration:** Advanced detection for private repositories across **GitHub**, **GitLab** (cloud & self-hosted), and **Bitbucket**.
+* **Native VS Code Authentication:** Seamless integration with VS Code's GitHub auth session (`repo` scope) and token management for private Git instances.
+* **Privacy Indicator Badge:** Header displays `🔒 GitHub Privado`, `🔒 GitLab Privado`, or `🔒 Bitbucket Privado` with glowing security status.
 
-### 3. 📦 Full Git Stash Management
-* **Stash Manager Modal:** Access stashes with the `<i class="codicon codicon-archive"></i>` toolbar button or stats counter.
-* **Save, Apply, Pop, and Drop:** Create named stashes with custom messages and inspect, apply, pop, or drop them directly from the UI without touching the command line.
+### 3. 🌿 Interactive Commit Graph (Retina Canvas & Zoom)
+* **Continuous Multi-Lane DAG:** Computes cubic Bézier curves for incoming forks, merges, and continuous passing lanes.
+* **Integrated Stashes & Tags:** View stash nodes and tag badges directly inside the commit graph.
+* **Instant Multi-Filter Search:** Filter in real-time by commit subject, author name, email, branch, or SHA hash with zero latency.
+* **Commit Inspector Drawer:** Inspect parent references, author metadata, full bodies, and one-click commit SHA copying.
 
-### 4. 🔍 Integrated Native VS Code Diff Viewer
-* **Virtual Document Provider (`commitflow-revision:`):** View historical diffs without creating temporary files on disk.
-* **File Change Breakdown:** Inspect which files were Modified (`M`), Added (`A`), Deleted (`D`), or Renamed (`R`) in any historical commit.
-* **Side-by-Side Diffs:** Clicking any changed file launches VS Code's native diff editor instantly.
+### 4. 📄 Visual File History (File Evolution & Diffs)
+* **Dedicated File Timeline:** Trace the entire lifecycle of any file in your project or currently open in the active editor.
+* **Line Delta Metrics:** Visual pill badges indicating exact additions and deletions (`+24 -8`) per historical commit.
+* **One-Click Native Diff Viewer:** Compare any historical revision directly against its parent commit or current working tree.
 
-### 5. 👤 Deep Author & Contributor Analytics
-* **Automatic Avatar Resolution:** Resolves author profile pictures by email using Gravatar (MD5) and GitHub noreply email mapping.
-* **Dynamic Vector Initials Fallback:** Generates high-resolution vector SVG initials with curated gradient palettes for offline environments.
-* **Repository Statistics Bar:** Real-time counter of total commits, total contributors, stashes, and active branches with top contributor mini-avatars that act as one-click filters.
+### 5. 🚀 Centralized PR Launchpad & Triage
+* **Triage View:** Categorize Pull Requests / Merge Requests directly within VS Code:
+  * 🔴 **Bloqueadas (Blocked):** Failing CI checks or changes requested by reviewers.
+  * 🟢 **Listas (Ready to Merge):** Approved by reviewers with green CI/CD pipelines.
+  * 🟡 **Pendientes (Pending Review):** Awaiting team reviews.
+  * 👤 **Mis PRs:** Fast filter for your own authored pull requests.
+* **One-Click Actions:** Instant local branch checkout, direct browser links, and clipboard URL copying.
 
-### 6. 🕵️ Zero-Lag Live Inline Blame & Editor Branding
-* **Clear Editor Brand Presence:** Visible in the code editor via inline blame: `⎇ CommitFlow › Author • RelativeTime • Summary`.
-* **Status Bar Item:** Clickable status bar widget: `$(git-branch) CommitFlow: Author, RelativeTime`.
-* **Editor Title Action:** `$(git-branch)` "CommitFlow: Open Graph" button in the upper right navigation of every open editor tab.
-* **Cooperative Cancellation (`CancellationToken`):** Rapid cursor movement automatically kills active Git sub-processes, preventing event loop starvation.
+### 6. 🌳 Worktrees & Multi-WIP Management
+* **Simultaneous Branch Development:** Work on multiple branches concurrently using `git worktree` without stashing or changing folders.
+* **Multi-WIP Change Detection:** Real-time indicator displaying whether each worktree has uncommitted modifications (`🟡 WIP Activo: 3 archivos`) or is clean (`🟢 Limpio`).
+* **Worktree Lifecycle:** Create new worktrees with custom branch names and paths, open them in separate VS Code windows, or prune them safely.
 
-### 7. 🤖 Model Context Protocol (MCP) Server for AI Assistants
-* **AI Tool Integration:** Exposes tools (`commitflow_get_user_impact`, `commitflow_get_active_context`, `commitflow_get_commit_history`, `commitflow_get_line_blame`, `commitflow_get_repo_summary`) and resources (`commitflow://repo/user-context`, `commitflow://repo/graph-summary`) so AI assistants can understand developer impact and repository state.
+### 7. ☁️ Cloud Patches (Zero-Push Private Sharing)
+* **Instant Team Collaboration:** Share uncommitted changes or branch diffs with colleagues privately without polluting remote branches.
+* **Self-Contained Unified Patches:** Create, preview, and copy formatted patches or shareable bundles to your clipboard with one click.
+* **Safe Application:** Dry-run validation (`git apply --check`) prevents conflicts before applying or reversing patches.
 
 ---
 
@@ -72,7 +74,7 @@ CommitFlow is fully compatible with **Windows, macOS, Linux, and WSL (Windows Su
 
 ```
 src/
-├── extension.ts               # Extension lifecycle entry point & command bindings
+├── extension.ts               # Extension lifecycle, commands, and context menu bindings
 ├── avatars/
 │   └── avatarService.ts       # Multi-tiered avatar resolver (Gravatar, GitHub, SVG)
 ├── blame/
@@ -82,22 +84,23 @@ src/
 │   └── blameStatusBar.ts      # Status bar controller
 ├── git/
 │   ├── branchWatcher.ts       # Upstream change detector & interactive pull/rebase prompter
-│   ├── gitClient.ts           # Stream Git CLI runner (Stash, Rebase, Merge, WSL path normalization)
+│   ├── gitClient.ts           # Git CLI runner (Worktrees, Cloud Patches, File History, Stash)
 │   ├── gitContentProvider.ts  # TextDocumentContentProvider for historical file diffs
 │   ├── gitParser.ts           # Incremental parser for git log, blame, refs
-│   └── types.ts               # Core domain interfaces (CommitFlowSettings, Stashes, DAG lanes)
+│   ├── githubService.ts       # Multi-remote provider (GitHub, GitLab, Bitbucket)
+│   └── types.ts               # Core domain models (Worktrees, PRs, Cloud Patches, LayoutMode)
 ├── graph/
 │   ├── graphLayout.ts         # Topological DAG solver with passing lanes & Bézier curves
-│   └── graphWebviewProvider.ts# Webview View & Full Panel Provider with secure CSP
+│   └── graphWebviewProvider.ts# Webview View & Full Panel Provider with tab navigation & IPC
 ├── i18n/
-│   └── locales.ts             # Complete English & Spanish internationalization engine
+│   └── locales.ts             # English & Spanish internationalization engine
 ├── mcp/
 │   └── commitflowMcpServer.ts # Standalone MCP JSON-RPC stdio server for AI agents
 ├── utils/
-│   └── lruCache.ts            # High-performance generic LRU cache with TTL & prefix deletion
+│   └── lruCache.ts            # High-performance generic LRU cache with TTL
 └── webview/
-    ├── main.ts                # Retina canvas DAG renderer, Stash manager, Upstream sync bar
-    └── style.css              # Adaptive theme design system (Light/Dark, Codicons)
+    ├── main.ts                # Retina canvas DAG, tab router, layout engine, PR launchpad
+    └── style.css              # Cyber-clean adaptive theme system (Light/Dark, Layout Modes)
 ```
 
 ---
@@ -108,6 +111,7 @@ Customize CommitFlow through VS Code Settings (`Ctrl+,` / `Cmd+,`):
 
 | Setting | Default | Description |
 | :--- | :--- | :--- |
+| `commitflow.graph.layoutMode` | `"auto"` | Panel orientation: `auto`, `bottom` (wide panel), `left` (sidebar), or `right` (secondary sidebar). |
 | `commitflow.language` | `"auto"` | Interface language: auto, Spanish (`es`), or English (`en`). |
 | `commitflow.graph.theme` | `"auto"` | Color theme: auto (matches VS Code), dark, or light. |
 | `commitflow.graph.density` | `"comfortable"` | Row density: compact (22px), comfortable (26px), spacious (32px). |
@@ -123,26 +127,30 @@ Customize CommitFlow through VS Code Settings (`Ctrl+,` / `Cmd+,`):
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## ⌨️ Commands & Shortcuts
 
-| Command | Windows / Linux | macOS |
+| Command | Shortcut | Description |
 | :--- | :--- | :--- |
-| **Open CommitFlow Graph** | `Ctrl + Alt + B` | `Cmd + Option + B` |
-| **Toggle Inline Blame** | Command Palette | Command Palette |
-| **Show Line Commit Details** | Context Menu | Context Menu |
+| **CommitFlow: Open Graph** | `Ctrl + Alt + B` / `Cmd + Option + B` | Open full graph panel in editor |
+| **CommitFlow: Show Visual File History** | Context Menu | Open timeline history of active file |
+| **CommitFlow: Open PR Launchpad** | Command Palette | Open centralized PR triage board |
+| **CommitFlow: Open Worktrees Manager** | Command Palette | Manage multi-WIP worktrees |
+| **CommitFlow: Create Cloud Patch** | Command Palette | Create and copy instant code patch |
+| **CommitFlow: Toggle Inline Blame** | Command Palette | Toggle line author annotations |
+| **CommitFlow: Show Line Commit** | Context Menu | View commit details for current line |
 
 ---
 
 ## 🧪 Testing & Packaging
 
 ```bash
-# Run automated test suite
+# Run automated test suite (17 suites)
 npm test
 
 # Run real repository live audit
 npm run test:live
 
-# Production build with esbuild
+# Production bundle with esbuild
 npm run build
 
 # Package local .vsix extension

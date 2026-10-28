@@ -348,4 +348,43 @@ assert.strictEqual(typeof gitClient.merge, 'function');
 assert.strictEqual(typeof gitClient.abortRebase, 'function');
 console.log('  ✔ Rebase & Merge Client API tests passed!');
 
-console.log('\n🎉 ALL 13 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+// 14. Test Multi-Provider & Private Repositories
+console.log('\n▶ Testing Multi-Provider & Private Repositories...');
+const ghRemote = ghService.parseRemoteUrl('git@github.com:myorg/private-repo.git');
+assert.ok(ghRemote);
+assert.strictEqual(ghRemote.provider, 'github');
+assert.strictEqual(ghRemote.owner, 'myorg');
+assert.strictEqual(ghRemote.repo, 'private-repo');
+assert.strictEqual(ghRemote.isPrivate, true);
+
+const glRemote = ghService.parseRemoteUrl('git@gitlab.com:enterprise/project.git');
+assert.ok(glRemote);
+assert.strictEqual(glRemote.provider, 'gitlab');
+assert.strictEqual(glRemote.isPrivate, true);
+assert.strictEqual(ghService.getPullRequestUrl(glRemote, 42), 'https://gitlab.com/enterprise/project/-/merge_requests/42');
+
+const bbRemote = ghService.parseRemoteUrl('https://bitbucket.org/team/code.git');
+assert.ok(bbRemote);
+assert.strictEqual(bbRemote.provider, 'bitbucket');
+assert.strictEqual(ghService.getPullRequestUrl(bbRemote, 99), 'https://bitbucket.org/team/code/pull-requests/99');
+console.log('  ✔ Multi-Provider & Private Repositories tests passed!');
+
+// 15. Test Worktrees & Multi-WIP Client APIs
+console.log('\n▶ Testing Worktrees & Multi-WIP APIs...');
+assert.strictEqual(typeof gitClient.getWorktrees, 'function');
+assert.strictEqual(typeof gitClient.addWorktree, 'function');
+assert.strictEqual(typeof gitClient.removeWorktree, 'function');
+console.log('  ✔ Worktrees & Multi-WIP tests passed!');
+
+// 16. Test Visual File History API
+console.log('\n▶ Testing Visual File History API...');
+assert.strictEqual(typeof gitClient.getFileCommitHistory, 'function');
+console.log('  ✔ Visual File History tests passed!');
+
+// 17. Test Cloud Patches API
+console.log('\n▶ Testing Cloud Patches API...');
+assert.strictEqual(typeof gitClient.createCloudPatch, 'function');
+assert.strictEqual(typeof gitClient.applyCloudPatch, 'function');
+console.log('  ✔ Cloud Patches tests passed!');
+
+console.log('\n🎉 ALL 17 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
