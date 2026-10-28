@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GitClient } from '../git/gitClient';
+import { GitBlameLine } from '../git/types';
 import { BlameDecorator } from './blameDecorator';
 import { BlameStatusBar } from './blameStatusBar';
 
