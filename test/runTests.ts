@@ -1,7 +1,7 @@
 import assert from 'assert';
 import { AvatarService } from '../src/avatars/avatarService';
 import { GitParser } from '../src/git/gitParser';
-import { GraphLayout } from '../src/graph/graphLayout';
+import { GraphLayout, THEME_LANE_COLORS } from '../src/graph/graphLayout';
 import { GitContentProvider } from '../src/git/gitContentProvider';
 import { LruCache } from '../src/utils/lruCache';
 import { GitClient } from '../src/git/gitClient';
@@ -387,4 +387,56 @@ assert.strictEqual(typeof gitClient.createCloudPatch, 'function');
 assert.strictEqual(typeof gitClient.applyCloudPatch, 'function');
 console.log('  ✔ Cloud Patches tests passed!');
 
-console.log('\n🎉 ALL 17 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+// 18. Test Color Themes & Lane Palettes
+console.log('\n▶ Testing Color Themes & Chromatic Lane Palettes...');
+const themes = ['cyberpunk', 'dracula', 'github', 'neon-pink', 'neon-green', 'neon-blue', 'dark', 'light'] as const;
+for (const theme of themes) {
+  assert.ok(THEME_LANE_COLORS[theme], `THEME_LANE_COLORS should include ${theme}`);
+  assert.ok(THEME_LANE_COLORS[theme].length >= 7, `${theme} palette should have at least 7 colors`);
+}
+// Test GraphLayout computation with cyberpunk theme
+const cyberpunkNodes = GraphLayout.compute(mockCommits, 'cyberpunk');
+assert.strictEqual(cyberpunkNodes[0].color, THEME_LANE_COLORS['cyberpunk'][0]);
+// Test GraphLayout computation with dracula theme
+const draculaNodes = GraphLayout.compute(mockCommits, 'dracula');
+assert.strictEqual(draculaNodes[0].color, THEME_LANE_COLORS['dracula'][0]);
+console.log('  ✔ Color Themes & Chromatic Lane Palettes tests passed!');
+
+// 19. Test Developer Workflow & Git Tools APIs
+console.log('\n▶ Testing Developer Workflow & Git Tools APIs...');
+assert.strictEqual(typeof gitClient.cherryPick, 'function');
+assert.strictEqual(typeof gitClient.revertCommit, 'function');
+assert.strictEqual(typeof gitClient.createTag, 'function');
+assert.strictEqual(typeof gitClient.deleteTag, 'function');
+assert.strictEqual(typeof gitClient.undoLastCommit, 'function');
+assert.strictEqual(typeof gitClient.generateChangelog, 'function');
+
+// Verify i18n keys for new themes and developer tools
+const requiredI18nKeys = [
+  'settings.themeCyberpunk',
+  'settings.themeDracula',
+  'settings.themeGithub',
+  'settings.themeNeonPink',
+  'settings.themeNeonGreen',
+  'settings.themeNeonBlue',
+  'toolbar.themePicker',
+  'toolbar.changelog',
+  'toolbar.undoCommit',
+  'drawer.cherryPick',
+  'drawer.revert',
+  'drawer.createTag',
+  'drawer.confirmCherryPick',
+  'drawer.confirmRevert',
+  'drawer.confirmUndo',
+  'tag.modalTitle',
+  'tag.tagNameLabel',
+  'tag.submit',
+  'changelog.title',
+];
+for (const key of requiredI18nKeys) {
+  assert.ok(t(key, 'es') !== key, `Missing Spanish translation for key: ${key}`);
+  assert.ok(t(key, 'en') !== key, `Missing English translation for key: ${key}`);
+}
+console.log('  ✔ Developer Workflow & Git Tools APIs tests passed!');
+
+console.log('\n🎉 ALL 19 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');

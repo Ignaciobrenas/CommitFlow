@@ -231,7 +231,24 @@
           "enum": [
             "auto",
             "dark",
-            "light"
+            "light",
+            "cyberpunk",
+            "dracula",
+            "github",
+            "neon-pink",
+            "neon-green",
+            "neon-blue"
+          ],
+          "enumDescriptions": [
+            "Automatic (follows VS Code theme)",
+            "Cyber Dark Mode",
+            "Professional Light Mode",
+            "Cyberpunk (Neon Yellow & Purple)",
+            "Dracula Official Spec",
+            "GitHub Dark Premier",
+            "Neon Pink (Synthwave)",
+            "Neon Green (Matrix Terminal)",
+            "Neon Blue (Tron Electric)"
           ],
           "default": "auto",
           "description": "%commitflow.config.graph.theme%"

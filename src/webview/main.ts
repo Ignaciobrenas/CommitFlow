@@ -14,6 +14,7 @@ import {
   PullRequestInfo,
   RemoteRepoInfo,
   RepoStats,
+  ThemeMode,
   UpstreamStatus,
   UserPersonalStats,
 } from '../git/types';
@@ -54,7 +55,7 @@ let currentMaxLane = 0;
 let currentLang: Language = 'auto';
 let systemLang: string = 'es';
 let currentDensity: 'compact' | 'comfortable' | 'spacious' = 'comfortable';
-let currentTheme: 'auto' | 'dark' | 'light' = 'auto';
+let currentTheme: ThemeMode = 'auto';
 let settings: CommitFlowSettings = {
   language: 'auto',
   density: 'comfortable',
@@ -83,6 +84,19 @@ const btnSettings = document.getElementById('btn-settings') as HTMLButtonElement
 const btnRefresh = document.getElementById('refresh-btn') as HTMLButtonElement;
 const btnLayoutMode = document.getElementById('btn-layout-mode') as HTMLButtonElement | null;
 const layoutPickerPopover = document.getElementById('layout-picker-popover') as HTMLElement | null;
+const btnThemeMode = document.getElementById('btn-theme-mode') as HTMLButtonElement | null;
+const themePickerPopover = document.getElementById('theme-picker-popover') as HTMLElement | null;
+const btnChangelog = document.getElementById('btn-changelog') as HTMLButtonElement | null;
+const btnUndoCommit = document.getElementById('btn-undo-commit') as HTMLButtonElement | null;
+
+// Tag Modal
+const tagCreateModal = document.getElementById('tag-create-modal') as HTMLElement | null;
+const tagModalClose = document.getElementById('tag-modal-close') as HTMLButtonElement | null;
+const tagBtnCancel = document.getElementById('tag-btn-cancel') as HTMLButtonElement | null;
+const tagBtnSubmit = document.getElementById('tag-btn-submit') as HTMLButtonElement | null;
+const tagNameInput = document.getElementById('tag-name-input') as HTMLInputElement | null;
+const tagMessageInput = document.getElementById('tag-message-input') as HTMLTextAreaElement | null;
+const tagTargetHash = document.getElementById('tag-target-hash') as HTMLInputElement | null;
 const privateRepoBadge = document.getElementById('private-repo-badge') as HTMLElement | null;
 const privateRepoLabel = document.getElementById('private-repo-label') as HTMLElement | null;
 const activeBranchPill = document.getElementById('active-branch-pill') as HTMLElement;
@@ -185,13 +199,34 @@ function tr(key: string, params?: Record<string, string | number>): string {
 }
 
 // Apply Theme
-function applyTheme(theme: 'auto' | 'dark' | 'light'): void {
+function applyTheme(theme: ThemeMode): void {
   currentTheme = theme;
-  document.body.classList.remove('theme-light', 'theme-dark');
-  if (theme === 'light') {
-    document.body.classList.add('theme-light');
-  } else if (theme === 'dark') {
-    document.body.classList.add('theme-dark');
+  document.body.classList.remove(
+    'theme-light',
+    'theme-dark',
+    'theme-cyberpunk',
+    'theme-dracula',
+    'theme-github',
+    'theme-neon-pink',
+    'theme-neon-green',
+    'theme-neon-blue'
+  );
+  if (theme !== 'auto') {
+    document.body.classList.add(`theme-${theme}`);
+  }
+
+  // Update active state in theme popover
+  document.querySelectorAll('.theme-option').forEach((opt) => {
+    if (opt.getAttribute('data-theme') === theme) {
+      opt.classList.add('active');
+    } else {
+      opt.classList.remove('active');
+    }
+  });
+
+  const cfgThemeSelect = document.getElementById('cfg-theme') as HTMLSelectElement | null;
+  if (cfgThemeSelect && cfgThemeSelect.value !== theme) {
+    cfgThemeSelect.value = theme;
   }
 }
 
@@ -299,6 +334,10 @@ window.addEventListener('message', (event) => {
       renderLoading();
       break;
 
+    case 'changelogReady':
+      // The changelog markdown has been copied to clipboard
+      break;
+
     case 'error':
       renderError(message.payload);
       break;
@@ -315,8 +354,19 @@ function applyLocalization(): void {
   if (btnRefresh) btnRefresh.title = tr('toolbar.refresh');
   if (btnPopout) btnPopout.title = tr('action.popout');
   if (btnLayoutMode) btnLayoutMode.title = tr('layout.toggleTitle');
+  if (btnThemeMode) btnThemeMode.title = tr('toolbar.themePicker');
+  if (btnChangelog) btnChangelog.title = tr('toolbar.changelog');
+  if (btnUndoCommit) btnUndoCommit.title = tr('toolbar.undoCommit');
   if (activeBranchPill) activeBranchPill.title = tr('toolbar.activeBranch');
   if (searchClearBtn) searchClearBtn.title = tr('toolbar.searchClear');
+
+  // Tag Modal titles/placeholders
+  const tagModalTitle = document.querySelector('#tag-create-modal .modal-header span');
+  if (tagModalTitle) tagModalTitle.textContent = tr('tag.modalTitle');
+  if (tagNameInput) tagNameInput.placeholder = tr('tag.tagNamePlaceholder');
+  if (tagMessageInput) tagMessageInput.placeholder = tr('tag.messagePlaceholder');
+  if (tagBtnCancel) tagBtnCancel.textContent = tr('tag.cancel');
+  if (tagBtnSubmit) tagBtnSubmit.textContent = tr('tag.submit');
 
   // Navigation tab titles and texts
   const tabGraph = document.querySelector('.nav-tab-btn[data-tab="tab-graph"]') as HTMLElement | null;
@@ -841,9 +891,31 @@ function renderGraph(): void {
         selectCommit(node);
       });
 
+      const btnCherryPick = document.createElement('button');
+      btnCherryPick.className = 'btn-row-action';
+      btnCherryPick.title = tr('drawer.cherryPick');
+      btnCherryPick.innerHTML = `<i class="codicon codicon-git-pull-request-go-to-changes"></i>`;
+      btnCherryPick.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm(tr('drawer.confirmCherryPick', { hash: node.commit.shortHash }))) {
+          vscode.postMessage({ command: 'cherryPickCommit', payload: { hash: node.commit.hash } });
+        }
+      });
+
+      const btnCreateTag = document.createElement('button');
+      btnCreateTag.className = 'btn-row-action';
+      btnCreateTag.title = tr('drawer.createTag');
+      btnCreateTag.innerHTML = `<i class="codicon codicon-tag"></i>`;
+      btnCreateTag.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openTagModal(node.commit.hash);
+      });
+
       rowActions.appendChild(btnCopySha);
       rowActions.appendChild(btnCopyMsg);
       rowActions.appendChild(btnCheckoutRow);
+      rowActions.appendChild(btnCherryPick);
+      rowActions.appendChild(btnCreateTag);
       rowActions.appendChild(btnInspect);
 
       row.appendChild(canvasCol);
@@ -1049,6 +1121,15 @@ function selectCommit(node: GraphNode): void {
       <button class="btn-icon" id="btn-copy-msg">
         <i class="codicon codicon-comment"></i> ${tr('drawer.copyMsg')}
       </button>
+      <button class="btn-icon" id="btn-drawer-cherry-pick" title="${tr('drawer.cherryPick')}">
+        <i class="codicon codicon-git-pull-request-go-to-changes"></i> ${tr('drawer.cherryPick')}
+      </button>
+      <button class="btn-icon" id="btn-drawer-revert" title="${tr('drawer.revert')}">
+        <i class="codicon codicon-history"></i> ${tr('drawer.revert')}
+      </button>
+      <button class="btn-icon" id="btn-drawer-create-tag" title="${tr('drawer.createTag')}">
+        <i class="codicon codicon-tag"></i> ${tr('drawer.createTag')}
+      </button>
       ${
         githubRepo
           ? `<button class="btn-icon" id="btn-open-github">
@@ -1092,6 +1173,22 @@ function selectCommit(node: GraphNode): void {
   document.getElementById('btn-copy-msg')?.addEventListener('click', () => {
     const fullMsg = commit.subject + (commit.body ? '\n\n' + commit.body : '');
     vscode.postMessage({ command: 'copyToClipboard', payload: fullMsg });
+  });
+
+  document.getElementById('btn-drawer-cherry-pick')?.addEventListener('click', () => {
+    if (confirm(tr('drawer.confirmCherryPick', { hash: commit.shortHash }))) {
+      vscode.postMessage({ command: 'cherryPickCommit', payload: { hash: commit.hash } });
+    }
+  });
+
+  document.getElementById('btn-drawer-revert')?.addEventListener('click', () => {
+    if (confirm(tr('drawer.confirmRevert', { hash: commit.shortHash }))) {
+      vscode.postMessage({ command: 'revertCommit', payload: { hash: commit.hash } });
+    }
+  });
+
+  document.getElementById('btn-drawer-create-tag')?.addEventListener('click', () => {
+    openTagModal(commit.hash);
   });
 
   if (githubRepo) {
@@ -1230,6 +1327,12 @@ function openSettingsModal(): void {
           <div class="setting-control">
             <select id="cfg-theme">
               <option value="auto" ${settings.theme === 'auto' ? 'selected' : ''}>${tr('settings.themeAuto')}</option>
+              <option value="cyberpunk" ${settings.theme === 'cyberpunk' ? 'selected' : ''}>${tr('settings.themeCyberpunk')}</option>
+              <option value="dracula" ${settings.theme === 'dracula' ? 'selected' : ''}>${tr('settings.themeDracula')}</option>
+              <option value="github" ${settings.theme === 'github' ? 'selected' : ''}>${tr('settings.themeGithub')}</option>
+              <option value="neon-pink" ${settings.theme === 'neon-pink' ? 'selected' : ''}>${tr('settings.themeNeonPink')}</option>
+              <option value="neon-green" ${settings.theme === 'neon-green' ? 'selected' : ''}>${tr('settings.themeNeonGreen')}</option>
+              <option value="neon-blue" ${settings.theme === 'neon-blue' ? 'selected' : ''}>${tr('settings.themeNeonBlue')}</option>
               <option value="dark" ${settings.theme === 'dark' ? 'selected' : ''}>${tr('settings.themeDark')}</option>
               <option value="light" ${settings.theme === 'light' ? 'selected' : ''}>${tr('settings.themeLight')}</option>
             </select>
@@ -2089,6 +2192,24 @@ function closeWorktreeModal(): void {
   worktreeCreateModal?.classList.remove('open');
 }
 
+function openTagModal(commitHash?: string): void {
+  if (tagTargetHash) tagTargetHash.value = commitHash || '';
+  if (tagNameInput) {
+    tagNameInput.value = '';
+    tagNameInput.placeholder = tr('tag.tagNamePlaceholder');
+  }
+  if (tagMessageInput) {
+    tagMessageInput.value = '';
+    tagMessageInput.placeholder = tr('tag.messagePlaceholder');
+  }
+  tagCreateModal?.classList.add('open');
+  setTimeout(() => tagNameInput?.focus(), 50);
+}
+
+function closeTagModal(): void {
+  tagCreateModal?.classList.remove('open');
+}
+
 // Event Listeners
 drawerCloseBtn?.addEventListener('click', closeDrawer);
 btnPersonalStats?.addEventListener('click', openPersonalModal);
@@ -2123,7 +2244,9 @@ window.addEventListener('keydown', (e) => {
     closeWorktreeModal();
     closePatchCreateModal();
     closePatchApplyModal();
+    closeTagModal();
     layoutPickerPopover?.classList.remove('visible');
+    themePickerPopover?.classList.remove('visible');
     hideHoverPopover();
   }
 });
@@ -2132,11 +2255,15 @@ window.addEventListener('keydown', (e) => {
 btnLayoutMode?.addEventListener('click', (e) => {
   e.stopPropagation();
   layoutPickerPopover?.classList.toggle('visible');
+  themePickerPopover?.classList.remove('visible');
 });
 
 document.addEventListener('click', (e) => {
   if (layoutPickerPopover && !layoutPickerPopover.contains(e.target as Node) && e.target !== btnLayoutMode) {
     layoutPickerPopover.classList.remove('visible');
+  }
+  if (themePickerPopover && !themePickerPopover.contains(e.target as Node) && e.target !== btnThemeMode) {
+    themePickerPopover.classList.remove('visible');
   }
 });
 
@@ -2149,6 +2276,65 @@ document.querySelectorAll('.layout-option').forEach((opt) => {
     }
   });
 });
+
+// Theme Mode Switcher Listeners
+btnThemeMode?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  themePickerPopover?.classList.toggle('visible');
+  layoutPickerPopover?.classList.remove('visible');
+});
+
+document.querySelectorAll('.theme-option').forEach((opt) => {
+  opt.addEventListener('click', () => {
+    const theme = opt.getAttribute('data-theme') as ThemeMode;
+    if (theme) {
+      applyTheme(theme);
+      settings.theme = theme;
+      vscode.postMessage({
+        command: 'saveSettings',
+        payload: { ...settings, theme },
+      });
+      renderGraph();
+      themePickerPopover?.classList.remove('visible');
+    }
+  });
+});
+
+// Changelog & Undo Buttons
+btnChangelog?.addEventListener('click', () => {
+  vscode.postMessage({
+    command: 'generateChangelog',
+    payload: { count: 30 },
+  });
+});
+
+btnUndoCommit?.addEventListener('click', () => {
+  if (confirm(tr('drawer.confirmUndo'))) {
+    vscode.postMessage({
+      command: 'undoLastCommit',
+      payload: {},
+    });
+  }
+});
+
+// Tag Modal Events
+tagBtnSubmit?.addEventListener('click', () => {
+  const name = tagNameInput?.value?.trim();
+  if (!name) {
+    alert(tr('tag.nameRequired'));
+    return;
+  }
+  const commitHash = tagTargetHash?.value?.trim() || undefined;
+  const message = tagMessageInput?.value?.trim() || undefined;
+  vscode.postMessage({
+    command: 'createTag',
+    payload: { name, commitHash, message },
+  });
+  closeTagModal();
+});
+
+tagBtnCancel?.addEventListener('click', closeTagModal);
+tagModalClose?.addEventListener('click', closeTagModal);
 
 // Tab Switcher Listeners
 navTabButtons.forEach((btn) => {

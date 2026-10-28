@@ -1,34 +1,52 @@
 import { GitCommit, GraphNode, GraphRouteLine, IncomingLine, PassingLane } from '../git/types';
 
 export class GraphLayout {
-  // Vibrant, high-contrast accessible color palette for branch lanes
-  public static readonly LANE_COLORS: string[] = [
-    '#38bdf8', // Electric Cyan
-    '#10b981', // Neon Emerald
-    '#f59e0b', // Radiant Amber
-    '#ec4899', // Hot Pink
-    '#8b5cf6', // Electric Violet
-    '#06b6d4', // Cyber Teal
-    '#f43f5e', // Glitch Rose
-    '#a855f7', // Vivid Purple
-    '#14b8a6', // Jade Mint
-    '#eab308', // Sun Gold
-  ];
+  // Theme-specific vibrant chromatic lane palettes
+  public static readonly THEME_LANE_COLORS: Record<string, string[]> = {
+    cyberpunk: ['#ffe600', '#d946ef', '#00f0ff', '#a855f7', '#00ffcc', '#ff0055', '#ff9900'],
+    dracula: ['#bd93f9', '#8be9fd', '#50fa7b', '#ff79c6', '#ffb86c', '#f1fa8c', '#ff5555'],
+    github: ['#58a6ff', '#3fb950', '#a371f7', '#d29922', '#f85149', '#79c0ff', '#56d364'],
+    'neon-pink': ['#ff2a85', '#00f5d4', '#fee440', '#c084fc', '#00bbf9', '#ff007f', '#f15bb5'],
+    'neon-green': ['#00ff66', '#a3e635', '#00e676', '#38bdf8', '#34d399', '#6ee7b7', '#a7f3d0'],
+    'neon-blue': ['#00e5ff', '#38bdf8', '#3b82f6', '#6366f1', '#06b6d4', '#93c5fd', '#00f5d4'],
+    light: ['#0969da', '#1a7f37', '#9a6700', '#8250df', '#cf222e', '#0550ae', '#116329'],
+    dark: [
+      '#38bdf8',
+      '#10b981',
+      '#f59e0b',
+      '#ec4899',
+      '#8b5cf6',
+      '#06b6d4',
+      '#f43f5e',
+      '#a855f7',
+      '#14b8a6',
+      '#eab308',
+    ],
+    default: [
+      '#38bdf8', // Electric Cyan
+      '#10b981', // Neon Emerald
+      '#f59e0b', // Radiant Amber
+      '#ec4899', // Hot Pink
+      '#8b5cf6', // Electric Violet
+      '#06b6d4', // Cyber Teal
+      '#f43f5e', // Glitch Rose
+      '#a855f7', // Vivid Purple
+      '#14b8a6', // Jade Mint
+      '#eab308', // Sun Gold
+    ],
+  };
+
+  public static readonly LANE_COLORS: string[] = GraphLayout.THEME_LANE_COLORS.default;
 
   /**
    * Computes topological lanes and connecting route lines for a list of commits.
-   * Accurately calculates:
-   * 1. Assigned lane for current commit
-   * 2. Passing lanes (active branches running straight down through this row)
-   * 3. Incoming lines from children above (cubic Bezier curves)
-   * 4. Outgoing lines to parents below (cubic Bezier curves & merges)
-   * Handles edge cases: empty lists, octopus merges (3+ parents), disconnected roots, shallow clones.
    */
-  public static compute(commits: GitCommit[]): GraphNode[] {
+  public static compute(commits: GitCommit[], theme?: string): GraphNode[] {
     if (!commits || commits.length === 0) {
       return [];
     }
 
+    const palette = (theme && GraphLayout.THEME_LANE_COLORS[theme]) || GraphLayout.LANE_COLORS;
     const nodes: GraphNode[] = [];
     const activeLanes: (string | null)[] = []; // maps lane index -> expected parent commit hash
     const incomingMap = new Map<string, { fromLane: number; color: string }[]>();
@@ -56,8 +74,7 @@ export class GraphLayout {
       }
 
       const safeLane = Math.max(0, assignedLane);
-      const nodeColor =
-        GraphLayout.LANE_COLORS[safeLane % GraphLayout.LANE_COLORS.length];
+      const nodeColor = palette[safeLane % palette.length];
 
       // 2. Identify passing lanes at this exact row
       // (any other active lane whose expected parent is below this row)
@@ -174,3 +191,5 @@ export class GraphLayout {
     return nodes;
   }
 }
+
+export const THEME_LANE_COLORS = GraphLayout.THEME_LANE_COLORS;

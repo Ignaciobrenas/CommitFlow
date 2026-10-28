@@ -185,10 +185,21 @@ export interface CloudPatch {
 
 export type LayoutMode = 'auto' | 'bottom' | 'left' | 'right';
 
+export type ThemeMode =
+  | 'auto'
+  | 'dark'
+  | 'light'
+  | 'cyberpunk'
+  | 'dracula'
+  | 'github'
+  | 'neon-pink'
+  | 'neon-green'
+  | 'neon-blue';
+
 export interface CommitFlowSettings {
   language: 'auto' | 'es' | 'en';
   density: 'compact' | 'comfortable' | 'spacious';
-  theme: 'auto' | 'dark' | 'light';
+  theme: ThemeMode;
   layoutMode?: LayoutMode;
   animations: boolean;
   pageSize: number;
@@ -289,7 +300,14 @@ export interface WebviewToExtensionMessage {
     | 'applyCloudPatch'
     | 'deleteCloudPatch'
     | 'requestCloudPatches'
-    | 'setLayoutMode';
+    | 'setLayoutMode'
+    // Developer Productivity Actions:
+    | 'cherryPickCommit'
+    | 'revertCommit'
+    | 'createTag'
+    | 'deleteTag'
+    | 'undoLastCommit'
+    | 'generateChangelog';
   payload?: any;
 }
 
@@ -307,6 +325,8 @@ export interface ExtensionToWebviewMessage {
     | 'cloudPatchesData'
     | 'patchCreated'
     | 'patchApplied'
+    | 'changelogReady'
+    | 'actionResult'
     | 'error'
     | 'loading';
   payload?: any;

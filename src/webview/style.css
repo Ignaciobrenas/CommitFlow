@@ -62,6 +62,138 @@ body.vscode-light:not(.theme-dark) {
   --accent-blue: #0969da;
 }
 
+/* 1. Cyberpunk Yellow & Purple (Night City Edition) */
+body.theme-cyberpunk {
+  --bg-primary: #110726;
+  --bg-secondary: #1a0b36;
+  --bg-tertiary: #271050;
+  --bg-glass: rgba(255, 230, 0, 0.05);
+  --bg-hover: rgba(255, 230, 0, 0.12);
+  --bg-active: rgba(255, 230, 0, 0.24);
+  --border-subtle: rgba(255, 230, 0, 0.22);
+  --border-hover: #ffe600;
+  --text-primary: #fffef2;
+  --text-muted: #e9d5ff;
+  --focus-ring: #ffe600;
+
+  --accent-cyan: #ffe600;
+  --accent-emerald: #00ffcc;
+  --accent-amber: #ff9900;
+  --accent-violet: #d946ef;
+  --accent-rose: #ff0055;
+  --accent-blue: #00f0ff;
+}
+
+/* 2. Dracula Theme (Official Dracula Spec) */
+body.theme-dracula {
+  --bg-primary: #282a36;
+  --bg-secondary: #21222c;
+  --bg-tertiary: #343746;
+  --bg-glass: rgba(189, 147, 249, 0.07);
+  --bg-hover: rgba(68, 71, 90, 0.55);
+  --bg-active: rgba(189, 147, 249, 0.22);
+  --border-subtle: #44475a;
+  --border-hover: #bd93f9;
+  --text-primary: #f8f8f2;
+  --text-muted: #a4b3d6;
+  --focus-ring: #bd93f9;
+
+  --accent-cyan: #8be9fd;
+  --accent-emerald: #50fa7b;
+  --accent-amber: #f1fa8c;
+  --accent-violet: #bd93f9;
+  --accent-rose: #ff5555;
+  --accent-blue: #8be9fd;
+}
+
+/* 3. GitHub Dark Premier */
+body.theme-github {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --bg-glass: rgba(255, 255, 255, 0.03);
+  --bg-hover: #1f242c;
+  --bg-active: rgba(56, 139, 253, 0.2);
+  --border-subtle: #30363d;
+  --border-hover: #58a6ff;
+  --text-primary: #f0f6fc;
+  --text-muted: #8b949e;
+  --focus-ring: #58a6ff;
+
+  --accent-cyan: #58a6ff;
+  --accent-emerald: #3fb950;
+  --accent-amber: #d29922;
+  --accent-violet: #a371f7;
+  --accent-rose: #f85149;
+  --accent-blue: #58a6ff;
+}
+
+/* 4. Neon Rosa (Synthwave / Outrun) */
+body.theme-neon-pink {
+  --bg-primary: #15031b;
+  --bg-secondary: #22052b;
+  --bg-tertiary: #32073e;
+  --bg-glass: rgba(255, 42, 133, 0.06);
+  --bg-hover: rgba(255, 42, 133, 0.16);
+  --bg-active: rgba(255, 42, 133, 0.28);
+  --border-subtle: rgba(255, 42, 133, 0.25);
+  --border-hover: #ff2a85;
+  --text-primary: #fff0f7;
+  --text-muted: #f472b6;
+  --focus-ring: #ff2a85;
+
+  --accent-cyan: #ff2a85;
+  --accent-emerald: #00f5d4;
+  --accent-amber: #fee440;
+  --accent-violet: #c084fc;
+  --accent-rose: #ff007f;
+  --accent-blue: #00bbf9;
+}
+
+/* 5. Neon Verde (Matrix Cyber Terminal) */
+body.theme-neon-green {
+  --bg-primary: #031407;
+  --bg-secondary: #06220d;
+  --bg-tertiary: #0b3615;
+  --bg-glass: rgba(0, 255, 102, 0.05);
+  --bg-hover: rgba(0, 255, 102, 0.15);
+  --bg-active: rgba(0, 255, 102, 0.25);
+  --border-subtle: rgba(0, 255, 102, 0.22);
+  --border-hover: #00ff66;
+  --text-primary: #e6ffe9;
+  --text-muted: #6ee7b7;
+  --focus-ring: #00ff66;
+
+  --accent-cyan: #00ff66;
+  --accent-emerald: #00ff66;
+  --accent-amber: #a3e635;
+  --accent-violet: #34d399;
+  --accent-rose: #fb7185;
+  --accent-blue: #38bdf8;
+}
+
+/* 6. Neon Azul (Tron Electric Blue) */
+body.theme-neon-blue {
+  --bg-primary: #020d1c;
+  --bg-secondary: #05162e;
+  --bg-tertiary: #0a254a;
+  --bg-glass: rgba(0, 229, 255, 0.05);
+  --bg-hover: rgba(0, 229, 255, 0.15);
+  --bg-active: rgba(0, 229, 255, 0.25);
+  --border-subtle: rgba(0, 229, 255, 0.22);
+  --border-hover: #00e5ff;
+  --text-primary: #eaf6ff;
+  --text-muted: #7dd3fc;
+  --focus-ring: #00e5ff;
+
+  --accent-cyan: #00e5ff;
+  --accent-emerald: #06b6d4;
+  --accent-amber: #38bdf8;
+  --accent-violet: #6366f1;
+  --accent-rose: #f43f5e;
+  --accent-blue: #00e5ff;
+}
+
 /* Density Variants */
 body.density-compact {
   --row-height: 22px;
@@ -1371,6 +1503,71 @@ body.theme-light .private-repo-badge {
 
 .layout-picker-popover.visible {
   display: block;
+}
+
+.theme-picker-popover {
+  position: absolute;
+  top: 42px;
+  right: 48px;
+  width: 280px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-hover);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 8px;
+  z-index: 2000;
+  display: none;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.theme-picker-popover.visible {
+  display: block;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.theme-option:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+}
+
+.theme-option.active {
+  background: var(--bg-active);
+  border-color: var(--border-hover);
+}
+
+.theme-swatches {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.theme-swatch-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+body.layout-right .theme-picker-popover {
+  right: auto;
+  left: 48px;
 }
 
 .picker-header {

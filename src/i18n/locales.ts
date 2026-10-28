@@ -15,6 +15,10 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'toolbar.openFullPanel': 'Abrir en pestaña completa de editor',
     'toolbar.moreActions': 'Más opciones',
     'toolbar.searchClear': 'Limpiar búsqueda',
+    'toolbar.themePicker': 'Cambiar tema de color',
+    'toolbar.changelog': 'Generar Changelog Markdown',
+    'toolbar.undoCommit': 'Deshacer último commit (soft reset)',
+    'toolbar.undoCommitConfirm': '¿Deseas deshacer el último commit? Los cambios se conservarán en staging.',
 
     // Stats Bar
     'stats.commits': 'Commits:',
@@ -64,6 +68,29 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'drawer.fileCount': '{count} archivo',
     'drawer.fileCountPlural': '{count} archivos',
     'drawer.close': 'Cerrar',
+    'drawer.cherryPick': 'Cherry-Pick',
+    'drawer.cherryPickTooltip': 'Aplicar este commit a la rama activa',
+    'drawer.confirmCherryPick': '¿Estás seguro de hacer cherry-pick del commit {hash} en la rama actual?',
+    'drawer.revert': 'Revertir',
+    'drawer.revertTooltip': 'Crear commit inverso para revertir estos cambios',
+    'drawer.confirmRevert': '¿Estás seguro de revertir el commit {hash}?',
+    'drawer.createTag': 'Crear Tag...',
+    'drawer.createTagTooltip': 'Crear una etiqueta Git en este commit',
+    'drawer.confirmUndo': '¿Seguro que quieres deshacer el último commit? Tus cambios se mantendrán preparados en el índice (git reset --soft HEAD~1).',
+
+    // Git Tag Modal
+    'tag.modalTitle': 'Crear Tag en Commit',
+    'tag.tagNameLabel': 'Nombre de la etiqueta / tag:',
+    'tag.tagNamePlaceholder': 'ej: v1.0.0 o release-candidate',
+    'tag.messageLabel': 'Mensaje anotado (opcional):',
+    'tag.messagePlaceholder': 'Notas de la versión o hito...',
+    'tag.cancel': 'Cancelar',
+    'tag.submit': 'Crear Tag',
+    'tag.nameRequired': 'El nombre del tag no puede estar vacío',
+
+    // Changelog
+    'changelog.title': 'Changelog Generado',
+    'changelog.copied': '¡Changelog en Markdown copiado al portapapeles!',
 
     // Settings Modal
     'settings.title': 'Ajustes de CommitFlow',
@@ -81,6 +108,12 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'settings.themeAuto': 'Automático (según tema de VS Code)',
     'settings.themeDark': 'Modo Oscuro Cyber',
     'settings.themeLight': 'Modo Claro Profesional',
+    'settings.themeCyberpunk': 'Cyberpunk (Amarillo & Morado Neon)',
+    'settings.themeDracula': 'Dracula (Oficial)',
+    'settings.themeGithub': 'GitHub Dark Premier',
+    'settings.themeNeonPink': 'Neon Rosa (Synthwave)',
+    'settings.themeNeonGreen': 'Neon Verde (Matrix)',
+    'settings.themeNeonBlue': 'Neon Azul (Tron)',
     'settings.animationsLabel': 'Animaciones y Efectos',
     'settings.animationsDesc': 'Activa transiciones suaves de ramas, baliza pulsante y efectos hover.',
     'settings.languageLabel': 'Idioma de la Interfaz',
@@ -334,6 +367,10 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'toolbar.openFullPanel': 'Open in Full Editor Tab',
     'toolbar.moreActions': 'More Options',
     'toolbar.searchClear': 'Clear Search',
+    'toolbar.themePicker': 'Change color theme',
+    'toolbar.changelog': 'Generate Markdown Changelog',
+    'toolbar.undoCommit': 'Undo last commit (soft reset)',
+    'toolbar.undoCommitConfirm': 'Do you want to undo the last commit? Modified files will remain staged.',
 
     // Stats Bar
     'stats.commits': 'Commits:',
@@ -383,6 +420,29 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'drawer.fileCount': '{count} file',
     'drawer.fileCountPlural': '{count} files',
     'drawer.close': 'Close',
+    'drawer.cherryPick': 'Cherry-Pick',
+    'drawer.cherryPickTooltip': 'Apply this commit onto the current branch',
+    'drawer.confirmCherryPick': 'Are you sure you want to cherry-pick commit {hash} into current branch?',
+    'drawer.revert': 'Revert',
+    'drawer.revertTooltip': 'Create inverse commit to revert this change',
+    'drawer.confirmRevert': 'Are you sure you want to revert commit {hash}?',
+    'drawer.createTag': 'Create Tag...',
+    'drawer.createTagTooltip': 'Create a Git tag on this commit',
+    'drawer.confirmUndo': 'Are you sure you want to undo the last commit? Your changes will remain staged in the index (git reset --soft HEAD~1).',
+
+    // Git Tag Modal
+    'tag.modalTitle': 'Create Tag on Commit',
+    'tag.tagNameLabel': 'Tag name:',
+    'tag.tagNamePlaceholder': 'e.g. v1.0.0 or release-candidate',
+    'tag.messageLabel': 'Annotated message (optional):',
+    'tag.messagePlaceholder': 'Release or milestone notes...',
+    'tag.cancel': 'Cancel',
+    'tag.submit': 'Create Tag',
+    'tag.nameRequired': 'Tag name cannot be empty',
+
+    // Changelog
+    'changelog.title': 'Generated Changelog',
+    'changelog.copied': 'Changelog Markdown copied to clipboard!',
 
     // Settings Modal
     'settings.title': 'CommitFlow Settings',
@@ -400,6 +460,12 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'settings.themeAuto': 'Automatic (VS Code Theme)',
     'settings.themeDark': 'Cyber Dark Mode',
     'settings.themeLight': 'Professional Light Mode',
+    'settings.themeCyberpunk': 'Cyberpunk (Neon Yellow & Purple)',
+    'settings.themeDracula': 'Dracula (Official)',
+    'settings.themeGithub': 'GitHub Dark Premier',
+    'settings.themeNeonPink': 'Neon Pink (Synthwave)',
+    'settings.themeNeonGreen': 'Neon Green (Matrix)',
+    'settings.themeNeonBlue': 'Neon Blue (Tron)',
     'settings.animationsLabel': 'Animations & Motion',
     'settings.animationsDesc': 'Enable smooth branch transitions, pulsing beacons, and hover glow effects.',
     'settings.languageLabel': 'Interface Language',

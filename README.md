@@ -68,6 +68,24 @@ Whether you place CommitFlow in the **Bottom Panel (terminal dock)**, the **Left
 * **Self-Contained Unified Patches:** Create, preview, and copy formatted patches or shareable bundles to your clipboard with one click.
 * **Safe Application:** Dry-run validation (`git apply --check`) prevents conflicts before applying or reversing patches.
 
+### 8. 🎨 Pro Color Themes & Header Quick Switcher
+* **Live Theme Switcher:** Click the `$(symbol-color)` button in the header or use settings to instantly switch themes without reloading:
+  * 💛💜 **Cyberpunk:** Neon Yellow (`#ffe600`) and Deep Purple (`#110726`) with Magenta (`#d946ef`) accents.
+  * 🧛 **Dracula:** Official Dracula palette (`#282a36`, `#bd93f9`, `#50fa7b`, `#8be9fd`, `#ff79c6`).
+  * 🐙 **GitHub Dark:** Authentic GitHub code review palette (`#0d1117`, `#161b22`, `#58a6ff`, `#3fb950`).
+  * 🌸 **Neon Pink:** Synthwave / Outrun glowing hot pink (`#ff2a85`) and vibrant turquoise (`#00f5d4`).
+  * 🟢 **Neon Green:** Cyber Matrix terminal glowing emerald (`#00ff66`, `#39ff14`).
+  * 🔵 **Neon Blue:** Tron electric cybernetic blue (`#00e5ff`, `#6366f1`).
+  * 🌑 **Cyber Dark** & ☀️ **Clean Light** & 🔄 **Auto (Matches VS Code theme)**.
+* **Chromatic Branch Lanes:** Every theme dynamically tunes the SVG Bézier curve lane palette to harmonize with the chosen colors.
+
+### 9. 🛠️ Pro Developer Workflow & Git Tools
+* 🍒 **Direct Cherry-Pick:** 1-click cherry-picking from row hover actions or inspector drawer into the current branch.
+* ↩️ **Revert Commit:** Safe, clean commit reversal with instant verification.
+* 🏷️ **Git Tagging Dialog:** Create annotated or lightweight release tags directly on any commit node.
+* 📋 **Markdown Release Changelog:** Instant formatted Markdown changelog generation copied directly to your clipboard.
+* ⏪ **Undo Last Commit (`git reset --soft HEAD~1`):** Safely roll back accidental commits without losing work staged in your index.
+
 ---
 
 ## 🏗️ System Architecture

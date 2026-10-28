@@ -194,7 +194,8 @@ export class GraphWebviewProvider
         this.gitClient.getPullRequests(root),
       ]);
 
-      const graphNodes = GraphLayout.compute(commits);
+      const themeConfig = config.get<any>('graph.theme', 'auto');
+      const graphNodes = GraphLayout.compute(commits, themeConfig);
       let maxLane = 0;
       graphNodes.forEach((n) => {
         if (n.lane > maxLane) maxLane = n.lane;
@@ -220,7 +221,7 @@ export class GraphWebviewProvider
           'graph.density',
           'comfortable'
         ),
-        theme: config.get<'auto' | 'dark' | 'light'>('graph.theme', 'auto'),
+        theme: config.get<any>('graph.theme', 'auto'),
         layoutMode: config.get<LayoutMode>('graph.layoutMode', 'auto'),
         animations: config.get<boolean>('graph.animations', true),
         pageSize: limit,
@@ -670,6 +671,109 @@ export class GraphWebviewProvider
           }
           break;
 
+        // --- Developer Productivity IPC Actions ---
+        case 'cherryPickCommit':
+          if (root && msg.payload?.hash) {
+            try {
+              const res = await this.gitClient.cherryPick(root, msg.payload.hash);
+              if (res.success) {
+                vscode.window.showInformationMessage(res.message);
+                await this.refreshData();
+              } else {
+                vscode.window.showErrorMessage(res.message);
+              }
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Cherry-pick failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'revertCommit':
+          if (root && msg.payload?.hash) {
+            try {
+              const res = await this.gitClient.revertCommit(root, msg.payload.hash);
+              if (res.success) {
+                vscode.window.showInformationMessage(res.message);
+                await this.refreshData();
+              } else {
+                vscode.window.showErrorMessage(res.message);
+              }
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Revert failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'createTag':
+          if (root && msg.payload?.tagName) {
+            try {
+              const res = await this.gitClient.createTag(
+                root,
+                msg.payload.tagName,
+                msg.payload.hash,
+                msg.payload.message
+              );
+              if (res.success) {
+                vscode.window.showInformationMessage(res.message);
+                await this.refreshData();
+              } else {
+                vscode.window.showErrorMessage(res.message);
+              }
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Create tag failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'deleteTag':
+          if (root && msg.payload?.tagName) {
+            try {
+              const res = await this.gitClient.deleteTag(root, msg.payload.tagName);
+              if (res.success) {
+                vscode.window.showInformationMessage(res.message);
+                await this.refreshData();
+              } else {
+                vscode.window.showErrorMessage(res.message);
+              }
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Delete tag failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'undoLastCommit':
+          if (root) {
+            try {
+              const res = await this.gitClient.undoLastCommit(root);
+              if (res.success) {
+                vscode.window.showInformationMessage(res.message);
+                await this.refreshData();
+              } else {
+                vscode.window.showErrorMessage(res.message);
+              }
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Undo commit failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'generateChangelog':
+          if (root) {
+            try {
+              const count = msg.payload?.count || 30;
+              const md = await this.gitClient.generateChangelog(root, count);
+              await vscode.env.clipboard.writeText(md);
+              vscode.window.showInformationMessage('CommitFlow: Changelog Markdown copied to clipboard!');
+              webview.postMessage({
+                command: 'changelogReady',
+                payload: md,
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Changelog generation failed: ${err.message}`);
+            }
+          }
+          break;
+
         case 'saveSettings':
           if (msg.payload) {
             const cfg = vscode.workspace.getConfiguration('commitflow');
@@ -826,6 +930,21 @@ export class GraphWebviewProvider
         <!-- Layout Switcher Button -->
         <button id="btn-layout-mode" class="btn-icon btn-layout-toggle" title="${tr('layout.toggleTitle')}">
           <i class="codicon codicon-layout"></i>
+        </button>
+
+        <!-- Theme Switcher Button -->
+        <button id="btn-theme-mode" class="btn-icon btn-theme-toggle" title="${tr('toolbar.themePicker')}">
+          <i class="codicon codicon-symbol-color"></i>
+        </button>
+
+        <!-- Changelog Export Button -->
+        <button id="btn-changelog" class="btn-icon" title="${tr('toolbar.changelog')}">
+          <i class="codicon codicon-markdown"></i>
+        </button>
+
+        <!-- Undo Last Commit Button -->
+        <button id="btn-undo-commit" class="btn-icon" title="${tr('toolbar.undoCommit')}">
+          <i class="codicon codicon-discard"></i>
         </button>
 
         <button id="refresh-btn" class="btn-icon" title="${tr('action.refresh')}">
@@ -1048,6 +1167,99 @@ export class GraphWebviewProvider
       </div>
     </div>
 
+    <!-- Theme Switcher Popover / Picker -->
+    <div id="theme-picker-popover" class="theme-picker-popover">
+      <div class="picker-header">${tr('toolbar.themePicker')}</div>
+      <div class="picker-options">
+        <button class="theme-option" data-theme="cyberpunk">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="theme-swatches">
+              <span class="theme-swatch-dot" style="background:#ffe600;"></span>
+              <span class="theme-swatch-dot" style="background:#110726;"></span>
+              <span class="theme-swatch-dot" style="background:#d946ef;"></span>
+            </div>
+            <span>${tr('settings.themeCyberpunk')}</span>
+          </div>
+        </button>
+        <button class="theme-option" data-theme="dracula">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="theme-swatches">
+              <span class="theme-swatch-dot" style="background:#bd93f9;"></span>
+              <span class="theme-swatch-dot" style="background:#282a36;"></span>
+              <span class="theme-swatch-dot" style="background:#50fa7b;"></span>
+            </div>
+            <span>${tr('settings.themeDracula')}</span>
+          </div>
+        </button>
+        <button class="theme-option" data-theme="github">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="theme-swatches">
+              <span class="theme-swatch-dot" style="background:#58a6ff;"></span>
+              <span class="theme-swatch-dot" style="background:#0d1117;"></span>
+              <span class="theme-swatch-dot" style="background:#3fb950;"></span>
+            </div>
+            <span>${tr('settings.themeGithub')}</span>
+          </div>
+        </button>
+        <button class="theme-option" data-theme="neon-pink">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="theme-swatches">
+              <span class="theme-swatch-dot" style="background:#ff2a85;"></span>
+              <span class="theme-swatch-dot" style="background:#15031b;"></span>
+              <span class="theme-swatch-dot" style="background:#00f5d4;"></span>
+            </div>
+            <span>${tr('settings.themeNeonPink')}</span>
+          </div>
+        </button>
+        <button class="theme-option" data-theme="neon-green">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="theme-swatches">
+              <span class="theme-swatch-dot" style="background:#00ff66;"></span>
+              <span class="theme-swatch-dot" style="background:#031407;"></span>
+              <span class="theme-swatch-dot" style="background:#34d399;"></span>
+            </div>
+            <span>${tr('settings.themeNeonGreen')}</span>
+          </div>
+        </button>
+        <button class="theme-option" data-theme="neon-blue">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="theme-swatches">
+              <span class="theme-swatch-dot" style="background:#00e5ff;"></span>
+              <span class="theme-swatch-dot" style="background:#020d1c;"></span>
+              <span class="theme-swatch-dot" style="background:#6366f1;"></span>
+            </div>
+            <span>${tr('settings.themeNeonBlue')}</span>
+          </div>
+        </button>
+        <button class="theme-option" data-theme="dark">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="theme-swatches">
+              <span class="theme-swatch-dot" style="background:#38bdf8;"></span>
+              <span class="theme-swatch-dot" style="background:#0d1117;"></span>
+              <span class="theme-swatch-dot" style="background:#10b981;"></span>
+            </div>
+            <span>${tr('settings.themeDark')}</span>
+          </div>
+        </button>
+        <button class="theme-option" data-theme="light">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="theme-swatches">
+              <span class="theme-swatch-dot" style="background:#0969da;"></span>
+              <span class="theme-swatch-dot" style="background:#ffffff;"></span>
+              <span class="theme-swatch-dot" style="background:#1a7f37;"></span>
+            </div>
+            <span>${tr('settings.themeLight')}</span>
+          </div>
+        </button>
+        <button class="theme-option" data-theme="auto">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-screen-normal" style="font-size:12px; margin-right:4px;"></i>
+            <span>${tr('settings.themeAuto')}</span>
+          </div>
+        </button>
+      </div>
+    </div>
+
     <!-- Git Stash Manager Modal -->
     <div id="stash-modal" class="modal-overlay">
       <div class="modal-card">
@@ -1167,6 +1379,36 @@ export class GraphWebviewProvider
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
               <button id="patch-apply-btn-cancel" class="btn-sm">${tr('patch.modalCancel')}</button>
               <button id="patch-apply-btn-submit" class="btn-sm btn-primary">${tr('patch.modalApplySubmit')}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Git Tag Modal -->
+    <div id="tag-create-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-tag" style="font-size:16px; color:var(--accent-amber);"></i>
+            <span style="font-weight:700; font-size:var(--font-size-base);">${tr('tag.modalTitle')}</span>
+          </div>
+          <button id="tag-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <input type="hidden" id="tag-target-hash" />
+            <label style="font-size:var(--font-size-sm);">
+              ${tr('tag.tagNameLabel')}
+              <input type="text" id="tag-name-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="${tr('tag.tagNamePlaceholder')}" />
+            </label>
+            <label style="font-size:var(--font-size-sm);">
+              ${tr('tag.messageLabel')}
+              <textarea id="tag-message-input" class="search-input" style="width:100%; height:60px; margin-top:4px; resize:vertical;" placeholder="${tr('tag.messagePlaceholder')}"></textarea>
+            </label>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+              <button id="tag-btn-cancel" class="btn-sm">${tr('tag.cancel')}</button>
+              <button id="tag-btn-submit" class="btn-sm btn-primary">${tr('tag.submit')}</button>
             </div>
           </div>
         </div>
