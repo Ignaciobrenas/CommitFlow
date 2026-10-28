@@ -133,7 +133,7 @@
         {
           "id": "commitflow-explorer",
           "title": "CommitFlow",
-          "icon": "resources/icon.png"
+          "icon": "resources/icon.svg"
         }
       ]
     },

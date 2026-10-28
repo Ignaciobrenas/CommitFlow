@@ -1,0 +1,54 @@
+const fs = require('fs');
+const path = require('path');
+
+const resourcesDir = path.join(__dirname, '..', 'resources');
+
+// 1. Copy dark logo (white version for dark backgrounds)
+const darkLogoSrc = path.join(resourcesDir, 'Logotipo_CommitFlow_en_blanco-removebg-preview.png');
+if (fs.existsSync(darkLogoSrc)) {
+  fs.copyFileSync(darkLogoSrc, path.join(resourcesDir, 'logo-dark.png'));
+  console.log('✓ Created resources/logo-dark.png');
+}
+
+// 2. Copy light logo (colored/dark version for light backgrounds)
+const lightLogoSrc = path.join(resourcesDir, 'Logo_tecnológico_CommitFlow_con_ramas_Git-removebg-preview.png');
+if (fs.existsSync(lightLogoSrc)) {
+  fs.copyFileSync(lightLogoSrc, path.join(resourcesDir, 'logo-light.png'));
+  console.log('✓ Created resources/logo-light.png');
+}
+
+// 3. Icon files
+const isotypeSrc = path.join(resourcesDir, 'isotipo.png');
+if (fs.existsSync(isotypeSrc)) {
+  fs.copyFileSync(isotypeSrc, path.join(resourcesDir, 'icon.png'));
+  fs.copyFileSync(isotypeSrc, path.join(resourcesDir, 'icon-256.png'));
+  fs.copyFileSync(isotypeSrc, path.join(resourcesDir, 'icon-512.png'));
+  console.log('✓ Created resources/icon.png, icon-256.png & icon-512.png');
+}
+
+// 4. Create vector SVG for VS Code Activity Bar
+const vectorSvg24 = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none">
+  <!-- Outer C-bracket frame -->
+  <path d="M17.5 5.5H8.5C7.4 5.5 6.5 6.4 6.5 7.5V16.5C6.5 17.6 7.4 18.5 8.5 18.5H17.5C18 18.5 18.5 18.9 18.5 19.5C18.5 20.1 18 20.5 17.5 20.5H8.5C6.3 20.5 4.5 18.7 4.5 16.5V7.5C4.5 5.3 6.3 3.5 8.5 3.5H17.5C18 3.5 18.5 3.9 18.5 4.5C18.5 5.1 18 5.5 17.5 5.5Z" fill="currentColor"/>
+  <!-- Vertical trunk -->
+  <path d="M8.5 8.5V15.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- Top, center, bottom trunk nodes -->
+  <circle cx="8.5" cy="7.5" r="1.6" fill="currentColor"/>
+  <circle cx="8.5" cy="12" r="1.6" fill="currentColor"/>
+  <circle cx="8.5" cy="16.5" r="1.6" fill="currentColor"/>
+  <!-- Upper fork -->
+  <path d="M9.5 12C11 12 12 9.5 14 9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+  <circle cx="14.8" cy="9.5" r="1.4" fill="currentColor"/>
+  <!-- Middle fork -->
+  <path d="M9.5 12H15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <circle cx="16" cy="12" r="1.4" fill="currentColor"/>
+  <!-- Lower fork -->
+  <path d="M9.5 12C11 12 12 14.5 14 14.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+  <circle cx="14.8" cy="14.5" r="1.4" fill="currentColor"/>
+  <!-- Right chevron arrow -->
+  <path d="M18 10L20.5 12L18 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+fs.writeFileSync(path.join(resourcesDir, 'icon.svg'), vectorSvg24.trim(), 'utf8');
+fs.writeFileSync(path.join(resourcesDir, 'isotipo.svg'), vectorSvg24.trim(), 'utf8');
+console.log('✓ Created resources/icon.svg and resources/isotipo.svg with currentColor');
