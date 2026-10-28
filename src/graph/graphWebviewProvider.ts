@@ -6,6 +6,7 @@ import { GitContentProvider } from '../git/gitContentProvider';
 import {
   CommitFlowSettings,
   ExtensionToWebviewMessage,
+  LayoutMode,
   WebviewToExtensionMessage,
 } from '../git/types';
 
@@ -71,7 +72,7 @@ export class GraphWebviewProvider
     } else {
       this.panel = vscode.window.createWebviewPanel(
         'commitflow.graphPanel',
-        'CommitFlow: Commit & Branch Graph',
+        'CommitFlow: Git Graph & Developer Hub',
         vscode.ViewColumn.One,
         {
           enableScripts: true,
@@ -121,6 +122,17 @@ export class GraphWebviewProvider
     });
   }
 
+  public switchTab(tabId: string): void {
+    const activeWebviews = [this.view?.webview, this.panel?.webview].filter(
+      (w): w is vscode.Webview => w !== undefined
+    );
+    activeWebviews.forEach((w) => {
+      try {
+        w.postMessage({ command: 'switchTab', payload: tabId });
+      } catch {}
+    });
+  }
+
   /**
    * Refreshes the Git data and sends to all active webviews
    */
@@ -157,16 +169,29 @@ export class GraphWebviewProvider
       const config = vscode.workspace.getConfiguration('commitflow');
       const limit = config.get<number>('graph.pageSize', 300);
 
-      const [commits, branches, currentBranch, githubRepo, userIdentity, upstreamStatus, stashes] =
-        await Promise.all([
-          this.gitClient.getCommits(root, limit),
-          this.gitClient.getBranches(root),
-          this.gitClient.getCurrentBranch(root),
-          this.gitClient.getGitHubRepoInfo(root),
-          this.gitClient.getUserIdentity(root),
-          this.gitClient.getUpstreamStatus(root),
-          this.gitClient.getStashes(root),
-        ]);
+      const [
+        commits,
+        branches,
+        currentBranch,
+        githubRepo,
+        remoteRepo,
+        userIdentity,
+        upstreamStatus,
+        stashes,
+        worktrees,
+        pullRequests,
+      ] = await Promise.all([
+        this.gitClient.getCommits(root, limit),
+        this.gitClient.getBranches(root),
+        this.gitClient.getCurrentBranch(root),
+        this.gitClient.getGitHubRepoInfo(root),
+        this.gitClient.getRemoteRepoInfo(root),
+        this.gitClient.getUserIdentity(root),
+        this.gitClient.getUpstreamStatus(root),
+        this.gitClient.getStashes(root),
+        this.gitClient.getWorktrees(root),
+        this.gitClient.getPullRequests(root),
+      ]);
 
       const graphNodes = GraphLayout.compute(commits);
       let maxLane = 0;
@@ -190,13 +215,20 @@ export class GraphWebviewProvider
 
       const settingsPayload: CommitFlowSettings = {
         language: config.get<'auto' | 'es' | 'en'>('language', 'auto'),
-        density: config.get<'compact' | 'comfortable' | 'spacious'>('graph.density', 'comfortable'),
+        density: config.get<'compact' | 'comfortable' | 'spacious'>(
+          'graph.density',
+          'comfortable'
+        ),
         theme: config.get<'auto' | 'dark' | 'light'>('graph.theme', 'auto'),
+        layoutMode: config.get<LayoutMode>('graph.layoutMode', 'auto'),
         animations: config.get<boolean>('graph.animations', true),
         pageSize: limit,
         inlineBlameEnabled: config.get<boolean>('inlineBlame.enabled', true),
         inlineBlameDelay: config.get<number>('inlineBlame.delay', 120),
-        avatarService: config.get<'gravatar' | 'github' | 'initials'>('avatars.service', 'gravatar'),
+        avatarService: config.get<'gravatar' | 'github' | 'initials'>(
+          'avatars.service',
+          'gravatar'
+        ),
         autoFetch: config.get<boolean>('sync.autoFetch', true),
         fetchIntervalMinutes: config.get<number>('sync.fetchIntervalMinutes', 5),
         notifyOnBranchMerge: config.get<boolean>('sync.notifyOnBranchMerge', true),
@@ -208,6 +240,9 @@ export class GraphWebviewProvider
         branches,
         currentBranch,
         githubRepo,
+        remoteRepo,
+        worktrees,
+        pullRequests,
         stats,
         personalStats,
         upstreamStatus,
@@ -474,6 +509,166 @@ export class GraphWebviewProvider
           }
           break;
 
+        // --- Worktrees & Multi-WIP IPC ---
+        case 'requestWorktrees':
+          if (root) {
+            const wt = await this.gitClient.getWorktrees(root);
+            webview.postMessage({
+              command: 'worktreesData',
+              payload: wt,
+            } as ExtensionToWebviewMessage);
+          }
+          break;
+
+        case 'addWorktree':
+          if (root && msg.payload?.path && msg.payload?.branch) {
+            try {
+              await this.gitClient.addWorktree(root, msg.payload.path, msg.payload.branch);
+              vscode.window.showInformationMessage(`Worktree created at ${msg.payload.path}`);
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to create worktree: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'removeWorktree':
+          if (root && msg.payload?.path) {
+            try {
+              await this.gitClient.removeWorktree(root, msg.payload.path, msg.payload.force);
+              vscode.window.showInformationMessage(`Worktree removed.`);
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to remove worktree: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'openWorktree':
+          if (msg.payload?.path) {
+            await vscode.commands.executeCommand(
+              'vscode.openFolder',
+              vscode.Uri.file(msg.payload.path),
+              { forceNewWindow: true }
+            );
+          }
+          break;
+
+        // --- Pull Requests Launchpad IPC ---
+        case 'requestPullRequests':
+          if (root) {
+            const prs = await this.gitClient.getPullRequests(root);
+            webview.postMessage({
+              command: 'pullRequestsData',
+              payload: prs,
+            } as ExtensionToWebviewMessage);
+          }
+          break;
+
+        case 'checkoutPullRequest':
+          if (root && msg.payload?.prNumber && msg.payload?.branchName) {
+            try {
+              await this.gitClient.checkoutPullRequest(
+                root,
+                msg.payload.prNumber,
+                msg.payload.branchName
+              );
+              vscode.window.showInformationMessage(
+                `Checked out PR #${msg.payload.prNumber} (${msg.payload.branchName})`
+              );
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to checkout PR: ${err.message}`);
+            }
+          }
+          break;
+
+        // --- Visual File History IPC ---
+        case 'requestFileHistory':
+          if (root) {
+            const targetFile =
+              msg.payload?.filePath ||
+              vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (targetFile) {
+              const revisions = await this.gitClient.getFileCommitHistory(
+                root,
+                targetFile
+              );
+              webview.postMessage({
+                command: 'fileHistoryData',
+                payload: {
+                  filePath: targetFile,
+                  fileName: path.basename(targetFile),
+                  revisions,
+                },
+              } as ExtensionToWebviewMessage);
+            }
+          }
+          break;
+
+        case 'openFileHistoryDiff':
+          if (root && msg.payload?.filePath && msg.payload?.commitHash) {
+            await this.openFileHistoryDiff(
+              root,
+              msg.payload.filePath,
+              msg.payload.commitHash
+            );
+          }
+          break;
+
+        // --- Cloud Patches IPC ---
+        case 'createCloudPatch':
+          if (root) {
+            try {
+              const patch = await this.gitClient.createCloudPatch(
+                root,
+                msg.payload?.title || 'WIP Patch',
+                msg.payload?.description || ''
+              );
+              webview.postMessage({
+                command: 'patchCreated',
+                payload: patch,
+              } as ExtensionToWebviewMessage);
+              vscode.window.showInformationMessage(
+                `Cloud Patch "${patch.title}" created successfully!`
+              );
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Could not create Cloud Patch: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'applyCloudPatch':
+          if (root && msg.payload?.patchContent) {
+            try {
+              const res = await this.gitClient.applyCloudPatch(
+                root,
+                msg.payload.patchContent,
+                msg.payload.reverse
+              );
+              if (res.success) {
+                vscode.window.showInformationMessage(res.message);
+                await this.refreshData();
+              } else {
+                vscode.window.showErrorMessage(res.message);
+              }
+              webview.postMessage({
+                command: 'patchApplied',
+                payload: res,
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Patch apply failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'setLayoutMode':
+          if (msg.payload) {
+            const cfg = vscode.workspace.getConfiguration('commitflow');
+            await cfg.update('graph.layoutMode', msg.payload, vscode.ConfigurationTarget.Global);
+          }
+          break;
+
         case 'saveSettings':
           if (msg.payload) {
             const cfg = vscode.workspace.getConfiguration('commitflow');
@@ -482,6 +677,7 @@ export class GraphWebviewProvider
               cfg.update('language', s.language, vscode.ConfigurationTarget.Global),
               cfg.update('graph.density', s.density, vscode.ConfigurationTarget.Global),
               cfg.update('graph.theme', s.theme, vscode.ConfigurationTarget.Global),
+              cfg.update('graph.layoutMode', s.layoutMode || 'auto', vscode.ConfigurationTarget.Global),
               cfg.update('graph.animations', s.animations, vscode.ConfigurationTarget.Global),
               cfg.update('graph.pageSize', s.pageSize, vscode.ConfigurationTarget.Global),
               cfg.update('inlineBlame.enabled', s.inlineBlameEnabled, vscode.ConfigurationTarget.Global),
@@ -550,6 +746,26 @@ export class GraphWebviewProvider
     }
   }
 
+  /**
+   * Opens native VS Code diff for visual file history
+   */
+  private async openFileHistoryDiff(
+    root: string,
+    filePath: string,
+    commitHash: string
+  ): Promise<void> {
+    const baseName = path.basename(filePath);
+    const leftUri = GitContentProvider.createUri(`${commitHash}~1`, filePath, root);
+    const rightUri = GitContentProvider.createUri(commitHash, filePath, root);
+    const title = `${baseName} (${commitHash.slice(0, 7)} vs Parent)`;
+
+    try {
+      await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title);
+    } catch (err: any) {
+      vscode.window.showErrorMessage(`Unable to open revision diff: ${err.message}`);
+    }
+  }
+
   private getHtmlForWebview(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview.js')
@@ -577,9 +793,9 @@ export class GraphWebviewProvider
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="${codiconCssUri}" rel="stylesheet" />
   <link href="${styleUri}" rel="stylesheet" />
-  <title>CommitFlow Graph</title>
+  <title>CommitFlow - Git Graph & Developer Hub</title>
 </head>
-<body class="density-comfortable">
+<body class="density-comfortable layout-auto">
   <!-- Top Header Bar -->
   <div class="header-bar" id="header-bar">
     <div class="header-row-primary">
@@ -594,8 +810,19 @@ export class GraphWebviewProvider
         <span class="branch-name">main</span>
       </div>
 
+      <!-- Private Repository Badge -->
+      <div id="private-repo-badge" class="private-repo-badge" style="display:none;" title="Repositorio Privado">
+        <i class="codicon codicon-lock"></i>
+        <span id="private-repo-label">Privado</span>
+      </div>
+
       <div class="header-quick-actions">
-        <button id="refresh-btn" class="btn-icon" title="Refrescar grafo">
+        <!-- Layout Switcher Button -->
+        <button id="btn-layout-mode" class="btn-icon btn-layout-toggle" title="Cambiar diseño de posición (Inferior / Lateral Izquierdo / Lateral Derecho / Automático)">
+          <i class="codicon codicon-layout"></i>
+        </button>
+
+        <button id="refresh-btn" class="btn-icon" title="Refrescar">
           <i class="codicon codicon-refresh"></i>
         </button>
         <button id="btn-popout" class="btn-icon" title="Abrir en pestaña completa del editor">
@@ -613,10 +840,37 @@ export class GraphWebviewProvider
       </div>
     </div>
 
+    <!-- Navigation Tab Bar -->
+    <div class="nav-tab-bar" id="nav-tab-bar">
+      <button class="nav-tab-btn active" data-tab="tab-graph" title="Grafo interactivo de commits y ramas">
+        <i class="codicon codicon-git-branch"></i>
+        <span>Grafo</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-file-history" title="Historial visual y evolución de archivos">
+        <i class="codicon codicon-history"></i>
+        <span>Historial</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-prs" title="Launchpad centralizado de Pull Requests">
+        <i class="codicon codicon-git-pull-request"></i>
+        <span>PRs</span>
+        <span class="tab-badge" id="pr-badge-count">0</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-worktrees" title="Árboles de trabajo simultáneos y Multi-WIP">
+        <i class="codicon codicon-repo-forked"></i>
+        <span>Worktrees</span>
+        <span class="tab-badge" id="worktree-badge-count">0</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-cloud-patches" title="Compartir cambios privados sin push">
+        <i class="codicon codicon-cloud-upload"></i>
+        <span>Cloud Patches</span>
+      </button>
+    </div>
+
+    <!-- Toolbar Controls (Search & Branch Filter) for Graph -->
     <div class="toolbar-controls" id="toolbar-controls">
       <div class="search-input-wrapper">
         <span class="search-icon"><i class="codicon codicon-search"></i></span>
-        <input type="text" id="search-input" class="search-input" placeholder="Buscar..." />
+        <input type="text" id="search-input" class="search-input" placeholder="Buscar por mensaje, SHA, autor..." />
         <button id="search-clear-btn" class="search-clear-btn" title="Limpiar búsqueda" style="display:none;">
           <i class="codicon codicon-close"></i>
         </button>
@@ -664,17 +918,129 @@ export class GraphWebviewProvider
   <!-- Upstream Sync Banner Container -->
   <div id="upstream-sync-container"></div>
 
-  <!-- Main Viewport -->
-  <div class="main-viewport">
-    <div id="graph-table-container" class="graph-table-container">
-      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
-        <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
-        <div>Iniciando CommitFlow Graph...</div>
+  <!-- Main Viewport containing tabs -->
+  <div class="main-viewport" id="main-viewport">
+    <!-- TAB 1: INTERACTIVE COMMIT GRAPH -->
+    <div id="tab-graph" class="tab-pane active">
+      <div id="graph-table-container" class="graph-table-container">
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
+          <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
+          <div>Iniciando CommitFlow Graph...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: VISUAL FILE HISTORY -->
+    <div id="tab-file-history" class="tab-pane">
+      <div class="file-history-container">
+        <div class="file-history-header">
+          <div class="file-picker-row">
+            <i class="codicon codicon-file-text"></i>
+            <span id="file-history-current-path" class="file-history-path">Selecciona o abre un archivo para ver su evolución</span>
+            <button id="btn-pick-file-history" class="btn-sm" title="Elegir otro archivo"><i class="codicon codicon-folder-opened"></i> Explorar</button>
+          </div>
+        </div>
+        <div id="file-history-timeline" class="file-history-timeline">
+          <div class="empty-state">
+            <i class="codicon codicon-history" style="font-size:32px; color:var(--accent-cyan);"></i>
+            <div style="font-weight:600; margin-top:8px;">Historial Visual de Archivos</div>
+            <div style="font-size:var(--font-size-sm); color:var(--text-muted); max-width:320px; text-align:center; margin-top:4px;">
+              Abre cualquier archivo en el editor de VS Code o haz clic en "Explorar" para inspeccionar todos los cambios, autorías y diffs a lo largo del tiempo.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: PULL REQUESTS LAUNCHPAD -->
+    <div id="tab-prs" class="tab-pane">
+      <div class="pr-launchpad-container">
+        <div class="pr-filters-bar">
+          <button class="pr-filter-pill active" data-filter="all">Todas (<span id="pr-filter-count-all">0</span>)</button>
+          <button class="pr-filter-pill" data-filter="blocked">🔴 Bloqueadas (<span id="pr-filter-count-blocked">0</span>)</button>
+          <button class="pr-filter-pill" data-filter="ready">🟢 Listas (<span id="pr-filter-count-ready">0</span>)</button>
+          <button class="pr-filter-pill" data-filter="pending">🟡 Pendientes (<span id="pr-filter-count-pending">0</span>)</button>
+        </div>
+        <div id="pr-cards-list" class="pr-cards-list">
+          <div class="empty-state">
+            <i class="codicon codicon-git-pull-request" style="font-size:32px; color:var(--accent-cyan);"></i>
+            <div style="font-weight:600; margin-top:8px;">PR Launchpad Centralizado</div>
+            <div style="font-size:var(--font-size-sm); color:var(--text-muted); text-align:center; margin-top:4px;">
+              Triaje, revisión y seguimiento de Pull Requests de repositorios públicos y privados sin salir del editor.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: WORKTREES & MULTI-WIP -->
+    <div id="tab-worktrees" class="tab-pane">
+      <div class="worktrees-container">
+        <div class="worktrees-header">
+          <div>
+            <span style="font-weight:600;">Árboles de Trabajo (Worktrees)</span>
+            <div style="font-size:var(--font-size-sm); color:var(--text-muted);">Trabaja en múltiples ramas simultáneamente sin cambiar de contexto</div>
+          </div>
+          <button id="btn-add-worktree" class="btn-sm btn-primary"><i class="codicon codicon-plus"></i> Nuevo Worktree</button>
+        </div>
+        <div id="worktrees-cards-list" class="worktrees-cards-list"></div>
+      </div>
+    </div>
+
+    <!-- TAB 5: CLOUD PATCHES -->
+    <div id="tab-cloud-patches" class="tab-pane">
+      <div class="cloud-patches-container">
+        <div class="patches-actions-bar">
+          <div>
+            <span style="font-weight:600;">Cloud Patches</span>
+            <div style="font-size:var(--font-size-sm); color:var(--text-muted);">Comparte cambios de código de forma privada y rápida sin hacer push a ramas remotas</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button id="btn-create-patch" class="btn-sm btn-primary"><i class="codicon codicon-add"></i> Crear Parche</button>
+            <button id="btn-apply-patch" class="btn-sm"><i class="codicon codicon-cloud-download"></i> Aplicar Parche</button>
+          </div>
+        </div>
+        <div id="cloud-patches-list" class="cloud-patches-list"></div>
       </div>
     </div>
 
     <!-- Floating Hover Popover -->
     <div id="hover-popover" class="hover-popover"></div>
+
+    <!-- Layout Switcher Popover / Picker -->
+    <div id="layout-picker-popover" class="layout-picker-popover">
+      <div class="picker-header">Orientación del Panel</div>
+      <div class="picker-options">
+        <button class="layout-option" data-layout="bottom">
+          <i class="codicon codicon-layout-panel"></i>
+          <div>
+            <div class="option-title">Panel Inferior</div>
+            <div class="option-desc">Diseño horizontal con tabla ancha y panel lateral</div>
+          </div>
+        </button>
+        <button class="layout-option" data-layout="left">
+          <i class="codicon codicon-layout-sidebar-left"></i>
+          <div>
+            <div class="option-title">Lateral Izquierdo</div>
+            <div class="option-desc">Barra lateral estándar con drawers a la derecha</div>
+          </div>
+        </button>
+        <button class="layout-option" data-layout="right">
+          <i class="codicon codicon-layout-sidebar-right"></i>
+          <div>
+            <div class="option-title">Lateral Derecho</div>
+            <div class="option-desc">Barra secundaria invertida para evitar cortes</div>
+          </div>
+        </button>
+        <button class="layout-option" data-layout="auto">
+          <i class="codicon codicon-screen-normal"></i>
+          <div>
+            <div class="option-title">Automático (Responsive)</div>
+            <div class="option-desc">Detecta la posición según el tamaño del contenedor</div>
+          </div>
+        </button>
+      </div>
+    </div>
 
     <!-- Git Stash Manager Modal -->
     <div id="stash-modal" class="modal-overlay">
@@ -715,6 +1081,89 @@ export class GraphWebviewProvider
           <button id="settings-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
         </div>
         <div id="settings-modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Worktree Create Modal -->
+    <div id="worktree-create-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-repo-forked" style="font-size:16px; color:var(--accent-cyan);"></i>
+            <span style="font-weight:700; font-size:var(--font-size-base);">Crear Nuevo Worktree</span>
+          </div>
+          <button id="worktree-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <label style="font-size:var(--font-size-sm);">
+              Nombre de la Rama (existente o nueva):
+              <input type="text" id="wt-branch-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="feature/nueva-rama" />
+            </label>
+            <label style="font-size:var(--font-size-sm);">
+              Ruta del Directorio (relativa o absoluta):
+              <input type="text" id="wt-path-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="../worktrees/mi-feature" />
+            </label>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+              <button id="wt-btn-cancel" class="btn-sm">Cancelar</button>
+              <button id="wt-btn-submit" class="btn-sm btn-primary">Crear Worktree</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cloud Patch Create Modal -->
+    <div id="patch-create-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-cloud-upload" style="font-size:16px; color:var(--accent-cyan);"></i>
+            <span style="font-weight:700; font-size:var(--font-size-base);">Crear Cloud Patch</span>
+          </div>
+          <button id="patch-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <label style="font-size:var(--font-size-sm);">
+              Título del Parche:
+              <input type="text" id="patch-title-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="Ej: Fix validación en login" />
+            </label>
+            <label style="font-size:var(--font-size-sm);">
+              Descripción u Observaciones:
+              <textarea id="patch-desc-input" class="search-input" style="width:100%; height:60px; margin-top:4px; resize:vertical;" placeholder="Detalles de los cambios para compartir"></textarea>
+            </label>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+              <button id="patch-btn-cancel" class="btn-sm">Cancelar</button>
+              <button id="patch-btn-submit" class="btn-sm btn-primary">Generar Parche</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Apply Patch Modal -->
+    <div id="patch-apply-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-cloud-download" style="font-size:16px; color:var(--accent-cyan);"></i>
+            <span style="font-weight:700; font-size:var(--font-size-base);">Aplicar Cloud Patch</span>
+          </div>
+          <button id="patch-apply-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <label style="font-size:var(--font-size-sm);">
+              Pega aquí el contenido del parche unificado o token:
+              <textarea id="patch-apply-content" class="search-input" style="width:100%; height:120px; margin-top:4px; font-family:monospace; resize:vertical;" placeholder="diff --git a/... b/..."></textarea>
+            </label>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+              <button id="patch-apply-btn-cancel" class="btn-sm">Cancelar</button>
+              <button id="patch-apply-btn-submit" class="btn-sm btn-primary">Validar y Aplicar</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

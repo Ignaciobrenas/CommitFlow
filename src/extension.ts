@@ -287,6 +287,71 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
+  // 21. Command: Show Visual File History
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'commitflow.showFileHistory',
+      async (uri?: vscode.Uri) => {
+        const targetUri = uri || vscode.window.activeTextEditor?.document.uri;
+        if (!targetUri || targetUri.scheme !== 'file') {
+          vscode.window.showWarningMessage('No active file selected to inspect history.');
+          return;
+        }
+        graphProvider?.openFullPanel();
+        graphProvider?.switchTab('tab-file-history');
+        const root = await GitClient.getInstance().getRepoRoot(targetUri.fsPath);
+        if (root) {
+          vscode.commands.executeCommand('workbench.view.extension.commitflow-explorer');
+        }
+      }
+    )
+  );
+
+  // 22. Command: Open PR Launchpad
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.openPrLaunchpad', () => {
+      graphProvider?.openFullPanel();
+      graphProvider?.switchTab('tab-prs');
+    })
+  );
+
+  // 23. Command: Open Worktrees Manager
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.openWorktrees', () => {
+      graphProvider?.openFullPanel();
+      graphProvider?.switchTab('tab-worktrees');
+    })
+  );
+
+  // 24. Command: Create Cloud Patch
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.createCloudPatch', async () => {
+      const gitClient = GitClient.getInstance();
+      const root = await gitClient.getRepoRoot();
+      if (!root) {
+        vscode.window.showWarningMessage('No Git repository found.');
+        return;
+      }
+
+      const title = await vscode.window.showInputBox({
+        prompt: 'Enter title for Cloud Patch',
+        placeHolder: 'Feature WIP / Quick Fix...',
+      });
+      if (title !== undefined) {
+        try {
+          const patch = await gitClient.createCloudPatch(root, title);
+          await vscode.env.clipboard.writeText(patch.patchContent);
+          vscode.window.showInformationMessage(
+            `CommitFlow: Cloud Patch "${patch.title}" copied to clipboard!`
+          );
+          graphProvider?.refreshData();
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Failed to create patch: ${err.message}`);
+        }
+      }
+    })
+  );
+
   console.log('⚡ [CommitFlow] Successfully initialized and ready.');
 }
 
