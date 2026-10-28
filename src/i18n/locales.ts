@@ -155,6 +155,45 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'stash.apply': 'Aplicar',
     'stash.drop': 'Descartar',
     'stash.stashes': 'Stashes:',
+
+    // Layout Modes
+    'layout.mode': 'Orientación del diseño',
+    'layout.bottom': 'Panel Inferior (Horizontal/Ancho)',
+    'layout.left': 'Lateral Izquierdo',
+    'layout.right': 'Lateral Derecho',
+    'layout.auto': 'Automático (Responsive)',
+
+    // Private Repositories & Remotes
+    'remote.private': 'Repositorio Privado',
+    'remote.connected': 'Conectado',
+
+    // Visual File History
+    'history.title': 'Historial Visual de Archivos',
+    'history.explore': 'Explorar Archivo',
+    'history.diff': 'Ver Diferencias',
+
+    // PR Launchpad
+    'pr.title': 'PR Launchpad Centralizado',
+    'pr.all': 'Todas',
+    'pr.blocked': 'Bloqueadas',
+    'pr.ready': 'Listas',
+    'pr.pending': 'Pendientes',
+    'pr.checkout': 'Checkout Rama',
+
+    // Worktrees & Multi-WIP
+    'worktree.title': 'Árboles de Trabajo (Worktrees)',
+    'worktree.new': 'Nuevo Worktree',
+    'worktree.clean': 'Limpio (Sin cambios)',
+    'worktree.wip': 'WIP Activo',
+    'worktree.open': 'Abrir en VS Code',
+    'worktree.remove': 'Eliminar Worktree',
+
+    // Cloud Patches
+    'patch.title': 'Cloud Patches (Compartir sin push)',
+    'patch.create': 'Crear Parche',
+    'patch.apply': 'Aplicar Parche',
+    'patch.copy': 'Copiar al Portapapeles',
+    'patch.revert': 'Revertir Parche',
   },
 
   en: {
@@ -311,6 +350,45 @@ export const LOCALES: Record<'es' | 'en', Record<string, string>> = {
     'stash.apply': 'Apply',
     'stash.drop': 'Drop',
     'stash.stashes': 'Stashes:',
+
+    // Layout Modes
+    'layout.mode': 'Layout orientation',
+    'layout.bottom': 'Bottom Panel (Wide/Horizontal)',
+    'layout.left': 'Left Sidebar',
+    'layout.right': 'Right Sidebar',
+    'layout.auto': 'Auto (Responsive)',
+
+    // Private Repositories & Remotes
+    'remote.private': 'Private Repository',
+    'remote.connected': 'Connected',
+
+    // Visual File History
+    'history.title': 'Visual File History',
+    'history.explore': 'Explore File',
+    'history.diff': 'View Diff',
+
+    // PR Launchpad
+    'pr.title': 'Centralized PR Launchpad',
+    'pr.all': 'All',
+    'pr.blocked': 'Blocked',
+    'pr.ready': 'Ready',
+    'pr.pending': 'Pending',
+    'pr.checkout': 'Checkout Branch',
+
+    // Worktrees & Multi-WIP
+    'worktree.title': 'Worktrees & Multi-WIP',
+    'worktree.new': 'New Worktree',
+    'worktree.clean': 'Clean (No WIP)',
+    'worktree.wip': 'Active WIP',
+    'worktree.open': 'Open in VS Code',
+    'worktree.remove': 'Remove Worktree',
+
+    // Cloud Patches
+    'patch.title': 'Cloud Patches (Share without push)',
+    'patch.create': 'Create Patch',
+    'patch.apply': 'Apply Patch',
+    'patch.copy': 'Copy to Clipboard',
+    'patch.revert': 'Revert Patch',
   },
 };
 
