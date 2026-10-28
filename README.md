@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/Ignaciobrenas/CommitFlow/actions"><img src="https://img.shields.io/badge/CI-Passing-10b981?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI Status" /></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.4.0-38bdf8?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.4.5-38bdf8?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-8b5cf6?style=for-the-badge" alt="License" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.6_Strict-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" /></a>
 </p>
@@ -25,7 +25,7 @@ Whether you place CommitFlow in the **Bottom Panel (terminal dock)**, the **Left
 
 ---
 
-## 🚀 What's New in v0.4.0
+## 🚀 What's New in v0.4.5
 
 ### 1. 🎛️ Adaptive Layout Mode Switcher (Bottom Panel / Left / Right / Auto)
 * **Custom Layouts for Every Placement:** Click the `$(layout)` button to switch between:

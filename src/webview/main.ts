@@ -1722,7 +1722,7 @@ function renderStashModalBody(): void {
 }
 
 // ==========================================================================
-// CommitFlow v0.4.0: Layout Switcher, Tabs, File History, PRs, Worktrees, Cloud Patches
+// CommitFlow v0.4.5: Layout Switcher, Themes, Dev Tools, File History, PRs, Worktrees, Cloud Patches
 // ==========================================================================
 
 function applyLayoutMode(mode: LayoutMode, persist = true): void {
