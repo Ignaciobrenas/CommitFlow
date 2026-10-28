@@ -108,11 +108,101 @@ export interface GraphNode {
   isWorkingTree?: boolean;
 }
 
+export type RemoteProviderType = 'github' | 'gitlab' | 'bitbucket' | 'other';
+
+export interface RemoteRepoInfo {
+  provider: RemoteProviderType;
+  owner: string;
+  repo: string;
+  webUrl: string;
+  isPrivate: boolean;
+  authConnected: boolean;
+}
+
 export interface GitHubRepoInfo {
   owner: string;
   repo: string;
   webUrl: string;
+  isPrivate?: boolean;
 }
+
+export interface GitWorktree {
+  path: string;
+  branch: string;
+  headHash: string;
+  isCurrent: boolean;
+  isLocked?: boolean;
+  isPrunable?: boolean;
+  hasWip: boolean;
+  wipFilesCount: number;
+  wipModified: number;
+  wipAdded: number;
+  wipDeleted: number;
+}
+
+export interface PullRequestInfo {
+  id: string | number;
+  number: number;
+  title: string;
+  state: 'open' | 'closed' | 'merged' | 'draft';
+  reviewStatus: 'approved' | 'changes_requested' | 'review_required' | 'none';
+  ciStatus: 'success' | 'failure' | 'pending' | 'none';
+  author: GitAuthor;
+  sourceBranch: string;
+  targetBranch: string;
+  url: string;
+  updatedAt: string;
+  isBlocked: boolean;
+  isReady: boolean;
+  isPending: boolean;
+  commentsCount?: number;
+}
+
+export interface FileCommitRevision {
+  commitHash: string;
+  shortHash: string;
+  author: GitAuthor;
+  subject: string;
+  date: string;
+  relativeTime: string;
+  linesAdded: number;
+  linesDeleted: number;
+  filePath: string;
+}
+
+export interface CloudPatch {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string;
+  author: string;
+  baseCommitHash: string;
+  filesCount: number;
+  summary: string;
+  patchContent: string;
+  isApplied?: boolean;
+}
+
+export type LayoutMode = 'auto' | 'bottom' | 'left' | 'right';
+
+export interface CommitFlowSettings {
+  language: 'auto' | 'es' | 'en';
+  density: 'compact' | 'comfortable' | 'spacious';
+  theme: 'auto' | 'dark' | 'light';
+  layoutMode?: LayoutMode;
+  animations: boolean;
+  pageSize: number;
+  inlineBlameEnabled: boolean;
+  inlineBlameDelay: number;
+  avatarService: 'gravatar' | 'github' | 'initials';
+  autoFetch: boolean;
+  fetchIntervalMinutes: number;
+  notifyOnBranchMerge: boolean;
+  askBeforePull: boolean;
+  gitlabToken?: string;
+  bitbucketToken?: string;
+}
+
 
 export interface BranchParticipation {
   branchName: string;
@@ -142,31 +232,19 @@ export interface GitStash {
   date: string;
 }
 
-export interface CommitFlowSettings {
-  language: 'auto' | 'es' | 'en';
-  density: 'compact' | 'comfortable' | 'spacious';
-  theme: 'auto' | 'dark' | 'light';
-  animations: boolean;
-  pageSize: number;
-  inlineBlameEnabled: boolean;
-  inlineBlameDelay: number;
-  avatarService: 'gravatar' | 'github' | 'initials';
-  autoFetch: boolean;
-  fetchIntervalMinutes: number;
-  notifyOnBranchMerge: boolean;
-  askBeforePull: boolean;
-}
-
-
 export interface GraphDataPayload {
   commits: GraphNode[];
   branches: GitBranch[];
   currentBranch?: string;
   githubRepo?: GitHubRepoInfo | null;
+  remoteRepo?: RemoteRepoInfo | null;
+  worktrees?: GitWorktree[];
+  pullRequests?: PullRequestInfo[];
   stats: RepoStats;
   personalStats?: UserPersonalStats;
   upstreamStatus?: UpstreamStatus | null;
   stashes?: GitStash[];
+  cloudPatches?: CloudPatch[];
   settings?: CommitFlowSettings;
   systemLanguage?: string;
   totalCommits: number;
@@ -197,7 +275,21 @@ export interface WebviewToExtensionMessage {
     | 'openCommit'
     | 'openDiff'
     | 'openFullPanel'
-    | 'filter';
+    | 'filter'
+    // New Features:
+    | 'requestWorktrees'
+    | 'addWorktree'
+    | 'removeWorktree'
+    | 'openWorktree'
+    | 'requestPullRequests'
+    | 'checkoutPullRequest'
+    | 'requestFileHistory'
+    | 'openFileHistoryDiff'
+    | 'createCloudPatch'
+    | 'applyCloudPatch'
+    | 'deleteCloudPatch'
+    | 'requestCloudPatches'
+    | 'setLayoutMode';
   payload?: any;
 }
 
@@ -209,6 +301,12 @@ export interface ExtensionToWebviewMessage {
     | 'stashesUpdated'
     | 'branchSwitched'
     | 'pullCompleted'
+    | 'worktreesData'
+    | 'pullRequestsData'
+    | 'fileHistoryData'
+    | 'cloudPatchesData'
+    | 'patchCreated'
+    | 'patchApplied'
     | 'error'
     | 'loading';
   payload?: any;
