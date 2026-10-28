@@ -1,12 +1,18 @@
 import {
+  CloudPatch,
   CommitFlowSettings,
   ContributorStat,
+  FileCommitRevision,
   GitBranch,
   GitCommit,
   GitFileChange,
   GitHubRepoInfo,
   GitStash,
+  GitWorktree,
   GraphNode,
+  LayoutMode,
+  PullRequestInfo,
+  RemoteRepoInfo,
   RepoStats,
   UpstreamStatus,
   UserPersonalStats,
@@ -26,6 +32,15 @@ let allNodes: GraphNode[] = [];
 let filteredNodes: GraphNode[] = [];
 let branches: GitBranch[] = [];
 let stashes: GitStash[] = [];
+let worktrees: GitWorktree[] = [];
+let pullRequests: PullRequestInfo[] = [];
+let remoteRepo: RemoteRepoInfo | null = null;
+let currentFileHistory: { filePath: string; fileName: string; revisions: FileCommitRevision[] } | null = null;
+let savedPatches: CloudPatch[] = [];
+let activeTab = 'tab-graph';
+let prActiveFilter: 'all' | 'blocked' | 'ready' | 'pending' = 'all';
+let currentLayoutMode: LayoutMode = 'auto';
+
 let repoStats: RepoStats | null = null;
 let personalStats: UserPersonalStats | null = null;
 let githubRepo: GitHubRepoInfo | null = null;
@@ -44,6 +59,7 @@ let settings: CommitFlowSettings = {
   language: 'auto',
   density: 'comfortable',
   theme: 'auto',
+  layoutMode: 'auto',
   animations: true,
   pageSize: 300,
   inlineBlameEnabled: true,
@@ -65,12 +81,47 @@ const btnStash = document.getElementById('btn-stash') as HTMLButtonElement;
 const btnPersonalStats = document.getElementById('btn-personal-stats') as HTMLButtonElement;
 const btnSettings = document.getElementById('btn-settings') as HTMLButtonElement;
 const btnRefresh = document.getElementById('refresh-btn') as HTMLButtonElement;
+const btnLayoutMode = document.getElementById('btn-layout-mode') as HTMLButtonElement | null;
+const layoutPickerPopover = document.getElementById('layout-picker-popover') as HTMLElement | null;
+const privateRepoBadge = document.getElementById('private-repo-badge') as HTMLElement | null;
+const privateRepoLabel = document.getElementById('private-repo-label') as HTMLElement | null;
 const activeBranchPill = document.getElementById('active-branch-pill') as HTMLElement;
 const upstreamSyncContainer = document.getElementById('upstream-sync-container') as HTMLElement;
 const tableContainer = document.getElementById('graph-table-container') as HTMLElement;
 const drawer = document.getElementById('commit-drawer') as HTMLElement;
 const drawerCloseBtn = document.getElementById('drawer-close-btn') as HTMLButtonElement;
 const hoverPopover = document.getElementById('hover-popover') as HTMLElement;
+
+// Tab Elements
+const navTabButtons = document.querySelectorAll('.nav-tab-btn');
+const prBadgeCount = document.getElementById('pr-badge-count');
+const worktreeBadgeCount = document.getElementById('worktree-badge-count');
+
+// Worktree & Patch Modals
+const worktreeCreateModal = document.getElementById('worktree-create-modal') as HTMLElement | null;
+const worktreeModalClose = document.getElementById('worktree-modal-close') as HTMLButtonElement | null;
+const btnAddWorktree = document.getElementById('btn-add-worktree') as HTMLButtonElement | null;
+const wtBtnCancel = document.getElementById('wt-btn-cancel') as HTMLButtonElement | null;
+const wtBtnSubmit = document.getElementById('wt-btn-submit') as HTMLButtonElement | null;
+const wtBranchInput = document.getElementById('wt-branch-input') as HTMLInputElement | null;
+const wtPathInput = document.getElementById('wt-path-input') as HTMLInputElement | null;
+
+const patchCreateModal = document.getElementById('patch-create-modal') as HTMLElement | null;
+const patchModalClose = document.getElementById('patch-modal-close') as HTMLButtonElement | null;
+const btnCreatePatch = document.getElementById('btn-create-patch') as HTMLButtonElement | null;
+const patchBtnCancel = document.getElementById('patch-btn-cancel') as HTMLButtonElement | null;
+const patchBtnSubmit = document.getElementById('patch-btn-submit') as HTMLButtonElement | null;
+const patchTitleInput = document.getElementById('patch-title-input') as HTMLInputElement | null;
+const patchDescInput = document.getElementById('patch-desc-input') as HTMLTextAreaElement | null;
+
+const patchApplyModal = document.getElementById('patch-apply-modal') as HTMLElement | null;
+const patchApplyClose = document.getElementById('patch-apply-close') as HTMLButtonElement | null;
+const btnApplyPatch = document.getElementById('btn-apply-patch') as HTMLButtonElement | null;
+const patchApplyBtnCancel = document.getElementById('patch-apply-btn-cancel') as HTMLButtonElement | null;
+const patchApplyBtnSubmit = document.getElementById('patch-apply-btn-submit') as HTMLButtonElement | null;
+const patchApplyContent = document.getElementById('patch-apply-content') as HTMLTextAreaElement | null;
+
+const btnPickFileHistory = document.getElementById('btn-pick-file-history') as HTMLButtonElement | null;
 
 // Responsive Layout State
 let isCompactLayout = false;
@@ -159,6 +210,9 @@ window.addEventListener('message', (event) => {
       allNodes = message.payload.commits || [];
       branches = message.payload.branches || [];
       stashes = message.payload.stashes || [];
+      worktrees = message.payload.worktrees || [];
+      pullRequests = message.payload.pullRequests || [];
+      remoteRepo = message.payload.remoteRepo || null;
       currentBranchName = message.payload.currentBranch || '';
       repoStats = message.payload.stats || null;
       personalStats = message.payload.personalStats || null;
@@ -173,18 +227,57 @@ window.addEventListener('message', (event) => {
         currentLang = settings.language;
         applyTheme(settings.theme);
         applyDensity(settings.density);
+        if (settings.layoutMode) {
+          applyLayoutMode(settings.layoutMode, false);
+        }
       }
       applyLocalization();
       updateStatsBar();
       updateBranchesDropdown();
       updateActiveBranchBadge();
+      updatePrivateRepoBadge();
+      updateTabBadges();
       renderUpstreamSyncBar();
       applyFilters();
+
+      if (activeTab === 'tab-worktrees') renderWorktrees();
+      if (activeTab === 'tab-prs') renderPullRequests();
       break;
 
     case 'commitFiles':
       if (selectedNode && message.payload.commitHash === selectedNode.commit.hash) {
         renderCommitFiles(message.payload.files || []);
+      }
+      break;
+
+    case 'worktreesData':
+      worktrees = message.payload || [];
+      updateTabBadges();
+      renderWorktrees();
+      break;
+
+    case 'pullRequestsData':
+      pullRequests = message.payload || [];
+      updateTabBadges();
+      renderPullRequests();
+      break;
+
+    case 'fileHistoryData':
+      currentFileHistory = message.payload;
+      renderFileHistory(message.payload);
+      break;
+
+    case 'patchCreated':
+      handlePatchCreated(message.payload);
+      break;
+
+    case 'patchApplied':
+      handlePatchApplied(message.payload);
+      break;
+
+    case 'switchTab':
+      if (message.payload) {
+        switchTab(message.payload);
       }
       break;
 
@@ -194,6 +287,9 @@ window.addEventListener('message', (event) => {
         currentLang = settings.language;
         applyTheme(settings.theme);
         applyDensity(settings.density);
+        if (settings.layoutMode) {
+          applyLayoutMode(settings.layoutMode, false);
+        }
         applyLocalization();
         renderGraph();
       }
@@ -1491,6 +1587,473 @@ function renderStashModalBody(): void {
   });
 }
 
+// ==========================================================================
+// CommitFlow v0.4.0: Layout Switcher, Tabs, File History, PRs, Worktrees, Cloud Patches
+// ==========================================================================
+
+function applyLayoutMode(mode: LayoutMode, persist = true): void {
+  currentLayoutMode = mode;
+  document.body.classList.remove('layout-bottom', 'layout-left', 'layout-right', 'layout-auto');
+  document.body.classList.add(`layout-${mode}`);
+
+  if (btnLayoutMode) {
+    const icon = btnLayoutMode.querySelector('i');
+    if (icon) {
+      icon.className = 'codicon';
+      if (mode === 'bottom') icon.classList.add('codicon-layout-panel');
+      else if (mode === 'left') icon.classList.add('codicon-layout-sidebar-left');
+      else if (mode === 'right') icon.classList.add('codicon-layout-sidebar-right');
+      else icon.classList.add('codicon-layout');
+    }
+  }
+
+  document.querySelectorAll('.layout-option').forEach((opt) => {
+    if (opt.getAttribute('data-layout') === mode) {
+      opt.classList.add('active');
+    } else {
+      opt.classList.remove('active');
+    }
+  });
+
+  checkLayoutMode();
+  if (allNodes.length > 0) {
+    renderGraph();
+  }
+
+  if (persist) {
+    vscode.postMessage({ command: 'setLayoutMode', payload: mode });
+  }
+}
+
+function updatePrivateRepoBadge(): void {
+  if (!privateRepoBadge) return;
+  if (remoteRepo && remoteRepo.isPrivate) {
+    privateRepoBadge.style.display = 'inline-flex';
+    if (privateRepoLabel) {
+      const pName = remoteRepo.provider.charAt(0).toUpperCase() + remoteRepo.provider.slice(1);
+      privateRepoLabel.textContent = `${pName} Privado`;
+    }
+    privateRepoBadge.title = `Repositorio Privado en ${remoteRepo.provider.toUpperCase()} (${remoteRepo.owner}/${remoteRepo.repo})`;
+  } else {
+    privateRepoBadge.style.display = 'none';
+  }
+}
+
+function updateTabBadges(): void {
+  if (prBadgeCount) {
+    prBadgeCount.textContent = String(pullRequests.length);
+    prBadgeCount.style.display = pullRequests.length > 0 ? 'inline-flex' : 'none';
+  }
+  if (worktreeBadgeCount) {
+    worktreeBadgeCount.textContent = String(worktrees.length);
+    worktreeBadgeCount.style.display = worktrees.length > 0 ? 'inline-flex' : 'none';
+  }
+
+  const elAll = document.getElementById('pr-filter-count-all');
+  const elBlocked = document.getElementById('pr-filter-count-blocked');
+  const elReady = document.getElementById('pr-filter-count-ready');
+  const elPending = document.getElementById('pr-filter-count-pending');
+
+  if (elAll) elAll.textContent = String(pullRequests.length);
+  if (elBlocked) elBlocked.textContent = String(pullRequests.filter((p) => p.isBlocked).length);
+  if (elReady) elReady.textContent = String(pullRequests.filter((p) => p.isReady).length);
+  if (elPending) elPending.textContent = String(pullRequests.filter((p) => p.isPending).length);
+}
+
+function switchTab(tabId: string): void {
+  activeTab = tabId;
+  navTabButtons.forEach((btn) => {
+    if (btn.getAttribute('data-tab') === tabId) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  document.querySelectorAll('.tab-pane').forEach((pane) => {
+    if (pane.id === tabId) {
+      pane.classList.add('active');
+    } else {
+      pane.classList.remove('active');
+    }
+  });
+
+  const toolbarControls = document.getElementById('toolbar-controls');
+  if (toolbarControls) {
+    toolbarControls.style.display = tabId === 'tab-graph' ? 'flex' : 'none';
+  }
+
+  if (tabId === 'tab-graph') {
+    renderGraph();
+  } else if (tabId === 'tab-file-history') {
+    if (!currentFileHistory) {
+      vscode.postMessage({ command: 'requestFileHistory' });
+    } else {
+      renderFileHistory(currentFileHistory);
+    }
+  } else if (tabId === 'tab-prs') {
+    renderPullRequests();
+  } else if (tabId === 'tab-worktrees') {
+    renderWorktrees();
+  } else if (tabId === 'tab-cloud-patches') {
+    renderCloudPatches();
+  }
+}
+
+function renderFileHistory(data: { filePath: string; fileName: string; revisions: FileCommitRevision[] }): void {
+  const currentPathEl = document.getElementById('file-history-current-path');
+  const timelineEl = document.getElementById('file-history-timeline');
+  if (currentPathEl) {
+    currentPathEl.textContent = data.filePath || 'Archivo actual';
+    currentPathEl.title = data.filePath;
+  }
+  if (!timelineEl) return;
+
+  if (!data.revisions || data.revisions.length === 0) {
+    timelineEl.innerHTML = `
+      <div class="empty-state">
+        <i class="codicon codicon-history" style="font-size:32px; color:var(--accent-cyan);"></i>
+        <div style="font-weight:600; margin-top:8px;">Sin historial disponible para este archivo</div>
+        <div style="font-size:var(--font-size-sm); color:var(--text-muted); margin-top:4px;">No se encontraron commits registrados en Git para esta ruta.</div>
+      </div>
+    `;
+    return;
+  }
+
+  timelineEl.innerHTML = data.revisions
+    .map(
+      (rev) => `
+    <div class="history-card">
+      <div class="history-card-header">
+        <div class="history-author-info">
+          <img src="${rev.author.avatarUrl}" class="history-avatar" alt="${rev.author.name}" />
+          <div>
+            <span class="history-author-name">${rev.author.name}</span>
+            <span class="history-date">• ${rev.relativeTime}</span>
+          </div>
+        </div>
+        <span class="commit-hash-pill" style="font-family:var(--vscode-editor-font-family);">${rev.shortHash}</span>
+      </div>
+      <div class="history-subject">${rev.subject}</div>
+      <div class="history-card-footer">
+        <div class="diff-deltas">
+          ${rev.linesAdded > 0 ? `<span class="diff-badge-added">+${rev.linesAdded}</span>` : ''}
+          ${rev.linesDeleted > 0 ? `<span class="diff-badge-deleted">-${rev.linesDeleted}</span>` : ''}
+        </div>
+        <button class="btn-sm btn-hist-diff" data-hash="${rev.commitHash}" data-file="${data.filePath}">
+          <i class="codicon codicon-git-diff"></i> Ver Diferencias
+        </button>
+      </div>
+    </div>
+  `
+    )
+    .join('');
+
+  timelineEl.querySelectorAll('.btn-hist-diff').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const hash = btn.getAttribute('data-hash');
+      const file = btn.getAttribute('data-file');
+      if (hash && file) {
+        vscode.postMessage({
+          command: 'openFileHistoryDiff',
+          payload: { commitHash: hash, filePath: file },
+        });
+      }
+    });
+  });
+}
+
+function renderPullRequests(): void {
+  const listEl = document.getElementById('pr-cards-list');
+  if (!listEl) return;
+
+  const filtered = pullRequests.filter((p) => {
+    if (prActiveFilter === 'blocked') return p.isBlocked;
+    if (prActiveFilter === 'ready') return p.isReady;
+    if (prActiveFilter === 'pending') return p.isPending;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <i class="codicon codicon-git-pull-request" style="font-size:32px; color:var(--accent-cyan);"></i>
+        <div style="font-weight:600; margin-top:8px;">No hay PRs en esta categoría</div>
+        <div style="font-size:var(--font-size-sm); color:var(--text-muted); margin-top:4px;">Todas las solicitudes están al día o no coinciden con el filtro actual.</div>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = filtered
+    .map((pr) => {
+      let statusBadge = '';
+      if (pr.isBlocked) {
+        statusBadge = `<span class="pr-chip blocked"><i class="codicon codicon-error"></i> Bloqueada</span>`;
+      } else if (pr.isReady) {
+        statusBadge = `<span class="pr-chip ready"><i class="codicon codicon-check"></i> Lista</span>`;
+      } else {
+        statusBadge = `<span class="pr-chip pending"><i class="codicon codicon-clock"></i> Pendiente</span>`;
+      }
+
+      const ciChip =
+        pr.ciStatus === 'success'
+          ? `<span class="pr-chip ci-success"><i class="codicon codicon-pass"></i> CI OK</span>`
+          : pr.ciStatus === 'failure'
+          ? `<span class="pr-chip ci-failure"><i class="codicon codicon-error"></i> CI Falló</span>`
+          : '';
+
+      return `
+        <div class="pr-card">
+          <div class="pr-card-header">
+            <div class="pr-title-row">
+              <span class="pr-number">#${pr.number}</span>
+              <span>${pr.title}</span>
+            </div>
+            <div class="pr-status-chips">
+              ${statusBadge}
+              ${ciChip}
+            </div>
+          </div>
+          <div class="pr-branches-row">
+            <span class="branch-badge-pill">${pr.sourceBranch}</span>
+            <i class="codicon codicon-arrow-right" style="font-size:12px;"></i>
+            <span class="branch-badge-pill">${pr.targetBranch}</span>
+            <span style="margin-left:auto;">${pr.updatedAt}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px; font-size:var(--font-size-xs); color:var(--text-muted);">
+            <img src="${pr.author.avatarUrl}" style="width:16px; height:16px; border-radius:50%;" alt="${pr.author.name}" />
+            <span>${pr.author.name}</span>
+          </div>
+          <div class="pr-card-actions">
+            <button class="btn-sm btn-pr-checkout" data-pr="${pr.number}" data-branch="${pr.sourceBranch}" title="Checkout local de esta rama">
+              <i class="codicon codicon-arrow-swap"></i> Checkout
+            </button>
+            ${
+              pr.url
+                ? `<button class="btn-sm btn-pr-open" data-url="${pr.url}" title="Abrir en remoto">
+                     <i class="codicon codicon-link-external"></i> Ver en Web
+                   </button>`
+                : ''
+            }
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  listEl.querySelectorAll('.btn-pr-checkout').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const prNumber = parseInt(btn.getAttribute('data-pr') || '0', 10);
+      const branchName = btn.getAttribute('data-branch') || '';
+      if (prNumber && branchName) {
+        vscode.postMessage({
+          command: 'checkoutPullRequest',
+          payload: { prNumber, branchName },
+        });
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-pr-open').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const url = btn.getAttribute('data-url');
+      if (url) {
+        vscode.postMessage({ command: 'openExternal', payload: url });
+      }
+    });
+  });
+}
+
+function renderWorktrees(): void {
+  const listEl = document.getElementById('worktrees-cards-list');
+  if (!listEl) return;
+
+  if (worktrees.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <i class="codicon codicon-repo-forked" style="font-size:32px; color:var(--accent-cyan);"></i>
+        <div style="font-weight:600; margin-top:8px;">No hay Worktrees configurados</div>
+        <div style="font-size:var(--font-size-sm); color:var(--text-muted); margin-top:4px;">Haz clic en "Nuevo Worktree" para trabajar en otra rama en paralelo sin cambiar de carpeta.</div>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = worktrees
+    .map(
+      (wt) => `
+    <div class="worktree-card ${wt.isCurrent ? 'active-worktree' : ''}">
+      <div class="worktree-top-row">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="branch-badge-pill" style="font-size:var(--font-size-sm);">${wt.branch}</span>
+          ${wt.isCurrent ? '<span style="font-size:10px; font-weight:700; color:var(--accent-cyan);">(Activo)</span>' : ''}
+        </div>
+        ${
+          wt.hasWip
+            ? `<span class="wip-badge active-wip" title="${wt.wipFilesCount} archivos modificados"><i class="codicon codicon-warning"></i> WIP (${wt.wipFilesCount} archivos: +${wt.wipAdded} ~${wt.wipModified} -${wt.wipDeleted})</span>`
+            : '<span class="wip-badge clean"><i class="codicon codicon-check"></i> Limpio (Sin cambios)</span>'
+        }
+      </div>
+      <div class="worktree-path">${wt.path}</div>
+      <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
+        <button class="btn-sm btn-wt-open" data-path="${wt.path}" title="Abrir esta carpeta en VS Code">
+          <i class="codicon codicon-folder-opened"></i> Abrir en VS Code
+        </button>
+        ${
+          !wt.isCurrent
+            ? `<button class="btn-sm btn-wt-remove" data-path="${wt.path}" title="Eliminar este worktree">
+                 <i class="codicon codicon-trash"></i> Eliminar
+               </button>`
+            : ''
+        }
+      </div>
+    </div>
+  `
+    )
+    .join('');
+
+  listEl.querySelectorAll('.btn-wt-open').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const p = btn.getAttribute('data-path');
+      if (p) vscode.postMessage({ command: 'openWorktree', payload: { path: p } });
+    });
+  });
+
+  listEl.querySelectorAll('.btn-wt-remove').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const p = btn.getAttribute('data-path');
+      if (p && confirm(`¿Seguro que deseas eliminar el worktree en "${p}"?`)) {
+        vscode.postMessage({ command: 'removeWorktree', payload: { path: p, force: false } });
+      }
+    });
+  });
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderCloudPatches(): void {
+  const listEl = document.getElementById('cloud-patches-list');
+  if (!listEl) return;
+
+  if (savedPatches.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <i class="codicon codicon-cloud-upload" style="font-size:32px; color:var(--accent-cyan);"></i>
+        <div style="font-weight:600; margin-top:8px;">No hay Cloud Patches guardados</div>
+        <div style="font-size:var(--font-size-sm); color:var(--text-muted); text-align:center; margin-top:4px;">
+          Crea un Cloud Patch a partir de tus cambios locales para compartirlos al instante sin hacer push a una rama remota.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = savedPatches
+    .map(
+      (p) => `
+    <div class="patch-card">
+      <div class="patch-header-row">
+        <span class="patch-title">${p.title}</span>
+        <span style="font-size:var(--font-size-xs); color:var(--text-muted);">${new Date(p.createdAt).toLocaleTimeString()}</span>
+      </div>
+      <div style="font-size:var(--font-size-xs); color:var(--text-muted);">${p.summary}</div>
+      <pre class="patch-diff-preview"><code>${escapeHtml(p.patchContent.slice(0, 500))}${p.patchContent.length > 500 ? '\n... (truncado)' : ''}</code></pre>
+      <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
+        <button class="btn-sm btn-copy-patch" data-id="${p.id}" title="Copiar diff completo al portapapeles">
+          <i class="codicon codicon-copy"></i> Copiar
+        </button>
+        <button class="btn-sm btn-apply-saved-patch" data-id="${p.id}" title="Aplicar este parche al código local">
+          <i class="codicon codicon-cloud-download"></i> Aplicar
+        </button>
+        <button class="btn-sm btn-delete-patch" data-id="${p.id}" title="Eliminar de la lista">
+          <i class="codicon codicon-trash"></i>
+        </button>
+      </div>
+    </div>
+  `
+    )
+    .join('');
+
+  listEl.querySelectorAll('.btn-copy-patch').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const patch = savedPatches.find((x) => x.id === id);
+      if (patch) {
+        vscode.postMessage({ command: 'copyToClipboard', payload: patch.patchContent });
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-apply-saved-patch').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const patch = savedPatches.find((x) => x.id === id);
+      if (patch) {
+        vscode.postMessage({
+          command: 'applyCloudPatch',
+          payload: { patchContent: patch.patchContent, reverse: false },
+        });
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-delete-patch').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      savedPatches = savedPatches.filter((x) => x.id !== id);
+      renderCloudPatches();
+    });
+  });
+}
+
+function handlePatchCreated(patch: CloudPatch): void {
+  savedPatches.unshift(patch);
+  closePatchCreateModal();
+  switchTab('tab-cloud-patches');
+}
+
+function handlePatchApplied(result: { success: boolean; message: string }): void {
+  closePatchApplyModal();
+  vscode.postMessage({ command: 'requestData' });
+}
+
+function openPatchCreateModal(): void {
+  if (patchTitleInput) patchTitleInput.value = '';
+  if (patchDescInput) patchDescInput.value = '';
+  patchCreateModal?.classList.add('open');
+}
+
+function closePatchCreateModal(): void {
+  patchCreateModal?.classList.remove('open');
+}
+
+function openPatchApplyModal(): void {
+  if (patchApplyContent) patchApplyContent.value = '';
+  patchApplyModal?.classList.add('open');
+}
+
+function closePatchApplyModal(): void {
+  patchApplyModal?.classList.remove('open');
+}
+
+function openWorktreeModal(): void {
+  if (wtBranchInput) wtBranchInput.value = '';
+  if (wtPathInput) wtPathInput.value = '';
+  worktreeCreateModal?.classList.add('open');
+}
+
+function closeWorktreeModal(): void {
+  worktreeCreateModal?.classList.remove('open');
+}
+
 // Event Listeners
 drawerCloseBtn?.addEventListener('click', closeDrawer);
 btnPersonalStats?.addEventListener('click', openPersonalModal);
@@ -1522,8 +2085,99 @@ window.addEventListener('keydown', (e) => {
     closePersonalModal();
     closeSettingsModal();
     closeStashModal();
+    closeWorktreeModal();
+    closePatchCreateModal();
+    closePatchApplyModal();
+    layoutPickerPopover?.classList.remove('visible');
     hideHoverPopover();
   }
+});
+
+// Layout Mode Switcher Listeners
+btnLayoutMode?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  layoutPickerPopover?.classList.toggle('visible');
+});
+
+document.addEventListener('click', (e) => {
+  if (layoutPickerPopover && !layoutPickerPopover.contains(e.target as Node) && e.target !== btnLayoutMode) {
+    layoutPickerPopover.classList.remove('visible');
+  }
+});
+
+document.querySelectorAll('.layout-option').forEach((opt) => {
+  opt.addEventListener('click', () => {
+    const mode = opt.getAttribute('data-layout') as LayoutMode;
+    if (mode) {
+      applyLayoutMode(mode, true);
+      layoutPickerPopover?.classList.remove('visible');
+    }
+  });
+});
+
+// Tab Switcher Listeners
+navTabButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const tabId = btn.getAttribute('data-tab');
+    if (tabId) switchTab(tabId);
+  });
+});
+
+// PR Filters
+document.querySelectorAll('.pr-filter-pill').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pr-filter-pill').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    prActiveFilter = (btn.getAttribute('data-filter') as any) || 'all';
+    renderPullRequests();
+  });
+});
+
+// Worktree Modal Events
+btnAddWorktree?.addEventListener('click', openWorktreeModal);
+worktreeModalClose?.addEventListener('click', closeWorktreeModal);
+wtBtnCancel?.addEventListener('click', closeWorktreeModal);
+wtBtnSubmit?.addEventListener('click', () => {
+  const branch = wtBranchInput?.value.trim() || '';
+  const path = wtPathInput?.value.trim() || '';
+  if (branch && path) {
+    vscode.postMessage({
+      command: 'addWorktree',
+      payload: { branch, path },
+    });
+    closeWorktreeModal();
+  }
+});
+
+// Patch Modal Events
+btnCreatePatch?.addEventListener('click', openPatchCreateModal);
+patchModalClose?.addEventListener('click', closePatchCreateModal);
+patchBtnCancel?.addEventListener('click', closePatchCreateModal);
+patchBtnSubmit?.addEventListener('click', () => {
+  const title = patchTitleInput?.value.trim() || 'WIP Patch';
+  const desc = patchDescInput?.value.trim() || '';
+  vscode.postMessage({
+    command: 'createCloudPatch',
+    payload: { title, description: desc },
+  });
+});
+
+btnApplyPatch?.addEventListener('click', openPatchApplyModal);
+patchApplyClose?.addEventListener('click', closePatchApplyModal);
+patchApplyBtnCancel?.addEventListener('click', closePatchApplyModal);
+patchApplyBtnSubmit?.addEventListener('click', () => {
+  const content = patchApplyContent?.value.trim() || '';
+  if (content) {
+    vscode.postMessage({
+      command: 'applyCloudPatch',
+      payload: { patchContent: content, reverse: false },
+    });
+  }
+});
+
+// Pick File for History
+btnPickFileHistory?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'requestFileHistory' });
 });
 
 searchInput?.addEventListener('input', (e) => {
@@ -1571,7 +2225,7 @@ function checkLayoutMode(): void {
   }
 
   if (wasCompact !== isCompactLayout && allNodes.length > 0) {
-    renderTable();
+    renderGraph();
   }
 }
 
