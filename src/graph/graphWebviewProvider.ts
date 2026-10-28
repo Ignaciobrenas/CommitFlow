@@ -3,6 +3,7 @@ import * as path from 'path';
 import { GitClient } from '../git/gitClient';
 import { GraphLayout } from './graphLayout';
 import { GitContentProvider } from '../git/gitContentProvider';
+import { t } from '../i18n/locales';
 import {
   CommitFlowSettings,
   ExtensionToWebviewMessage,
@@ -767,6 +768,11 @@ export class GraphWebviewProvider
   }
 
   private getHtmlForWebview(webview: vscode.Webview): string {
+    const config = vscode.workspace.getConfiguration('commitflow');
+    const preferredLang = config.get<'auto' | 'es' | 'en'>('language', 'auto');
+    const sysLang = vscode.env.language;
+    const tr = (k: string, p?: Record<string, string | number>) => t(k, preferredLang, sysLang, p);
+
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview.js')
     );
@@ -805,36 +811,36 @@ export class GraphWebviewProvider
         <span class="brand-title">CommitFlow</span>
       </div>
 
-      <div id="active-branch-pill" class="active-branch-badge" title="Rama activa actual">
+      <div id="active-branch-pill" class="active-branch-badge" title="${tr('toolbar.activeBranch')}">
         <div class="branch-pulse-dot"></div>
         <span class="branch-name">main</span>
       </div>
 
       <!-- Private Repository Badge -->
-      <div id="private-repo-badge" class="private-repo-badge" style="display:none;" title="Repositorio Privado">
+      <div id="private-repo-badge" class="private-repo-badge" style="display:none;" title="${tr('remote.private')}">
         <i class="codicon codicon-lock"></i>
-        <span id="private-repo-label">Privado</span>
+        <span id="private-repo-label">${tr('remote.private')}</span>
       </div>
 
       <div class="header-quick-actions">
         <!-- Layout Switcher Button -->
-        <button id="btn-layout-mode" class="btn-icon btn-layout-toggle" title="Cambiar diseño de posición (Inferior / Lateral Izquierdo / Lateral Derecho / Automático)">
+        <button id="btn-layout-mode" class="btn-icon btn-layout-toggle" title="${tr('layout.toggleTitle')}">
           <i class="codicon codicon-layout"></i>
         </button>
 
-        <button id="refresh-btn" class="btn-icon" title="Refrescar">
+        <button id="refresh-btn" class="btn-icon" title="${tr('action.refresh')}">
           <i class="codicon codicon-refresh"></i>
         </button>
-        <button id="btn-popout" class="btn-icon" title="Abrir en pestaña completa del editor">
+        <button id="btn-popout" class="btn-icon" title="${tr('action.popout')}">
           <i class="codicon codicon-link-external"></i>
         </button>
-        <button id="btn-stash" class="btn-icon" title="Gestor de Git Stash">
+        <button id="btn-stash" class="btn-icon" title="${tr('toolbar.stash')}">
           <i class="codicon codicon-archive"></i>
         </button>
-        <button id="btn-personal-stats" class="btn-icon" title="Ver Mi Impacto">
+        <button id="btn-personal-stats" class="btn-icon" title="${tr('toolbar.myImpact')}">
           <i class="codicon codicon-graph"></i>
         </button>
-        <button id="btn-settings" class="btn-icon" title="Ajustes de CommitFlow">
+        <button id="btn-settings" class="btn-icon" title="${tr('toolbar.settings')}">
           <i class="codicon codicon-settings-gear"></i>
         </button>
       </div>
@@ -842,27 +848,27 @@ export class GraphWebviewProvider
 
     <!-- Navigation Tab Bar -->
     <div class="nav-tab-bar" id="nav-tab-bar">
-      <button class="nav-tab-btn active" data-tab="tab-graph" title="Grafo interactivo de commits y ramas">
+      <button class="nav-tab-btn active" data-tab="tab-graph" title="${tr('tabs.graphTitle')}">
         <i class="codicon codicon-git-branch"></i>
-        <span>Grafo</span>
+        <span id="nav-tab-text-graph">${tr('tabs.graph')}</span>
       </button>
-      <button class="nav-tab-btn" data-tab="tab-file-history" title="Historial visual y evolución de archivos">
+      <button class="nav-tab-btn" data-tab="tab-file-history" title="${tr('tabs.fileHistoryTitle')}">
         <i class="codicon codicon-history"></i>
-        <span>Historial</span>
+        <span id="nav-tab-text-history">${tr('tabs.fileHistory')}</span>
       </button>
-      <button class="nav-tab-btn" data-tab="tab-prs" title="Launchpad centralizado de Pull Requests">
+      <button class="nav-tab-btn" data-tab="tab-prs" title="${tr('tabs.prsTitle')}">
         <i class="codicon codicon-git-pull-request"></i>
-        <span>PRs</span>
+        <span id="nav-tab-text-prs">${tr('tabs.prs')}</span>
         <span class="tab-badge" id="pr-badge-count">0</span>
       </button>
-      <button class="nav-tab-btn" data-tab="tab-worktrees" title="Árboles de trabajo simultáneos y Multi-WIP">
+      <button class="nav-tab-btn" data-tab="tab-worktrees" title="${tr('tabs.worktreesTitle')}">
         <i class="codicon codicon-repo-forked"></i>
-        <span>Worktrees</span>
+        <span id="nav-tab-text-worktrees">${tr('tabs.worktrees')}</span>
         <span class="tab-badge" id="worktree-badge-count">0</span>
       </button>
-      <button class="nav-tab-btn" data-tab="tab-cloud-patches" title="Compartir cambios privados sin push">
+      <button class="nav-tab-btn" data-tab="tab-cloud-patches" title="${tr('tabs.cloudPatchesTitle')}">
         <i class="codicon codicon-cloud-upload"></i>
-        <span>Cloud Patches</span>
+        <span id="nav-tab-text-patches">${tr('tabs.cloudPatches')}</span>
       </button>
     </div>
 
@@ -870,17 +876,17 @@ export class GraphWebviewProvider
     <div class="toolbar-controls" id="toolbar-controls">
       <div class="search-input-wrapper">
         <span class="search-icon"><i class="codicon codicon-search"></i></span>
-        <input type="text" id="search-input" class="search-input" placeholder="Buscar por mensaje, SHA, autor..." />
-        <button id="search-clear-btn" class="search-clear-btn" title="Limpiar búsqueda" style="display:none;">
+        <input type="text" id="search-input" class="search-input" placeholder="${tr('toolbar.searchPlaceholder')}" />
+        <button id="search-clear-btn" class="search-clear-btn" title="${tr('toolbar.searchClear')}" style="display:none;">
           <i class="codicon codicon-close"></i>
         </button>
       </div>
 
-      <select id="branch-select" class="branch-select" title="Filtrar por rama">
-        <option value="all">Todas las ramas</option>
+      <select id="branch-select" class="branch-select" title="${tr('toolbar.allBranches')}">
+        <option value="all">${tr('toolbar.allBranches')}</option>
       </select>
 
-      <button id="btn-checkout" class="btn-icon" title="Cambiar a rama seleccionada">
+      <button id="btn-checkout" class="btn-icon" title="${tr('toolbar.checkout')}">
         <i class="codicon codicon-arrow-swap"></i>
       </button>
     </div>
@@ -888,27 +894,27 @@ export class GraphWebviewProvider
 
   <!-- Repository Quick Stats Bar -->
   <div id="stats-bar" class="stats-bar">
-    <div class="stat-item" title="Total de commits en el repositorio">
+    <div class="stat-item" title="${tr('stats.commitsTooltip')}">
       <i class="codicon codicon-git-commit stat-icon"></i>
-      <span class="stat-label" id="label-stat-commits">Commits:</span>
+      <span class="stat-label" id="label-stat-commits">${tr('stats.commits')}</span>
       <span class="stat-value" id="stat-total-commits">0</span>
     </div>
     <div class="stat-divider"></div>
-    <div class="stat-item" title="Colaboradores del repositorio">
+    <div class="stat-item" title="${tr('stats.contributorsTooltip')}">
       <i class="codicon codicon-organization stat-icon"></i>
-      <span class="stat-label" id="label-stat-contributors">Colaboradores:</span>
+      <span class="stat-label" id="label-stat-contributors">${tr('stats.contributors')}</span>
       <span class="stat-value" id="stat-total-contributors">0</span>
     </div>
     <div class="stat-divider"></div>
-    <div class="stat-item" title="Ramas locales y remotas">
+    <div class="stat-item" title="${tr('stats.branchesTooltip')}">
       <i class="codicon codicon-git-branch stat-icon"></i>
-      <span class="stat-label" id="label-stat-branches">Ramas:</span>
+      <span class="stat-label" id="label-stat-branches">${tr('stats.branches')}</span>
       <span class="stat-value" id="stat-total-branches">0</span>
     </div>
     <div class="stat-divider"></div>
-    <div class="stat-item" id="stat-stash-item" style="cursor:pointer;" title="Stashes guardados (clic para abrir)">
+    <div class="stat-item" id="stat-stash-item" style="cursor:pointer;" title="${tr('stats.stashesTooltip')}">
       <i class="codicon codicon-archive stat-icon"></i>
-      <span class="stat-label" id="label-stat-stashes">Stashes:</span>
+      <span class="stat-label" id="label-stat-stashes">${tr('stash.stashes')}</span>
       <span class="stat-value" id="stat-total-stashes">0</span>
     </div>
     <div class="stat-divider"></div>
@@ -925,7 +931,7 @@ export class GraphWebviewProvider
       <div id="graph-table-container" class="graph-table-container">
         <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
           <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
-          <div>Iniciando CommitFlow Graph...</div>
+          <div>${tr('graph.loading')}</div>
         </div>
       </div>
     </div>
@@ -936,16 +942,16 @@ export class GraphWebviewProvider
         <div class="file-history-header">
           <div class="file-picker-row">
             <i class="codicon codicon-file-text"></i>
-            <span id="file-history-current-path" class="file-history-path">Selecciona o abre un archivo para ver su evolución</span>
-            <button id="btn-pick-file-history" class="btn-sm" title="Elegir otro archivo"><i class="codicon codicon-folder-opened"></i> Explorar</button>
+            <span id="file-history-current-path" class="file-history-path">${tr('history.currentFileFallback')}</span>
+            <button id="btn-pick-file-history" class="btn-sm" title="${tr('history.btnPickFileTitle')}"><i class="codicon codicon-folder-opened"></i> ${tr('history.btnPickFile')}</button>
           </div>
         </div>
         <div id="file-history-timeline" class="file-history-timeline">
           <div class="empty-state">
             <i class="codicon codicon-history" style="font-size:32px; color:var(--accent-cyan);"></i>
-            <div style="font-weight:600; margin-top:8px;">Historial Visual de Archivos</div>
+            <div style="font-weight:600; margin-top:8px;">${tr('history.title')}</div>
             <div style="font-size:var(--font-size-sm); color:var(--text-muted); max-width:320px; text-align:center; margin-top:4px;">
-              Abre cualquier archivo en el editor de VS Code o haz clic en "Explorar" para inspeccionar todos los cambios, autorías y diffs a lo largo del tiempo.
+              ${tr('history.emptyDesc')}
             </div>
           </div>
         </div>
@@ -956,17 +962,17 @@ export class GraphWebviewProvider
     <div id="tab-prs" class="tab-pane">
       <div class="pr-launchpad-container">
         <div class="pr-filters-bar">
-          <button class="pr-filter-pill active" data-filter="all">Todas (<span id="pr-filter-count-all">0</span>)</button>
-          <button class="pr-filter-pill" data-filter="blocked">🔴 Bloqueadas (<span id="pr-filter-count-blocked">0</span>)</button>
-          <button class="pr-filter-pill" data-filter="ready">🟢 Listas (<span id="pr-filter-count-ready">0</span>)</button>
-          <button class="pr-filter-pill" data-filter="pending">🟡 Pendientes (<span id="pr-filter-count-pending">0</span>)</button>
+          <button class="pr-filter-pill active" data-filter="all">${tr('pr.filterAll')} (<span id="pr-filter-count-all">0</span>)</button>
+          <button class="pr-filter-pill" data-filter="blocked">🔴 ${tr('pr.filterBlocked')} (<span id="pr-filter-count-blocked">0</span>)</button>
+          <button class="pr-filter-pill" data-filter="ready">🟢 ${tr('pr.filterReady')} (<span id="pr-filter-count-ready">0</span>)</button>
+          <button class="pr-filter-pill" data-filter="pending">🟡 ${tr('pr.filterPending')} (<span id="pr-filter-count-pending">0</span>)</button>
         </div>
         <div id="pr-cards-list" class="pr-cards-list">
           <div class="empty-state">
             <i class="codicon codicon-git-pull-request" style="font-size:32px; color:var(--accent-cyan);"></i>
-            <div style="font-weight:600; margin-top:8px;">PR Launchpad Centralizado</div>
+            <div style="font-weight:600; margin-top:8px;">${tr('pr.title')}</div>
             <div style="font-size:var(--font-size-sm); color:var(--text-muted); text-align:center; margin-top:4px;">
-              Triaje, revisión y seguimiento de Pull Requests de repositorios públicos y privados sin salir del editor.
+              ${tr('pr.emptyDesc')}
             </div>
           </div>
         </div>
@@ -978,10 +984,10 @@ export class GraphWebviewProvider
       <div class="worktrees-container">
         <div class="worktrees-header">
           <div>
-            <span style="font-weight:600;">Árboles de Trabajo (Worktrees)</span>
-            <div style="font-size:var(--font-size-sm); color:var(--text-muted);">Trabaja en múltiples ramas simultáneamente sin cambiar de contexto</div>
+            <span style="font-weight:600;">${tr('worktree.title')}</span>
+            <div style="font-size:var(--font-size-sm); color:var(--text-muted);">${tr('worktree.emptyDesc')}</div>
           </div>
-          <button id="btn-add-worktree" class="btn-sm btn-primary"><i class="codicon codicon-plus"></i> Nuevo Worktree</button>
+          <button id="btn-add-worktree" class="btn-sm btn-primary"><i class="codicon codicon-plus"></i> ${tr('worktree.btnNew')}</button>
         </div>
         <div id="worktrees-cards-list" class="worktrees-cards-list"></div>
       </div>
@@ -992,12 +998,12 @@ export class GraphWebviewProvider
       <div class="cloud-patches-container">
         <div class="patches-actions-bar">
           <div>
-            <span style="font-weight:600;">Cloud Patches</span>
-            <div style="font-size:var(--font-size-sm); color:var(--text-muted);">Comparte cambios de código de forma privada y rápida sin hacer push a ramas remotas</div>
+            <span style="font-weight:600;">${tr('tabs.cloudPatches')}</span>
+            <div style="font-size:var(--font-size-sm); color:var(--text-muted);">${tr('patch.emptyDesc')}</div>
           </div>
           <div style="display:flex; gap:8px;">
-            <button id="btn-create-patch" class="btn-sm btn-primary"><i class="codicon codicon-add"></i> Crear Parche</button>
-            <button id="btn-apply-patch" class="btn-sm"><i class="codicon codicon-cloud-download"></i> Aplicar Parche</button>
+            <button id="btn-create-patch" class="btn-sm btn-primary"><i class="codicon codicon-add"></i> ${tr('patch.btnCreate')}</button>
+            <button id="btn-apply-patch" class="btn-sm"><i class="codicon codicon-cloud-download"></i> ${tr('patch.btnApply')}</button>
           </div>
         </div>
         <div id="cloud-patches-list" class="cloud-patches-list"></div>
@@ -1009,34 +1015,34 @@ export class GraphWebviewProvider
 
     <!-- Layout Switcher Popover / Picker -->
     <div id="layout-picker-popover" class="layout-picker-popover">
-      <div class="picker-header">Orientación del Panel</div>
+      <div class="picker-header">${tr('layout.mode')}</div>
       <div class="picker-options">
         <button class="layout-option" data-layout="bottom">
           <i class="codicon codicon-layout-panel"></i>
           <div>
-            <div class="option-title">Panel Inferior</div>
-            <div class="option-desc">Diseño horizontal con tabla ancha y panel lateral</div>
+            <div class="option-title">${tr('layout.bottom')}</div>
+            <div class="option-desc">${tr('layout.bottomDesc')}</div>
           </div>
         </button>
         <button class="layout-option" data-layout="left">
           <i class="codicon codicon-layout-sidebar-left"></i>
           <div>
-            <div class="option-title">Lateral Izquierdo</div>
-            <div class="option-desc">Barra lateral estándar con drawers a la derecha</div>
+            <div class="option-title">${tr('layout.left')}</div>
+            <div class="option-desc">${tr('layout.leftDesc')}</div>
           </div>
         </button>
         <button class="layout-option" data-layout="right">
           <i class="codicon codicon-layout-sidebar-right"></i>
           <div>
-            <div class="option-title">Lateral Derecho</div>
-            <div class="option-desc">Barra secundaria invertida para evitar cortes</div>
+            <div class="option-title">${tr('layout.right')}</div>
+            <div class="option-desc">${tr('layout.rightDesc')}</div>
           </div>
         </button>
         <button class="layout-option" data-layout="auto">
           <i class="codicon codicon-screen-normal"></i>
           <div>
-            <div class="option-title">Automático (Responsive)</div>
-            <div class="option-desc">Detecta la posición según el tamaño del contenedor</div>
+            <div class="option-title">${tr('layout.auto')}</div>
+            <div class="option-desc">${tr('layout.autoDesc')}</div>
           </div>
         </button>
       </div>
@@ -1048,9 +1054,9 @@ export class GraphWebviewProvider
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-archive" style="font-size:16px; color:var(--accent-amber);"></i>
-            <span id="stash-modal-title" style="font-weight:700; font-size:var(--font-size-base);">Gestor de Git Stash</span>
+            <span id="stash-modal-title" style="font-weight:700; font-size:var(--font-size-base);">${tr('stash.title')}</span>
           </div>
-          <button id="stash-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+          <button id="stash-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
         </div>
         <div id="stash-modal-body" class="modal-body"></div>
       </div>
@@ -1062,9 +1068,9 @@ export class GraphWebviewProvider
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-graph" style="font-size:16px; color:var(--accent-cyan);"></i>
-            <span id="personal-modal-title" style="font-weight:700; font-size:var(--font-size-base);">Tu Contribución e Impacto Personal</span>
+            <span id="personal-modal-title" style="font-weight:700; font-size:var(--font-size-base);">${tr('personal.title')}</span>
           </div>
-          <button id="personal-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+          <button id="personal-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
         </div>
         <div id="personal-modal-body" class="modal-body"></div>
       </div>
@@ -1076,9 +1082,9 @@ export class GraphWebviewProvider
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-settings-gear" style="font-size:16px; color:var(--accent-cyan);"></i>
-            <span id="settings-modal-title" style="font-weight:700; font-size:var(--font-size-base);">Ajustes de CommitFlow</span>
+            <span id="settings-modal-title" style="font-weight:700; font-size:var(--font-size-base);">${tr('settings.title')}</span>
           </div>
-          <button id="settings-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+          <button id="settings-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
         </div>
         <div id="settings-modal-body" class="modal-body"></div>
       </div>
@@ -1090,23 +1096,23 @@ export class GraphWebviewProvider
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-repo-forked" style="font-size:16px; color:var(--accent-cyan);"></i>
-            <span style="font-weight:700; font-size:var(--font-size-base);">Crear Nuevo Worktree</span>
+            <span style="font-weight:700; font-size:var(--font-size-base);">${tr('worktree.modalTitle')}</span>
           </div>
-          <button id="worktree-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+          <button id="worktree-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
         </div>
         <div class="modal-body">
           <div style="display:flex; flex-direction:column; gap:12px;">
             <label style="font-size:var(--font-size-sm);">
-              Nombre de la Rama (existente o nueva):
-              <input type="text" id="wt-branch-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="feature/nueva-rama" />
+              ${tr('worktree.branchLabel')}
+              <input type="text" id="wt-branch-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="${tr('worktree.branchPlaceholder')}" />
             </label>
             <label style="font-size:var(--font-size-sm);">
-              Ruta del Directorio (relativa o absoluta):
-              <input type="text" id="wt-path-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="../worktrees/mi-feature" />
+              ${tr('worktree.pathLabel')}
+              <input type="text" id="wt-path-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="${tr('worktree.pathPlaceholder')}" />
             </label>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
-              <button id="wt-btn-cancel" class="btn-sm">Cancelar</button>
-              <button id="wt-btn-submit" class="btn-sm btn-primary">Crear Worktree</button>
+              <button id="wt-btn-cancel" class="btn-sm">${tr('worktree.cancel')}</button>
+              <button id="wt-btn-submit" class="btn-sm btn-primary">${tr('worktree.submit')}</button>
             </div>
           </div>
         </div>
@@ -1119,23 +1125,23 @@ export class GraphWebviewProvider
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-cloud-upload" style="font-size:16px; color:var(--accent-cyan);"></i>
-            <span style="font-weight:700; font-size:var(--font-size-base);">Crear Cloud Patch</span>
+            <span style="font-weight:700; font-size:var(--font-size-base);">${tr('patch.modalCreateTitle')}</span>
           </div>
-          <button id="patch-modal-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+          <button id="patch-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
         </div>
         <div class="modal-body">
           <div style="display:flex; flex-direction:column; gap:12px;">
             <label style="font-size:var(--font-size-sm);">
-              Título del Parche:
-              <input type="text" id="patch-title-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="Ej: Fix validación en login" />
+              ${tr('patch.modalTitleLabel')}
+              <input type="text" id="patch-title-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="${tr('patch.modalTitlePlaceholder')}" />
             </label>
             <label style="font-size:var(--font-size-sm);">
-              Descripción u Observaciones:
-              <textarea id="patch-desc-input" class="search-input" style="width:100%; height:60px; margin-top:4px; resize:vertical;" placeholder="Detalles de los cambios para compartir"></textarea>
+              ${tr('patch.modalDescLabel')}
+              <textarea id="patch-desc-input" class="search-input" style="width:100%; height:60px; margin-top:4px; resize:vertical;" placeholder="${tr('patch.modalDescPlaceholder')}"></textarea>
             </label>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
-              <button id="patch-btn-cancel" class="btn-sm">Cancelar</button>
-              <button id="patch-btn-submit" class="btn-sm btn-primary">Generar Parche</button>
+              <button id="patch-btn-cancel" class="btn-sm">${tr('patch.modalCancel')}</button>
+              <button id="patch-btn-submit" class="btn-sm btn-primary">${tr('patch.modalSubmit')}</button>
             </div>
           </div>
         </div>
@@ -1148,19 +1154,19 @@ export class GraphWebviewProvider
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-cloud-download" style="font-size:16px; color:var(--accent-cyan);"></i>
-            <span style="font-weight:700; font-size:var(--font-size-base);">Aplicar Cloud Patch</span>
+            <span style="font-weight:700; font-size:var(--font-size-base);">${tr('patch.modalApplyTitle')}</span>
           </div>
-          <button id="patch-apply-close" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+          <button id="patch-apply-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
         </div>
         <div class="modal-body">
           <div style="display:flex; flex-direction:column; gap:12px;">
             <label style="font-size:var(--font-size-sm);">
-              Pega aquí el contenido del parche unificado o token:
+              ${tr('patch.modalApplyLabel')}
               <textarea id="patch-apply-content" class="search-input" style="width:100%; height:120px; margin-top:4px; font-family:monospace; resize:vertical;" placeholder="diff --git a/... b/..."></textarea>
             </label>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
-              <button id="patch-apply-btn-cancel" class="btn-sm">Cancelar</button>
-              <button id="patch-apply-btn-submit" class="btn-sm btn-primary">Validar y Aplicar</button>
+              <button id="patch-apply-btn-cancel" class="btn-sm">${tr('patch.modalCancel')}</button>
+              <button id="patch-apply-btn-submit" class="btn-sm btn-primary">${tr('patch.modalApplySubmit')}</button>
             </div>
           </div>
         </div>
@@ -1170,8 +1176,8 @@ export class GraphWebviewProvider
     <!-- Slide-in Commit Inspector Drawer -->
     <div id="commit-drawer" class="commit-drawer">
       <div class="drawer-header">
-        <span id="drawer-title" style="font-weight:600; font-size:var(--font-size-base);">Detalles del Commit y Archivos</span>
-        <button id="drawer-close-btn" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+        <span id="drawer-title" style="font-weight:600; font-size:var(--font-size-base);">${tr('drawer.title')}</span>
+        <button id="drawer-close-btn" class="btn-icon" title="${tr('drawer.close')}"><i class="codicon codicon-close"></i></button>
       </div>
       <div id="drawer-body" class="drawer-body"></div>
     </div>

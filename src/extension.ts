@@ -5,10 +5,17 @@ import { GraphWebviewProvider } from './graph/graphWebviewProvider';
 import { GitContentProvider } from './git/gitContentProvider';
 import { BranchWatcherService } from './git/branchWatcher';
 import { GitClient } from './git/gitClient';
+import { t } from './i18n/locales';
 
 let blameController: BlameController | undefined;
 let graphProvider: GraphWebviewProvider | undefined;
 let branchWatcher: BranchWatcherService | undefined;
+
+function tr(key: string, params?: Record<string, string | number>): string {
+  const config = vscode.workspace.getConfiguration('commitflow');
+  const lang = config.get<'auto' | 'es' | 'en'>('language', 'auto');
+  return t(key, lang, vscode.env.language, params);
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   console.log('⚡ [CommitFlow] Activating Git Graph & Live Blame extension...');
@@ -66,7 +73,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (blameController) {
         const state = blameController.toggle();
         vscode.window.showInformationMessage(
-          `CommitFlow Live Inline Blame: ${state ? 'ENABLED' : 'DISABLED'}`
+          tr('ext.blameToggle', { state: state ? 'ENABLED' : 'DISABLED' })
         );
       }
     })
@@ -89,7 +96,7 @@ export function activate(context: vscode.ExtensionContext): void {
         if (finalHash) {
           await vscode.env.clipboard.writeText(finalHash);
           vscode.window.showInformationMessage(
-            `Copied SHA to clipboard: ${finalHash.slice(0, 7)}`
+            tr('ext.copiedSha', { hash: finalHash.slice(0, 7) })
           );
         }
       }
@@ -109,7 +116,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('commitflow.openLineDiff', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.uri.scheme !== 'file') {
-        vscode.window.showWarningMessage('No active file to compare changes.');
+        vscode.window.showWarningMessage(tr('ext.noActiveFileDiff'));
         return;
       }
 
@@ -121,7 +128,7 @@ export function activate(context: vscode.ExtensionContext): void {
         (await gitClient.getBlameForLine(filePath, lineNumber));
 
       if (!blame) {
-        vscode.window.showInformationMessage('No Git blame history available for this line.');
+        vscode.window.showInformationMessage(tr('ext.noBlameHistory'));
         return;
       }
 
@@ -149,7 +156,7 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title);
       } catch (err: any) {
-        vscode.window.showErrorMessage(`Failed to open diff: ${err.message}`);
+        vscode.window.showErrorMessage(tr('ext.diffError', { error: err.message }));
       }
     })
   );
@@ -160,7 +167,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const target = Array.isArray(hash) ? hash[0] : hash;
       const finalHash = target || blameController?.getCurrentBlame()?.commitHash;
       if (!finalHash || finalHash === '0000000') {
-        vscode.window.showWarningMessage('No committed revision available on remote.');
+        vscode.window.showWarningMessage(tr('ext.noRemoteRevision'));
         return;
       }
 
@@ -172,7 +179,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (github?.webUrl) {
         await vscode.env.openExternal(vscode.Uri.parse(`${github.webUrl}/commit/${finalHash}`));
       } else {
-        vscode.window.showInformationMessage('No GitHub or GitLab remote URL found for this repository.');
+        vscode.window.showInformationMessage(tr('ext.noRemoteUrl'));
       }
     })
   );
@@ -233,16 +240,16 @@ export function activate(context: vscode.ExtensionContext): void {
       const root = await gitClient.getRepoRoot();
       if (root) {
         const msg = await vscode.window.showInputBox({
-          prompt: 'Enter optional stash message',
-          placeHolder: 'Work in progress...',
+          prompt: tr('ext.stashPrompt'),
+          placeHolder: tr('ext.stashPlaceholder'),
         });
         if (msg !== undefined) {
           try {
             await gitClient.stashSave(root, msg);
-            vscode.window.showInformationMessage('CommitFlow: Stash saved successfully.');
+            vscode.window.showInformationMessage(tr('ext.stashSaved'));
             graphProvider?.refreshData();
           } catch (e: any) {
-            vscode.window.showErrorMessage(`Stash failed: ${e.message}`);
+            vscode.window.showErrorMessage(tr('ext.stashFailed', { error: e.message }));
           }
         }
       }
@@ -257,10 +264,10 @@ export function activate(context: vscode.ExtensionContext): void {
       if (root) {
         try {
           await gitClient.stashPop(root);
-          vscode.window.showInformationMessage('CommitFlow: Stash applied and popped.');
+          vscode.window.showInformationMessage(tr('ext.stashPopped'));
           graphProvider?.refreshData();
         } catch (e: any) {
-          vscode.window.showErrorMessage(`Stash pop failed: ${e.message}`);
+          vscode.window.showErrorMessage(tr('ext.stashPopFailed', { error: e.message }));
         }
       }
     })
@@ -275,11 +282,13 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
-            title: 'CommitFlow: Fetching all remotes...',
+            title: tr('ext.fetchingRemotes'),
           },
           async () => {
             const res = await gitClient.fetch(root);
-            vscode.window.showInformationMessage(`Fetch complete: ${res || 'Up to date'}`);
+            vscode.window.showInformationMessage(
+              tr('ext.fetchComplete', { status: res || tr('ext.upToDate') })
+            );
             graphProvider?.refreshData();
           }
         );
@@ -294,7 +303,7 @@ export function activate(context: vscode.ExtensionContext): void {
       async (uri?: vscode.Uri) => {
         const targetUri = uri || vscode.window.activeTextEditor?.document.uri;
         if (!targetUri || targetUri.scheme !== 'file') {
-          vscode.window.showWarningMessage('No active file selected to inspect history.');
+          vscode.window.showWarningMessage(tr('ext.noActiveFileHistory'));
           return;
         }
         graphProvider?.openFullPanel();
@@ -329,24 +338,24 @@ export function activate(context: vscode.ExtensionContext): void {
       const gitClient = GitClient.getInstance();
       const root = await gitClient.getRepoRoot();
       if (!root) {
-        vscode.window.showWarningMessage('No Git repository found.');
+        vscode.window.showWarningMessage(tr('ext.noRepoFound'));
         return;
       }
 
       const title = await vscode.window.showInputBox({
-        prompt: 'Enter title for Cloud Patch',
-        placeHolder: 'Feature WIP / Quick Fix...',
+        prompt: tr('ext.patchPromptTitle'),
+        placeHolder: tr('ext.patchPromptPlaceholder'),
       });
       if (title !== undefined) {
         try {
           const patch = await gitClient.createCloudPatch(root, title);
           await vscode.env.clipboard.writeText(patch.patchContent);
           vscode.window.showInformationMessage(
-            `CommitFlow: Cloud Patch "${patch.title}" copied to clipboard!`
+            tr('ext.patchCopied', { title: patch.title })
           );
           graphProvider?.refreshData();
         } catch (err: any) {
-          vscode.window.showErrorMessage(`Failed to create patch: ${err.message}`);
+          vscode.window.showErrorMessage(tr('ext.patchFailed', { error: err.message }));
         }
       }
     })

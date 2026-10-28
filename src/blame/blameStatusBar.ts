@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GitBlameLine } from '../git/types';
+import { t } from '../i18n/locales';
 
 export class BlameStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
@@ -21,18 +22,22 @@ export class BlameStatusBar implements vscode.Disposable {
       return;
     }
 
+    const config = vscode.workspace.getConfiguration('commitflow');
+    const lang = config.get<'auto' | 'es' | 'en'>('language', 'auto');
+    const sysLang = vscode.env.language;
+
     this.statusBarItem.text = `$(git-branch) CommitFlow: ${blame.author.name}, ${blame.author.relativeTime}`;
     this.statusBarItem.tooltip = new vscode.MarkdownString(
-      `**Commit:** \`${blame.shortHash}\`\n\n` +
-        `**Author:** ${blame.author.name} <${blame.author.email}>\n\n` +
-        `**Date:** ${blame.author.date.toLocaleString()}\n\n` +
-        `**Message:** ${blame.summary}\n\n` +
-        `*Click to view in CommitFlow Graph*`
+      `**${t('ext.statusCommit', lang, sysLang)}** \`${blame.shortHash}\`\n\n` +
+        `**${t('ext.statusAuthor', lang, sysLang)}** ${blame.author.name} <${blame.author.email}>\n\n` +
+        `**${t('ext.statusDate', lang, sysLang)}** ${blame.author.date.toLocaleString()}\n\n` +
+        `**${t('ext.statusMessage', lang, sysLang)}** ${blame.summary}\n\n` +
+        `*${t('ext.statusTooltip', lang, sysLang)}*`
     );
 
     this.statusBarItem.command = {
       command: 'commitflow.openGraph',
-      title: 'Open in CommitFlow Graph',
+      title: t('ext.statusCommandTitle', lang, sysLang),
       arguments: [blame.commitHash],
     };
 

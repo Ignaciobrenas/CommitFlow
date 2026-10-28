@@ -313,7 +313,35 @@ function applyLocalization(): void {
   if (btnPersonalStats) btnPersonalStats.title = tr('toolbar.myImpact');
   if (btnSettings) btnSettings.title = tr('toolbar.settings');
   if (btnRefresh) btnRefresh.title = tr('toolbar.refresh');
+  if (btnPopout) btnPopout.title = tr('action.popout');
+  if (btnLayoutMode) btnLayoutMode.title = tr('layout.toggleTitle');
   if (activeBranchPill) activeBranchPill.title = tr('toolbar.activeBranch');
+  if (searchClearBtn) searchClearBtn.title = tr('toolbar.searchClear');
+
+  // Navigation tab titles and texts
+  const tabGraph = document.querySelector('.nav-tab-btn[data-tab="tab-graph"]') as HTMLElement | null;
+  const tabHistory = document.querySelector('.nav-tab-btn[data-tab="tab-file-history"]') as HTMLElement | null;
+  const tabPrs = document.querySelector('.nav-tab-btn[data-tab="tab-prs"]') as HTMLElement | null;
+  const tabWorktrees = document.querySelector('.nav-tab-btn[data-tab="tab-worktrees"]') as HTMLElement | null;
+  const tabPatches = document.querySelector('.nav-tab-btn[data-tab="tab-cloud-patches"]') as HTMLElement | null;
+
+  if (tabGraph) tabGraph.title = tr('tabs.graphTitle');
+  if (tabHistory) tabHistory.title = tr('tabs.fileHistoryTitle');
+  if (tabPrs) tabPrs.title = tr('tabs.prsTitle');
+  if (tabWorktrees) tabWorktrees.title = tr('tabs.worktreesTitle');
+  if (tabPatches) tabPatches.title = tr('tabs.cloudPatchesTitle');
+
+  const textGraph = document.getElementById('nav-tab-text-graph');
+  const textHistory = document.getElementById('nav-tab-text-history');
+  const textPrs = document.getElementById('nav-tab-text-prs');
+  const textWorktrees = document.getElementById('nav-tab-text-worktrees');
+  const textPatches = document.getElementById('nav-tab-text-patches');
+
+  if (textGraph) textGraph.textContent = tr('tabs.graph');
+  if (textHistory) textHistory.textContent = tr('tabs.fileHistory');
+  if (textPrs) textPrs.textContent = tr('tabs.prs');
+  if (textWorktrees) textWorktrees.textContent = tr('tabs.worktrees');
+  if (textPatches) textPatches.textContent = tr('tabs.cloudPatches');
 
   // Stats bar labels
   const labelCommits = document.getElementById('label-stat-commits');
@@ -1089,7 +1117,10 @@ function renderCommitFiles(files: GitFileChange[]): void {
   if (!filesList) return;
 
   if (countBadge) {
-    countBadge.textContent = `${files.length} file${files.length === 1 ? '' : 's'}`;
+    countBadge.textContent =
+      files.length === 1
+        ? tr('drawer.fileCount', { count: files.length })
+        : tr('drawer.fileCountPlural', { count: files.length });
   }
 
   if (files.length === 0) {
@@ -1631,9 +1662,13 @@ function updatePrivateRepoBadge(): void {
     privateRepoBadge.style.display = 'inline-flex';
     if (privateRepoLabel) {
       const pName = remoteRepo.provider.charAt(0).toUpperCase() + remoteRepo.provider.slice(1);
-      privateRepoLabel.textContent = `${pName} Privado`;
+      privateRepoLabel.textContent = tr('remote.privateBadge', { provider: pName });
     }
-    privateRepoBadge.title = `Repositorio Privado en ${remoteRepo.provider.toUpperCase()} (${remoteRepo.owner}/${remoteRepo.repo})`;
+    privateRepoBadge.title = tr('remote.privateTooltip', {
+      provider: remoteRepo.provider.toUpperCase(),
+      owner: remoteRepo.owner,
+      repo: remoteRepo.repo,
+    });
   } else {
     privateRepoBadge.style.display = 'none';
   }
@@ -1704,7 +1739,7 @@ function renderFileHistory(data: { filePath: string; fileName: string; revisions
   const currentPathEl = document.getElementById('file-history-current-path');
   const timelineEl = document.getElementById('file-history-timeline');
   if (currentPathEl) {
-    currentPathEl.textContent = data.filePath || 'Archivo actual';
+    currentPathEl.textContent = data.filePath || tr('history.currentFileFallback');
     currentPathEl.title = data.filePath;
   }
   if (!timelineEl) return;
@@ -1713,8 +1748,8 @@ function renderFileHistory(data: { filePath: string; fileName: string; revisions
     timelineEl.innerHTML = `
       <div class="empty-state">
         <i class="codicon codicon-history" style="font-size:32px; color:var(--accent-cyan);"></i>
-        <div style="font-weight:600; margin-top:8px;">Sin historial disponible para este archivo</div>
-        <div style="font-size:var(--font-size-sm); color:var(--text-muted); margin-top:4px;">No se encontraron commits registrados en Git para esta ruta.</div>
+        <div style="font-weight:600; margin-top:8px;">${tr('history.emptyTitle')}</div>
+        <div style="font-size:var(--font-size-sm); color:var(--text-muted); margin-top:4px;">${tr('history.emptyDesc')}</div>
       </div>
     `;
     return;
@@ -1741,7 +1776,7 @@ function renderFileHistory(data: { filePath: string; fileName: string; revisions
           ${rev.linesDeleted > 0 ? `<span class="diff-badge-deleted">-${rev.linesDeleted}</span>` : ''}
         </div>
         <button class="btn-sm btn-hist-diff" data-hash="${rev.commitHash}" data-file="${data.filePath}">
-          <i class="codicon codicon-git-diff"></i> Ver Diferencias
+          <i class="codicon codicon-git-diff"></i> ${tr('history.viewDiff')}
         </button>
       </div>
     </div>
@@ -1778,8 +1813,8 @@ function renderPullRequests(): void {
     listEl.innerHTML = `
       <div class="empty-state">
         <i class="codicon codicon-git-pull-request" style="font-size:32px; color:var(--accent-cyan);"></i>
-        <div style="font-weight:600; margin-top:8px;">No hay PRs en esta categoría</div>
-        <div style="font-size:var(--font-size-sm); color:var(--text-muted); margin-top:4px;">Todas las solicitudes están al día o no coinciden con el filtro actual.</div>
+        <div style="font-weight:600; margin-top:8px;">${tr('pr.emptyTitle')}</div>
+        <div style="font-size:var(--font-size-sm); color:var(--text-muted); margin-top:4px;">${tr('pr.emptyDesc')}</div>
       </div>
     `;
     return;
@@ -1789,18 +1824,18 @@ function renderPullRequests(): void {
     .map((pr) => {
       let statusBadge = '';
       if (pr.isBlocked) {
-        statusBadge = `<span class="pr-chip blocked"><i class="codicon codicon-error"></i> Bloqueada</span>`;
+        statusBadge = `<span class="pr-chip blocked"><i class="codicon codicon-error"></i> ${tr('pr.chipBlocked')}</span>`;
       } else if (pr.isReady) {
-        statusBadge = `<span class="pr-chip ready"><i class="codicon codicon-check"></i> Lista</span>`;
+        statusBadge = `<span class="pr-chip ready"><i class="codicon codicon-check"></i> ${tr('pr.chipReady')}</span>`;
       } else {
-        statusBadge = `<span class="pr-chip pending"><i class="codicon codicon-clock"></i> Pendiente</span>`;
+        statusBadge = `<span class="pr-chip pending"><i class="codicon codicon-clock"></i> ${tr('pr.chipPending')}</span>`;
       }
 
       const ciChip =
         pr.ciStatus === 'success'
-          ? `<span class="pr-chip ci-success"><i class="codicon codicon-pass"></i> CI OK</span>`
+          ? `<span class="pr-chip ci-success"><i class="codicon codicon-pass"></i> ${tr('pr.ciSuccess')}</span>`
           : pr.ciStatus === 'failure'
-          ? `<span class="pr-chip ci-failure"><i class="codicon codicon-error"></i> CI Falló</span>`
+          ? `<span class="pr-chip ci-failure"><i class="codicon codicon-error"></i> ${tr('pr.ciFailure')}</span>`
           : '';
 
       return `
@@ -1826,13 +1861,13 @@ function renderPullRequests(): void {
             <span>${pr.author.name}</span>
           </div>
           <div class="pr-card-actions">
-            <button class="btn-sm btn-pr-checkout" data-pr="${pr.number}" data-branch="${pr.sourceBranch}" title="Checkout local de esta rama">
-              <i class="codicon codicon-arrow-swap"></i> Checkout
+            <button class="btn-sm btn-pr-checkout" data-pr="${pr.number}" data-branch="${pr.sourceBranch}" title="${tr('pr.checkoutActionTitle')}">
+              <i class="codicon codicon-arrow-swap"></i> ${tr('pr.checkoutAction')}
             </button>
             ${
               pr.url
-                ? `<button class="btn-sm btn-pr-open" data-url="${pr.url}" title="Abrir en remoto">
-                     <i class="codicon codicon-link-external"></i> Ver en Web
+                ? `<button class="btn-sm btn-pr-open" data-url="${pr.url}" title="${tr('pr.viewWebActionTitle')}">
+                     <i class="codicon codicon-link-external"></i> ${tr('pr.viewWebAction')}
                    </button>`
                 : ''
             }
@@ -1873,8 +1908,8 @@ function renderWorktrees(): void {
     listEl.innerHTML = `
       <div class="empty-state">
         <i class="codicon codicon-repo-forked" style="font-size:32px; color:var(--accent-cyan);"></i>
-        <div style="font-weight:600; margin-top:8px;">No hay Worktrees configurados</div>
-        <div style="font-size:var(--font-size-sm); color:var(--text-muted); margin-top:4px;">Haz clic en "Nuevo Worktree" para trabajar en otra rama en paralelo sin cambiar de carpeta.</div>
+        <div style="font-weight:600; margin-top:8px;">${tr('worktree.emptyTitle')}</div>
+        <div style="font-size:var(--font-size-sm); color:var(--text-muted); margin-top:4px;">${tr('worktree.emptyDesc')}</div>
       </div>
     `;
     return;
@@ -1887,23 +1922,23 @@ function renderWorktrees(): void {
       <div class="worktree-top-row">
         <div style="display:flex; align-items:center; gap:8px;">
           <span class="branch-badge-pill" style="font-size:var(--font-size-sm);">${wt.branch}</span>
-          ${wt.isCurrent ? '<span style="font-size:10px; font-weight:700; color:var(--accent-cyan);">(Activo)</span>' : ''}
+          ${wt.isCurrent ? `<span style="font-size:10px; font-weight:700; color:var(--accent-cyan);">${tr('worktree.activeBadge')}</span>` : ''}
         </div>
         ${
           wt.hasWip
-            ? `<span class="wip-badge active-wip" title="${wt.wipFilesCount} archivos modificados"><i class="codicon codicon-warning"></i> WIP (${wt.wipFilesCount} archivos: +${wt.wipAdded} ~${wt.wipModified} -${wt.wipDeleted})</span>`
-            : '<span class="wip-badge clean"><i class="codicon codicon-check"></i> Limpio (Sin cambios)</span>'
+            ? `<span class="wip-badge active-wip" title="${tr('worktree.wipTooltip', { count: wt.wipFilesCount })}"><i class="codicon codicon-warning"></i> ${tr('worktree.wipBadge', { count: wt.wipFilesCount, added: wt.wipAdded, modified: wt.wipModified, deleted: wt.wipDeleted })}</span>`
+            : `<span class="wip-badge clean"><i class="codicon codicon-check"></i> ${tr('worktree.cleanBadge')}</span>`
         }
       </div>
       <div class="worktree-path">${wt.path}</div>
       <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
-        <button class="btn-sm btn-wt-open" data-path="${wt.path}" title="Abrir esta carpeta en VS Code">
-          <i class="codicon codicon-folder-opened"></i> Abrir en VS Code
+        <button class="btn-sm btn-wt-open" data-path="${wt.path}" title="${tr('worktree.openActionTitle')}">
+          <i class="codicon codicon-folder-opened"></i> ${tr('worktree.openAction')}
         </button>
         ${
           !wt.isCurrent
-            ? `<button class="btn-sm btn-wt-remove" data-path="${wt.path}" title="Eliminar este worktree">
-                 <i class="codicon codicon-trash"></i> Eliminar
+            ? `<button class="btn-sm btn-wt-remove" data-path="${wt.path}" title="${tr('worktree.removeActionTitle')}">
+                 <i class="codicon codicon-trash"></i> ${tr('worktree.removeAction')}
                </button>`
             : ''
         }
@@ -1923,7 +1958,7 @@ function renderWorktrees(): void {
   listEl.querySelectorAll('.btn-wt-remove').forEach((btn) => {
     btn.addEventListener('click', () => {
       const p = btn.getAttribute('data-path');
-      if (p && confirm(`¿Seguro que deseas eliminar el worktree en "${p}"?`)) {
+      if (p && confirm(tr('worktree.confirmRemove', { path: p }))) {
         vscode.postMessage({ command: 'removeWorktree', payload: { path: p, force: false } });
       }
     });
@@ -1947,9 +1982,9 @@ function renderCloudPatches(): void {
     listEl.innerHTML = `
       <div class="empty-state">
         <i class="codicon codicon-cloud-upload" style="font-size:32px; color:var(--accent-cyan);"></i>
-        <div style="font-weight:600; margin-top:8px;">No hay Cloud Patches guardados</div>
+        <div style="font-weight:600; margin-top:8px;">${tr('patch.emptyTitle')}</div>
         <div style="font-size:var(--font-size-sm); color:var(--text-muted); text-align:center; margin-top:4px;">
-          Crea un Cloud Patch a partir de tus cambios locales para compartirlos al instante sin hacer push a una rama remota.
+          ${tr('patch.emptyDesc')}
         </div>
       </div>
     `;
@@ -1965,15 +2000,15 @@ function renderCloudPatches(): void {
         <span style="font-size:var(--font-size-xs); color:var(--text-muted);">${new Date(p.createdAt).toLocaleTimeString()}</span>
       </div>
       <div style="font-size:var(--font-size-xs); color:var(--text-muted);">${p.summary}</div>
-      <pre class="patch-diff-preview"><code>${escapeHtml(p.patchContent.slice(0, 500))}${p.patchContent.length > 500 ? '\n... (truncado)' : ''}</code></pre>
+      <pre class="patch-diff-preview"><code>${escapeHtml(p.patchContent.slice(0, 500))}${p.patchContent.length > 500 ? '\n' + tr('patch.truncated') : ''}</code></pre>
       <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
-        <button class="btn-sm btn-copy-patch" data-id="${p.id}" title="Copiar diff completo al portapapeles">
-          <i class="codicon codicon-copy"></i> Copiar
+        <button class="btn-sm btn-copy-patch" data-id="${p.id}" title="${tr('patch.copyActionTitle')}">
+          <i class="codicon codicon-copy"></i> ${tr('patch.copyAction')}
         </button>
-        <button class="btn-sm btn-apply-saved-patch" data-id="${p.id}" title="Aplicar este parche al código local">
-          <i class="codicon codicon-cloud-download"></i> Aplicar
+        <button class="btn-sm btn-apply-saved-patch" data-id="${p.id}" title="${tr('patch.applyActionTitle')}">
+          <i class="codicon codicon-cloud-download"></i> ${tr('patch.applyAction')}
         </button>
-        <button class="btn-sm btn-delete-patch" data-id="${p.id}" title="Eliminar de la lista">
+        <button class="btn-sm btn-delete-patch" data-id="${p.id}" title="${tr('patch.deleteActionTitle')}">
           <i class="codicon codicon-trash"></i>
         </button>
       </div>
@@ -2154,7 +2189,7 @@ btnCreatePatch?.addEventListener('click', openPatchCreateModal);
 patchModalClose?.addEventListener('click', closePatchCreateModal);
 patchBtnCancel?.addEventListener('click', closePatchCreateModal);
 patchBtnSubmit?.addEventListener('click', () => {
-  const title = patchTitleInput?.value.trim() || 'WIP Patch';
+  const title = patchTitleInput?.value.trim() || tr('patch.defaultTitle');
   const desc = patchDescInput?.value.trim() || '';
   vscode.postMessage({
     command: 'createCloudPatch',

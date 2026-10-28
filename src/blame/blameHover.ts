@@ -56,22 +56,22 @@ export class BlameHoverProvider implements vscode.HoverProvider {
 
       // 3. GitLens-style Action Toolbar
       if (!isUncommitted) {
-        md.appendMarkdown(`**Commit:** \`${blame.shortHash}\` &nbsp;&nbsp;\n\n`);
+        md.appendMarkdown(`**${t('ext.statusCommit', lang, sysLang)}** \`${blame.shortHash}\` &nbsp;&nbsp;\n\n`);
 
         const openArgs = encodeURIComponent(JSON.stringify([blame.commitHash]));
         const copyArgs = encodeURIComponent(JSON.stringify([blame.commitHash]));
 
         md.appendMarkdown(
-          `[$(git-diff) ${t('blame.viewChanges', lang, sysLang)}](command:commitflow.openLineDiff "View Diff with previous revision") &nbsp;|&nbsp; ` +
-            `[$(git-branch) ${t('blame.inspectInGraph', lang, sysLang)}](command:commitflow.openGraph?${openArgs} "Open commit in CommitFlow Graph") &nbsp;|&nbsp; ` +
-            `[$(clippy) ${t('blame.copySha', lang, sysLang)}](command:commitflow.copyHash?${copyArgs} "Copy Commit SHA") &nbsp;|&nbsp; ` +
-            `[$(link-external) ${t('blame.openRemote', lang, sysLang)}](command:commitflow.openOnGitHub?${openArgs} "Open commit on GitHub / remote")\n`
+          `[$(git-diff) ${t('blame.viewChanges', lang, sysLang)}](command:commitflow.openLineDiff "${t('blame.viewChangesTitle', lang, sysLang)}") &nbsp;|&nbsp; ` +
+            `[$(git-branch) ${t('blame.inspectInGraph', lang, sysLang)}](command:commitflow.openGraph?${openArgs} "${t('blame.inspectInGraphTitle', lang, sysLang)}") &nbsp;|&nbsp; ` +
+            `[$(clippy) ${t('blame.copySha', lang, sysLang)}](command:commitflow.copyHash?${copyArgs} "${t('blame.copyShaTitle', lang, sysLang)}") &nbsp;|&nbsp; ` +
+            `[$(link-external) ${t('blame.openRemote', lang, sysLang)}](command:commitflow.openOnGitHub?${openArgs} "${t('blame.openRemoteTitle', lang, sysLang)}")\n`
         );
       } else {
         md.appendMarkdown(`*$(edit) ${t('blame.uncommitted', lang, sysLang)}*\n\n`);
         md.appendMarkdown(
-          `[$(git-diff) ${t('blame.compareWithHead', lang, sysLang)}](command:commitflow.openLineDiff "Compare with HEAD") &nbsp;|&nbsp; ` +
-            `[$(git-branch) ${t('blame.openGraph', lang, sysLang)}](command:commitflow.openGraph "Open CommitFlow Graph")\n`
+          `[$(git-diff) ${t('blame.compareWithHead', lang, sysLang)}](command:commitflow.openLineDiff "${t('blame.compareWithHeadTitle', lang, sysLang)}") &nbsp;|&nbsp; ` +
+            `[$(git-branch) ${t('blame.openGraph', lang, sysLang)}](command:commitflow.openGraph "${t('ext.statusCommandTitle', lang, sysLang)}")\n`
         );
       }
 
