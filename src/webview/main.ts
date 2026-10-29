@@ -136,6 +136,29 @@ const patchApplyBtnSubmit = document.getElementById('patch-apply-btn-submit') as
 const patchApplyContent = document.getElementById('patch-apply-content') as HTMLTextAreaElement | null;
 
 const btnPickFileHistory = document.getElementById('btn-pick-file-history') as HTMLButtonElement | null;
+const btnOpenFork = document.getElementById('btn-open-fork') as HTMLButtonElement | null;
+const issuesBadgeCount = document.getElementById('issues-badge-count') as HTMLElement | null;
+const issueDrawer = document.getElementById('issue-drawer') as HTMLElement | null;
+const issueDrawerCloseBtn = document.getElementById('issue-drawer-close-btn') as HTMLButtonElement | null;
+const issueDrawerTitle = document.getElementById('issue-drawer-title') as HTMLElement | null;
+const issueDrawerBody = document.getElementById('issue-drawer-body') as HTMLElement | null;
+const issuesSearchInput = document.getElementById('issues-search-input') as HTMLInputElement | null;
+const linkedIssueSpotlight = document.getElementById('linked-issue-spotlight') as HTMLElement | null;
+const issuesCardsList = document.getElementById('issues-cards-list') as HTMLElement | null;
+
+let issuesHubData: {
+  assigned: any[];
+  linked: any[];
+  allIssues: any[];
+  defaultFilter?: string;
+} = {
+  assigned: [],
+  linked: [],
+  allIssues: [],
+};
+
+let activeIssueFilter = 'assignedToMe';
+let issueSearchQuery = '';
 
 // Responsive Layout State
 let isCompactLayout = false;
@@ -275,8 +298,26 @@ window.addEventListener('message', (event) => {
       renderUpstreamSyncBar();
       applyFilters();
 
+      if (btnOpenFork) {
+        btnOpenFork.style.display =
+          message.payload.forkInstalled && message.payload.forkEnabled !== false ? 'inline-flex' : 'none';
+      }
+
       if (activeTab === 'tab-worktrees') renderWorktrees();
       if (activeTab === 'tab-prs') renderPullRequests();
+      if (activeTab === 'tab-issues') renderIssues();
+      break;
+
+    case 'issuesData':
+      handleIssuesData(message.payload);
+      break;
+
+    case 'issueDetailsData':
+      handleIssueDetailsData(message.payload);
+      break;
+
+    case 'issueCommentAdded':
+      handleIssueCommentAdded(message.payload);
       break;
 
     case 'commitFiles':
@@ -732,7 +773,7 @@ function renderGraph(): void {
 
       const subjectSpan = document.createElement('span');
       subjectSpan.className = 'commit-subject';
-      subjectSpan.textContent = node.commit.subject;
+      subjectSpan.innerHTML = formatCommitSubjectWithIssues(node.commit.subject);
       subjectSpan.title = node.commit.subject;
       cardTop.appendChild(subjectSpan);
 
@@ -812,7 +853,7 @@ function renderGraph(): void {
 
       const subjectSpan = document.createElement('span');
       subjectSpan.className = 'commit-subject';
-      subjectSpan.textContent = node.commit.subject;
+      subjectSpan.innerHTML = formatCommitSubjectWithIssues(node.commit.subject);
       subjectSpan.title = node.commit.subject;
       infoCol.appendChild(subjectSpan);
 
@@ -1761,20 +1802,33 @@ function applyLayoutMode(mode: LayoutMode, persist = true): void {
 
 function updatePrivateRepoBadge(): void {
   if (!privateRepoBadge) return;
-  if (remoteRepo && remoteRepo.isPrivate) {
-    privateRepoBadge.style.display = 'inline-flex';
-    if (privateRepoLabel) {
-      const pName = remoteRepo.provider.charAt(0).toUpperCase() + remoteRepo.provider.slice(1);
-      privateRepoLabel.textContent = tr('remote.privateBadge', { provider: pName });
+  if (remoteRepo) {
+    if (remoteRepo.provider === 'forgejo' || remoteRepo.badgeType === 'forgejo') {
+      privateRepoBadge.style.display = 'inline-flex';
+      privateRepoBadge.className = 'private-repo-badge badge-forgejo';
+      if (privateRepoLabel) {
+        privateRepoLabel.textContent = remoteRepo.badgeLabel || '🔒 Forgejo Privado';
+      }
+      privateRepoBadge.title = `Forgejo / Gitea Instance: ${remoteRepo.webUrl}`;
+      return;
     }
-    privateRepoBadge.title = tr('remote.privateTooltip', {
-      provider: remoteRepo.provider.toUpperCase(),
-      owner: remoteRepo.owner,
-      repo: remoteRepo.repo,
-    });
-  } else {
-    privateRepoBadge.style.display = 'none';
+
+    if (remoteRepo.isPrivate) {
+      privateRepoBadge.style.display = 'inline-flex';
+      privateRepoBadge.className = 'private-repo-badge';
+      if (privateRepoLabel) {
+        const pName = remoteRepo.provider.charAt(0).toUpperCase() + remoteRepo.provider.slice(1);
+        privateRepoLabel.textContent = remoteRepo.badgeLabel || tr('remote.privateBadge', { provider: pName });
+      }
+      privateRepoBadge.title = tr('remote.privateTooltip', {
+        provider: remoteRepo.provider.toUpperCase(),
+        owner: remoteRepo.owner,
+        repo: remoteRepo.repo,
+      });
+      return;
+    }
   }
+  privateRepoBadge.style.display = 'none';
 }
 
 function updateTabBadges(): void {
@@ -1831,6 +1885,9 @@ function switchTab(tabId: string): void {
     }
   } else if (tabId === 'tab-prs') {
     renderPullRequests();
+  } else if (tabId === 'tab-issues') {
+    vscode.postMessage({ command: 'requestIssues' });
+    renderIssues();
   } else if (tabId === 'tab-worktrees') {
     renderWorktrees();
   } else if (tabId === 'tab-cloud-patches') {
@@ -2459,6 +2516,399 @@ if (typeof ResizeObserver !== 'undefined') {
   window.addEventListener('resize', checkLayoutMode);
 }
 checkLayoutMode();
+
+// Open in Fork Event
+btnOpenFork?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'openInFork' });
+});
+
+// Issue Hub Filter Pills
+document.querySelectorAll('.issue-filter-pill').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.issue-filter-pill').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeIssueFilter = (btn.getAttribute('data-filter') as any) || 'assignedToMe';
+    renderIssues();
+  });
+});
+
+// Issue Search Input
+issuesSearchInput?.addEventListener('input', (e) => {
+  issueSearchQuery = (e.target as HTMLInputElement).value?.trim() || '';
+  renderIssues();
+});
+
+// Issue Drawer Close
+issueDrawerCloseBtn?.addEventListener('click', () => {
+  issueDrawer?.classList.remove('open');
+});
+
+// Delegated click on table container for commit issue pills
+tableContainer?.addEventListener('click', (e) => {
+  const pill = (e.target as HTMLElement).closest('.commit-issue-pill');
+  if (pill) {
+    e.stopPropagation();
+    const num = pill.getAttribute('data-issue-number');
+    if (num) {
+      vscode.postMessage({ command: 'requestIssueDetails', payload: { issueNumber: Number(num) } });
+    }
+  }
+});
+
+function formatCommitSubjectWithIssues(subject: string): string {
+  const safe = escapeHtml(subject || '');
+  return safe.replace(
+    /(^|[\s(])#(\d+)(?=[\s).,;:]|$)/g,
+    '$1<span class="commit-issue-pill" data-issue-number="$2" title="Inspeccionar Issue #$2">#$2</span>'
+  );
+}
+
+function handleIssuesData(payload: any): void {
+  if (!payload) return;
+  issuesHubData = {
+    assigned: payload.assigned || [],
+    linked: payload.linked || [],
+    allIssues: payload.allIssues || [],
+  };
+
+  if (payload.defaultFilter && activeIssueFilter === 'assignedToMe') {
+    activeIssueFilter = payload.defaultFilter;
+    document.querySelectorAll('.issue-filter-pill').forEach((b) => {
+      if (b.getAttribute('data-filter') === activeIssueFilter) {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
+      }
+    });
+  }
+
+  updateIssueBadges();
+  renderIssues();
+}
+
+function updateIssueBadges(): void {
+  if (issuesBadgeCount) {
+    const totalAssigned = issuesHubData.assigned.length;
+    issuesBadgeCount.textContent = String(totalAssigned);
+    issuesBadgeCount.style.display = totalAssigned > 0 ? 'inline-flex' : 'none';
+  }
+
+  const assignedCountEl = document.getElementById('issues-assigned-count');
+  if (assignedCountEl) assignedCountEl.textContent = String(issuesHubData.assigned.length);
+
+  const linkedCountEl = document.getElementById('issues-linked-count');
+  if (linkedCountEl) linkedCountEl.textContent = String(issuesHubData.linked.length);
+
+  const allCountEl = document.getElementById('issues-all-count');
+  if (allCountEl) allCountEl.textContent = String(issuesHubData.allIssues.length);
+}
+
+function renderIssues(): void {
+  if (!issuesCardsList) return;
+
+  // 1. Linked spotlight card
+  if (linkedIssueSpotlight) {
+    if (issuesHubData.linked.length > 0) {
+      const topLinked = issuesHubData.linked[0];
+      linkedIssueSpotlight.style.display = 'block';
+      linkedIssueSpotlight.innerHTML = `
+        <div class="spotlight-card">
+          <div class="spotlight-header">
+            <span class="spotlight-tag"><i class="codicon codicon-link"></i> Vinculado al Trabajo Actual</span>
+            <span class="issue-badge-state ${topLinked.state}">${topLinked.state === 'open' ? '🟢 Abierto' : '🔴 Cerrado'}</span>
+          </div>
+          <div class="spotlight-title">#${topLinked.number} ${escapeHtml(topLinked.title)}</div>
+          <div class="spotlight-meta">
+            <span>Autor: ${escapeHtml(topLinked.author.name)}</span>
+            <span>&bull;</span>
+            <span>${topLinked.commentsCount || 0} comentarios</span>
+          </div>
+          <div class="spotlight-actions">
+            <button class="btn-sm btn-primary btn-issue-worktree" data-number="${topLinked.number}">
+              <i class="codicon codicon-repo-forked"></i> Crear Worktree
+            </button>
+            <button class="btn-sm btn-issue-branch" data-number="${topLinked.number}">
+              <i class="codicon codicon-git-branch"></i> Checkout Rama
+            </button>
+            <button class="btn-sm btn-issue-insert-ref" data-number="${topLinked.number}">
+              <i class="codicon codicon-edit"></i> Copiar Ref (#${topLinked.number})
+            </button>
+            <button class="btn-sm btn-issue-details" data-number="${topLinked.number}">
+              <i class="codicon codicon-eye"></i> Inspeccionar
+            </button>
+          </div>
+        </div>
+      `;
+    } else {
+      linkedIssueSpotlight.style.display = 'none';
+      linkedIssueSpotlight.innerHTML = '';
+    }
+  }
+
+  // 2. Select filtered list
+  let sourceList: any[] = [];
+  if (activeIssueFilter === 'assignedToMe') {
+    sourceList = issuesHubData.assigned;
+  } else if (activeIssueFilter === 'linkedToBranch') {
+    sourceList = issuesHubData.linked;
+  } else if (activeIssueFilter === 'closed') {
+    sourceList = issuesHubData.allIssues.filter((i) => i.state === 'closed');
+  } else {
+    sourceList = issuesHubData.allIssues.filter((i) => i.state === 'open');
+  }
+
+  // 3. Search query filter
+  if (issueSearchQuery) {
+    const q = issueSearchQuery.toLowerCase();
+    sourceList = sourceList.filter(
+      (i) =>
+        i.title.toLowerCase().includes(q) ||
+        String(i.number).includes(q) ||
+        (i.body && i.body.toLowerCase().includes(q)) ||
+        (i.labels && i.labels.some((l: any) => l.name.toLowerCase().includes(q)))
+    );
+  }
+
+  // 4. Render cards or empty state
+  if (sourceList.length === 0) {
+    issuesCardsList.innerHTML = `
+      <div class="empty-state">
+        <i class="codicon codicon-issues" style="font-size:32px; color:var(--accent-purple);"></i>
+        <div style="font-weight:600; margin-top:8px;">No hay issues que mostrar</div>
+        <div style="font-size:var(--font-size-sm); color:var(--text-muted); text-align:center; margin-top:4px;">
+          ${
+            issueSearchQuery
+              ? 'No se encontraron issues que coincidan con la búsqueda.'
+              : 'No tienes tareas pendientes en esta vista.'
+          }
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  issuesCardsList.innerHTML = sourceList
+    .map((issue) => {
+      const stateBadge = `<span class="issue-badge-state ${issue.state}">${issue.state === 'open' ? '🟢 Abierto' : '🔴 Cerrado'}</span>`;
+      const labelsHtml = (issue.labels || [])
+        .map(
+          (l: any) =>
+            `<span class="issue-label-pill" style="background:${escapeHtml(l.color)}22; border-color:${escapeHtml(l.color)}; color:${escapeHtml(l.color)};">${escapeHtml(l.name)}</span>`
+        )
+        .join('');
+
+      return `
+        <div class="issue-card" data-number="${issue.number}">
+          <div class="issue-card-top">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="issue-number">#${issue.number}</span>
+              ${stateBadge}
+              ${issue.isLinkedToBranch ? '<span class="issue-tag-linked"><i class="codicon codicon-link"></i> Vinculado</span>' : ''}
+            </div>
+            <div class="issue-card-actions">
+              <button class="btn-icon btn-issue-branch" data-number="${issue.number}" title="🌿 Crear Rama desde Issue">
+                <i class="codicon codicon-git-branch"></i>
+              </button>
+              <button class="btn-icon btn-issue-worktree" data-number="${issue.number}" title="🌳 Crear Worktree paralelo">
+                <i class="codicon codicon-repo-forked"></i>
+              </button>
+              <button class="btn-icon btn-issue-insert-ref" data-number="${issue.number}" title="✍️ Copiar Closes #${issue.number}">
+                <i class="codicon codicon-edit"></i>
+              </button>
+              <button class="btn-icon btn-issue-details" data-number="${issue.number}" title="💬 Inspeccionar">
+                <i class="codicon codicon-eye"></i>
+              </button>
+            </div>
+          </div>
+          <div class="issue-card-title">${escapeHtml(issue.title)}</div>
+          ${labelsHtml ? `<div class="issue-labels-wrap">${labelsHtml}</div>` : ''}
+          <div class="issue-card-footer">
+            <div class="issue-author-info">
+              <span class="author-name">${escapeHtml(issue.author.name)}</span>
+              <span class="relative-time">&bull; ${issue.commentsCount || 0} comentarios</span>
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  // Attach card event listeners
+  issuesCardsList.querySelectorAll('.issue-card').forEach((card) => {
+    card.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.issue-card-actions')) return;
+      const num = card.getAttribute('data-number');
+      if (num) {
+        vscode.postMessage({ command: 'requestIssueDetails', payload: { issueNumber: Number(num) } });
+      }
+    });
+  });
+
+  issuesCardsList.querySelectorAll('.btn-issue-branch').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const num = btn.getAttribute('data-number');
+      if (num) {
+        vscode.postMessage({
+          command: 'startWorkOnIssue',
+          payload: { issueNumber: Number(num), useWorktree: false },
+        });
+      }
+    });
+  });
+
+  issuesCardsList.querySelectorAll('.btn-issue-worktree').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const num = btn.getAttribute('data-number');
+      if (num) {
+        vscode.postMessage({
+          command: 'startWorkOnIssue',
+          payload: { issueNumber: Number(num), useWorktree: true },
+        });
+      }
+    });
+  });
+
+  issuesCardsList.querySelectorAll('.btn-issue-insert-ref').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const num = btn.getAttribute('data-number');
+      if (num) {
+        vscode.postMessage({
+          command: 'insertIssueRef',
+          payload: { issueNumber: Number(num) },
+        });
+      }
+    });
+  });
+
+  issuesCardsList.querySelectorAll('.btn-issue-details').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const num = btn.getAttribute('data-number');
+      if (num) {
+        vscode.postMessage({ command: 'requestIssueDetails', payload: { issueNumber: Number(num) } });
+      }
+    });
+  });
+}
+
+function handleIssueDetailsData(payload: { issue: any; comments: any[] }): void {
+  if (!issueDrawer || !issueDrawerBody || !payload.issue) return;
+
+  const issue = payload.issue;
+  if (issueDrawerTitle) {
+    issueDrawerTitle.textContent = `#${issue.number} - ${issue.title}`;
+  }
+
+  const isClosed = issue.state === 'closed';
+  const toggleBtnText = isClosed ? 'Reabrir Issue' : 'Cerrar Issue';
+  const toggleBtnClass = isClosed ? 'btn-success' : 'btn-danger';
+  const targetState = isClosed ? 'open' : 'closed';
+
+  const commentsHtml = (payload.comments || [])
+    .map(
+      (c: any) => `
+        <div class="issue-comment-item">
+          <div class="comment-author-row">
+            <span style="font-weight:600;">${escapeHtml(c.author.name)}</span>
+            <span style="color:var(--text-muted); font-size:var(--font-size-xs);">&bull; ${escapeHtml(c.relativeTime || '')}</span>
+          </div>
+          <div class="comment-body">${escapeHtml(c.body || '').replace(/\n/g, '<br/>')}</div>
+        </div>
+      `
+    )
+    .join('');
+
+  issueDrawerBody.innerHTML = `
+    <div class="issue-drawer-content">
+      <div class="issue-drawer-topbar">
+        <span class="issue-badge-state ${issue.state}">${issue.state === 'open' ? '🟢 Abierto' : '🔴 Cerrado'}</span>
+        <div style="display:flex; gap:6px;">
+          <button id="btn-toggle-issue-state" class="btn-sm ${toggleBtnClass}">
+            <i class="codicon ${isClosed ? 'codicon-issue-reopened' : 'codicon-issue-closed'}"></i> ${toggleBtnText}
+          </button>
+          <button id="btn-issue-drawer-branch" class="btn-sm btn-primary">
+            <i class="codicon codicon-git-branch"></i> Crear Rama
+          </button>
+        </div>
+      </div>
+
+      <div class="issue-description-box">
+        <div style="font-size:var(--font-size-xs); color:var(--text-muted); margin-bottom:6px;">
+          Creado por <strong>${escapeHtml(issue.author.name)}</strong> el ${new Date(issue.createdAt).toLocaleDateString()}
+        </div>
+        <div class="issue-body-text">
+          ${escapeHtml(issue.body || 'Sin descripción proporcionada.').replace(/\n/g, '<br/>')}
+        </div>
+      </div>
+
+      <div class="issue-comments-section">
+        <div style="font-weight:600; font-size:var(--font-size-sm); margin-bottom:8px;">
+          Comentarios (${payload.comments?.length || 0})
+        </div>
+        <div id="issue-comments-feed" class="issue-comments-feed">
+          ${commentsHtml || '<div style="color:var(--text-muted); font-size:var(--font-size-sm);">No hay comentarios aún.</div>'}
+        </div>
+        <div class="issue-add-comment-box">
+          <textarea id="issue-new-comment-text" placeholder="Escribe un comentario..." class="search-input" style="width:100%; height:70px; resize:vertical; margin-top:8px;"></textarea>
+          <div style="display:flex; justify-content:flex-end; margin-top:6px;">
+            <button id="btn-submit-issue-comment" class="btn-sm btn-primary">
+              <i class="codicon codicon-send"></i> Comentar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  issueDrawer.classList.add('open');
+
+  document.getElementById('btn-toggle-issue-state')?.addEventListener('click', () => {
+    vscode.postMessage({
+      command: 'setIssueState',
+      payload: { issueNumber: issue.number, state: targetState },
+    });
+  });
+
+  document.getElementById('btn-issue-drawer-branch')?.addEventListener('click', () => {
+    vscode.postMessage({
+      command: 'startWorkOnIssue',
+      payload: { issueNumber: issue.number, useWorktree: false },
+    });
+  });
+
+  document.getElementById('btn-submit-issue-comment')?.addEventListener('click', () => {
+    const textEl = document.getElementById('issue-new-comment-text') as HTMLTextAreaElement | null;
+    const body = textEl?.value?.trim();
+    if (body) {
+      vscode.postMessage({
+        command: 'createIssueComment',
+        payload: { issueNumber: issue.number, body },
+      });
+      if (textEl) textEl.value = '';
+    }
+  });
+}
+
+function handleIssueCommentAdded(payload: { issueNumber: number; comment: any }): void {
+  const feed = document.getElementById('issue-comments-feed');
+  if (feed && payload.comment) {
+    const c = payload.comment;
+    const div = document.createElement('div');
+    div.className = 'issue-comment-item';
+    div.innerHTML = `
+      <div class="comment-author-row">
+        <span style="font-weight:600;">${escapeHtml(c.author.name)}</span>
+        <span style="color:var(--text-muted); font-size:var(--font-size-xs);">&bull; just now</span>
+      </div>
+      <div class="comment-body">${escapeHtml(c.body || '').replace(/\n/g, '<br/>')}</div>
+    `;
+    feed.appendChild(div);
+  }
+}
 
 // Initial handshake
 vscode.postMessage({ command: 'ready' });

@@ -4,6 +4,9 @@ import { GitClient } from '../git/gitClient';
 import { GraphLayout } from './graphLayout';
 import { GitContentProvider } from '../git/gitContentProvider';
 import { t } from '../i18n/locales';
+import { IssueService } from '../issues/issueService';
+import { ForkIntegration } from '../remotes/forkIntegration';
+import { PersistenceManager } from '../state/persistenceManager';
 import {
   CommitFlowSettings,
   ExtensionToWebviewMessage,
@@ -15,9 +18,13 @@ export class GraphWebviewProvider
   implements vscode.WebviewViewProvider, vscode.Disposable
 {
   public static readonly viewType = 'commitflow.graphView';
+  public static readonly mainViewType = 'commitflow.mainView';
   private view?: vscode.WebviewView;
   private panel?: vscode.WebviewPanel;
   private readonly gitClient = GitClient.getInstance();
+  private readonly issueService = IssueService.getInstance();
+  private readonly forkIntegration = ForkIntegration.getInstance();
+  private readonly persistence = PersistenceManager.getInstance();
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(private readonly extensionUri: vscode.Uri) {
@@ -254,6 +261,8 @@ export class GraphWebviewProvider
         systemLanguage: vscode.env.language,
         totalCommits: graphNodes.length,
         hasMore: false,
+        forkInstalled: this.forkIntegration.findForkExecutable() !== null,
+        forkEnabled: this.persistence.isForkIntegrationEnabled(),
       };
 
       activeWebviews.forEach((w) => {
@@ -801,6 +810,125 @@ export class GraphWebviewProvider
             vscode.window.showInformationMessage('CommitFlow: Settings saved successfully!');
           }
           break;
+
+        case 'requestIssues':
+          if (root) {
+            try {
+              const [assigned, linked, allIssues] = await Promise.all([
+                this.issueService.getAssignedIssues(root),
+                this.issueService.getLinkedIssues(root),
+                this.issueService.getAllIssues(root, msg.payload || {}),
+              ]);
+              webview.postMessage({
+                command: 'issuesData',
+                payload: {
+                  assigned,
+                  linked,
+                  allIssues,
+                  defaultFilter: this.persistence.getDefaultIssueFilter(),
+                },
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to fetch issues: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'requestIssueDetails':
+          if (root && msg.payload?.issueNumber) {
+            try {
+              const [issue, comments] = await Promise.all([
+                this.issueService.getIssue(root, msg.payload.issueNumber),
+                this.issueService.getIssueComments(root, msg.payload.issueNumber),
+              ]);
+              webview.postMessage({
+                command: 'issueDetailsData',
+                payload: { issue, comments },
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to load issue details: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'startWorkOnIssue':
+          if (root && msg.payload?.issueNumber) {
+            try {
+              const res = await this.issueService.startWorkOnIssue(
+                root,
+                msg.payload.issueNumber,
+                Boolean(msg.payload.useWorktree)
+              );
+              vscode.window.showInformationMessage(
+                res.isWorktree
+                  ? `Created and opened worktree for branch ${res.branchName} at ${res.path}`
+                  : `Checked out branch ${res.branchName}`
+              );
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Could not start work on issue: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'insertIssueRef':
+          if (msg.payload?.issueNumber) {
+            const ref = `Closes #${msg.payload.issueNumber}`;
+            await vscode.env.clipboard.writeText(ref);
+            vscode.window.showInformationMessage(`Copied "${ref}" to clipboard!`);
+          }
+          break;
+
+        case 'createIssueComment':
+          if (root && msg.payload?.issueNumber && msg.payload?.body) {
+            try {
+              const comment = await this.issueService.createComment(
+                root,
+                msg.payload.issueNumber,
+                msg.payload.body
+              );
+              vscode.window.showInformationMessage('Comment posted successfully!');
+              webview.postMessage({
+                command: 'issueCommentAdded',
+                payload: { issueNumber: msg.payload.issueNumber, comment },
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to post comment: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'setIssueState':
+          if (root && msg.payload?.issueNumber && msg.payload?.state) {
+            try {
+              await this.issueService.setIssueState(
+                root,
+                msg.payload.issueNumber,
+                msg.payload.state
+              );
+              vscode.window.showInformationMessage(
+                `Issue #${msg.payload.issueNumber} marked as ${msg.payload.state}.`
+              );
+              const [assigned, linked, allIssues] = await Promise.all([
+                this.issueService.getAssignedIssues(root),
+                this.issueService.getLinkedIssues(root),
+                this.issueService.getAllIssues(root),
+              ]);
+              webview.postMessage({
+                command: 'issuesData',
+                payload: { assigned, linked, allIssues },
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to update issue: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'openInFork':
+          if (root) {
+            await this.forkIntegration.openInFork(root);
+          }
+          break;
       }
     });
   }
@@ -892,6 +1020,15 @@ export class GraphWebviewProvider
     const logoLightUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'resources', 'logo-light.png')
     );
+    const resourcesUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'resources')
+    );
+    const isotipoColorUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'resources', 'commitflow-isotipo-color.svg')
+    );
+    const logotipoWhiteUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'resources', 'commitflow-logotipo-white.svg')
+    );
 
     const nonce = getNonce();
 
@@ -905,11 +1042,12 @@ export class GraphWebviewProvider
   <link href="${styleUri}" rel="stylesheet" />
   <title>CommitFlow - Git Graph & Developer Hub</title>
 </head>
-<body class="density-comfortable layout-auto">
+<body class="density-comfortable layout-auto" data-resources-uri="${resourcesUri}">
   <!-- Top Header Bar -->
   <div class="header-bar" id="header-bar">
     <div class="header-row-primary">
       <div class="brand-section">
+        <img src="${isotipoColorUri}" alt="CommitFlow" class="brand-logo logo-neon" />
         <img src="${logoDarkUri}" alt="CommitFlow" class="brand-logo logo-dark-mode" />
         <img src="${logoLightUri}" alt="CommitFlow" class="brand-logo logo-light-mode" />
         <span class="brand-title">CommitFlow</span>
@@ -920,13 +1058,18 @@ export class GraphWebviewProvider
         <span class="branch-name">main</span>
       </div>
 
-      <!-- Private Repository Badge -->
+      <!-- Private / Remote Provider / Forgejo Badge -->
       <div id="private-repo-badge" class="private-repo-badge" style="display:none;" title="${tr('remote.private')}">
-        <i class="codicon codicon-lock"></i>
+        <i class="codicon codicon-lock" id="private-repo-icon"></i>
         <span id="private-repo-label">${tr('remote.private')}</span>
       </div>
 
       <div class="header-quick-actions">
+        <!-- Open in Fork Button -->
+        <button id="btn-open-fork" class="btn-icon" title="Abrir en Fork" style="display:none;">
+          <i class="codicon codicon-link-external"></i>
+        </button>
+
         <!-- Layout Switcher Button -->
         <button id="btn-layout-mode" class="btn-icon btn-layout-toggle" title="${tr('layout.toggleTitle')}">
           <i class="codicon codicon-layout"></i>
@@ -974,6 +1117,11 @@ export class GraphWebviewProvider
       <button class="nav-tab-btn" data-tab="tab-file-history" title="${tr('tabs.fileHistoryTitle')}">
         <i class="codicon codicon-history"></i>
         <span id="nav-tab-text-history">${tr('tabs.fileHistory')}</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-issues" title="🎯 Issues Tracker Hub & Mis Issues">
+        <i class="codicon codicon-issues"></i>
+        <span id="nav-tab-text-issues">Issues</span>
+        <span class="tab-badge" id="issues-badge-count">0</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-prs" title="${tr('tabs.prsTitle')}">
         <i class="codicon codicon-git-pull-request"></i>
@@ -1126,6 +1274,54 @@ export class GraphWebviewProvider
           </div>
         </div>
         <div id="cloud-patches-list" class="cloud-patches-list"></div>
+      </div>
+    </div>
+
+    <!-- TAB 6: ISSUES TRACKER HUB -->
+    <div id="tab-issues" class="tab-pane">
+      <div class="issues-hub-container">
+        <!-- Filter toolbar -->
+        <div class="issues-filters-bar">
+          <div class="issues-filter-pills">
+            <button class="issue-filter-pill active" data-filter="assignedToMe">
+              <i class="codicon codicon-account"></i>
+              <span>Mis Issues</span>
+              <span class="pill-badge" id="issues-assigned-count">0</span>
+            </button>
+            <button class="issue-filter-pill" data-filter="linkedToBranch">
+              <i class="codicon codicon-git-branch"></i>
+              <span>Asociados a Rama</span>
+              <span class="pill-badge" id="issues-linked-count">0</span>
+            </button>
+            <button class="issue-filter-pill" data-filter="allOpen">
+              <i class="codicon codicon-issues"></i>
+              <span>Todos los Abiertos</span>
+              <span class="pill-badge" id="issues-all-count">0</span>
+            </button>
+            <button class="issue-filter-pill" data-filter="closed">
+              <i class="codicon codicon-issue-closed"></i>
+              <span>Cerrados</span>
+            </button>
+          </div>
+          <div class="issues-search-wrapper">
+            <i class="codicon codicon-search search-icon"></i>
+            <input type="text" id="issues-search-input" class="issues-search-input" placeholder="Buscar por título, #número o etiqueta..." />
+          </div>
+        </div>
+
+        <!-- Linked Work Spotlight Card -->
+        <div id="linked-issue-spotlight" class="linked-issue-spotlight" style="display:none;"></div>
+
+        <!-- Issue List / Grid -->
+        <div id="issues-cards-list" class="issues-cards-list">
+          <div class="empty-state">
+            <i class="codicon codicon-issues" style="font-size:32px; color:var(--accent-purple);"></i>
+            <div style="font-weight:600; margin-top:8px;">Hub de Issues</div>
+            <div style="font-size:var(--font-size-sm); color:var(--text-muted); text-align:center; margin-top:4px;">
+              Cargando tus tareas pendientes y asignadas...
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1422,6 +1618,15 @@ export class GraphWebviewProvider
         <button id="drawer-close-btn" class="btn-icon" title="${tr('drawer.close')}"><i class="codicon codicon-close"></i></button>
       </div>
       <div id="drawer-body" class="drawer-body"></div>
+    </div>
+
+    <!-- Slide-in Issue Inspector Drawer -->
+    <div id="issue-drawer" class="commit-drawer issue-drawer">
+      <div class="drawer-header">
+        <span id="issue-drawer-title" style="font-weight:600; font-size:var(--font-size-base);">Inspector de Issue</span>
+        <button id="issue-drawer-close-btn" class="btn-icon" title="Cerrar"><i class="codicon codicon-close"></i></button>
+      </div>
+      <div id="issue-drawer-body" class="drawer-body"></div>
     </div>
   </div>
 

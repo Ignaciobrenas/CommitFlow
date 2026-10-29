@@ -5,6 +5,8 @@ import { GraphWebviewProvider } from './graph/graphWebviewProvider';
 import { GitContentProvider } from './git/gitContentProvider';
 import { BranchWatcherService } from './git/branchWatcher';
 import { GitClient } from './git/gitClient';
+import { ForkIntegration } from './remotes/forkIntegration';
+import { PersistenceManager } from './state/persistenceManager';
 import { t } from './i18n/locales';
 
 let blameController: BlameController | undefined;
@@ -19,6 +21,9 @@ function tr(key: string, params?: Record<string, string | number>): string {
 
 export function activate(context: vscode.ExtensionContext): void {
   console.log('⚡ [CommitFlow] Activating Git Graph & Live Blame extension...');
+
+  // 0. Initialize Persistence Manager (Settings & SecretStorage)
+  PersistenceManager.getInstance().init(context);
 
   // 1. Register Virtual Text Document Content Provider for Historical Git Diffs
   const contentProvider = new GitContentProvider();
@@ -39,8 +44,15 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.languages.registerHoverProvider({ scheme: 'file' }, hoverProvider)
   );
 
-  // 4. Register Graph Webview Provider (Sidebar Activity Bar)
+  // 4. Register Graph Webview Provider (Sidebar Activity Bar & Panel)
   graphProvider = new GraphWebviewProvider(context.extensionUri);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      GraphWebviewProvider.mainViewType,
+      graphProvider,
+      { webviewOptions: { retainContextWhenHidden: true } }
+    )
+  );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       GraphWebviewProvider.viewType,
@@ -358,6 +370,27 @@ export function activate(context: vscode.ExtensionContext): void {
           vscode.window.showErrorMessage(tr('ext.patchFailed', { error: err.message }));
         }
       }
+    })
+  );
+
+  // 25. Command: Open Issues Tracker Hub
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.openIssues', () => {
+      graphProvider?.openFullPanel();
+      graphProvider?.switchTab('tab-issues');
+    })
+  );
+
+  // 26. Command: Open Repository in Fork Git Client
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.openInFork', async () => {
+      const gitClient = GitClient.getInstance();
+      const root = await gitClient.getRepoRoot();
+      if (!root) {
+        vscode.window.showWarningMessage('No active Git repository detected.');
+        return;
+      }
+      await ForkIntegration.getInstance().openInFork(root);
     })
   );
 

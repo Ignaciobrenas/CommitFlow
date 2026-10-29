@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import { GitClient } from '../git/gitClient';
+import { IssueService } from '../issues/issueService';
 import { t, Language } from '../i18n/locales';
 
 export class BlameHoverProvider implements vscode.HoverProvider {
   private readonly gitClient = GitClient.getInstance();
+  private readonly issueService = IssueService.getInstance();
 
   public async provideHover(
     document: vscode.TextDocument,
@@ -52,6 +54,30 @@ export class BlameHoverProvider implements vscode.HoverProvider {
 
       // 2. Commit Message
       md.appendMarkdown(`> **${blame.summary}**\n\n`);
+
+      // 2.1 Issue Card Hover if commit references #123
+      const issueMatch = blame.summary.match(/#(\d+)/);
+      if (issueMatch) {
+        const issueNum = parseInt(issueMatch[1], 10);
+        const root = await this.gitClient.getRepoRoot(document.uri.fsPath);
+        if (root) {
+          try {
+            const issue = await this.issueService.getIssue(root, issueNum);
+            if (issue) {
+              const stateIcon = issue.state === 'open' ? '🟢' : '🔴';
+              const stateLabel = issue.state === 'open' ? 'Abierto' : 'Cerrado';
+              md.appendMarkdown(
+                `> ${stateIcon} **Issue #${issue.number}: ${issue.title}** (${stateLabel})\n`
+              );
+              if (issue.body) {
+                const snippet = issue.body.slice(0, 110).replace(/\r?\n/g, ' ');
+                md.appendMarkdown(`> *${snippet}${issue.body.length > 110 ? '...' : ''}*\n\n`);
+              }
+            }
+          } catch {}
+        }
+      }
+
       md.appendMarkdown(`---\n\n`);
 
       // 3. GitLens-style Action Toolbar

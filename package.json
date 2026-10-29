@@ -4,7 +4,7 @@
   "description": "High-performance interactive Git commit & branch graph visualizer, real-time live blame with author avatars, visual file history, PR launchpad, worktrees & multi-WIP, cloud patches, and adaptive layout modes for VS Code.",
   "version": "0.4.5",
   "publisher": "Ignaciobrenas",
-  "icon": "resources/icon.png",
+  "icon": "resources/commitflow-logo-color.png",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -153,23 +153,43 @@
         "title": "%commitflow.command.createCloudPatch%",
         "category": "CommitFlow",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "commitflow.openIssues",
+        "title": "%commitflow.command.openIssues%",
+        "category": "CommitFlow",
+        "icon": "$(issues)"
+      },
+      {
+        "command": "commitflow.openInFork",
+        "title": "%commitflow.command.openInFork%",
+        "category": "CommitFlow",
+        "icon": "$(link-external)"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "commitflow-explorer",
+          "id": "commitflow-sidebar",
           "title": "CommitFlow",
-          "icon": "resources/icon.svg"
+          "icon": "resources/commitflow-isotipo-white.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "commitflow-bottom",
+          "title": "CommitFlow",
+          "icon": "resources/commitflow-isotipo-white.svg"
         }
       ]
     },
     "views": {
-      "commitflow-explorer": [
+      "commitflow-sidebar": [
         {
           "type": "webview",
-          "id": "commitflow.graphView",
-          "name": "%commitflow.view.graphView%"
+          "id": "commitflow.mainView",
+          "name": "CommitFlow Hub",
+          "icon": "resources/commitflow-isotipo-white.svg"
         }
       ]
     },
@@ -288,6 +308,32 @@
           "type": "boolean",
           "default": true,
           "description": "%commitflow.config.sync.askBeforePull%"
+        },
+        "commitflow.remotes.forgejoInstances": {
+          "type": "array",
+          "default": [],
+          "description": "Lista de dominios o IPs de tus servidores Forgejo/Gitea self-hosted (ej. ['git.midominio.com', '192.168.1.100:3000']). Si usas SSH en un puerto distinto al HTTP, mapea el host SSH al endpoint API."
+        },
+        "commitflow.ssh.configPath": {
+          "type": "string",
+          "default": "~/.ssh/config",
+          "description": "Ruta al archivo de configuración SSH para resolver alias de hosts y claves privadas."
+        },
+        "commitflow.issues.defaultFilter": {
+          "type": "string",
+          "enum": ["assignedToMe", "linkedToBranch", "createdByMe", "allOpen"],
+          "default": "assignedToMe",
+          "description": "Filtro persistente por defecto al abrir la pestaña de Issues."
+        },
+        "commitflow.issues.branchNamingPattern": {
+          "type": "string",
+          "default": "feat/{id}-{slug}",
+          "description": "Plantilla automática al crear una rama o worktree desde un Issue."
+        },
+        "commitflow.integrations.enableForkButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mostrar acción rápida para abrir el repositorio o worktree actual en el cliente Git Fork."
         }
       }
     },
@@ -319,12 +365,12 @@
       "view/title": [
         {
           "command": "commitflow.refreshGraph",
-          "when": "view == commitflow.graphView",
+          "when": "view == commitflow.mainView || view == commitflow.graphView",
           "group": "navigation"
         },
         {
           "command": "commitflow.openGraph",
-          "when": "view == commitflow.graphView",
+          "when": "view == commitflow.mainView || view == commitflow.graphView",
           "group": "navigation"
         }
       ]

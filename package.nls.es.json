@@ -17,6 +17,8 @@
   "commitflow.command.createCloudPatch": "Crear y Compartir Cloud Patch",
   "commitflow.command.openSettings": "Abrir Ajustes de CommitFlow",
   "commitflow.command.refreshGraph": "Refrescar Grafo de Git",
+  "commitflow.command.openIssues": "Abrir Hub de Issues",
+  "commitflow.command.openInFork": "Abrir Repositorio en Fork",
   "commitflow.view.graphView": "Grafo de Commits y Ramas",
   "commitflow.config.title": "CommitFlow",
   "commitflow.config.inlineBlame.enabled": "Muestra información de autoría y commit al final de la línea activa.",
