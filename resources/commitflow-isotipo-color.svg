@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- CommitFlow Neon Gradients -->
+    <linearGradient id="neonGradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f0ff" />
+      <stop offset="50%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+    <linearGradient id="neonCyanPink" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00f0ff" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+    <linearGradient id="neonViolet" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Glow underlay -->
+  <g fill="none" stroke="url(#neonGradient1)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" opacity="0.4" filter="url(#neonGlow)">
+    <path d="M 135 224 C 155 185, 210 195, 210 140 L 210 115" />
+    <path d="M 242 220 C 242 145, 285 135, 338 135" />
+    <path d="M 162 256 L 208 256" />
+    <path d="M 288 256 L 332 256" />
+    <path d="M 242 272 L 242 325" />
+    <circle cx="128" cy="256" r="24" stroke-width="24" />
+    <circle cx="256" cy="256" r="23" stroke-width="24" />
+    <circle cx="392" cy="135" r="24" stroke-width="24" />
+    <circle cx="238" cy="382" r="23" stroke-width="24" />
+  </g>
+
+  <!-- Sharp Forefront SVG paths -->
+  <g fill="none" stroke="url(#neonGradient1)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Top left branch -->
+    <path d="M 135 224 C 155 185, 210 195, 210 140 L 210 115" stroke="url(#neonViolet)" />
+    <circle cx="210" cy="110" r="16" fill="#00f0ff" stroke="none" />
+
+    <!-- Top center arc with arrow head -->
+    <path d="M 242 220 C 242 145, 285 135, 338 135" stroke="url(#neonCyanPink)" />
+    <polygon points="325,103 368,135 325,167" fill="#ec4899" stroke="none" />
+
+    <!-- Top right wavy branch -->
+    <path d="M 278 232 C 295 185, 345 198, 375 155" stroke="#ec4899" />
+
+    <!-- Left to Center arrow -->
+    <path d="M 162 256 L 208 256" stroke="#00f0ff" />
+    <polygon points="196,226 236,256 196,286" fill="#00f0ff" stroke="none" />
+
+    <!-- Center to Right arrow -->
+    <path d="M 288 256 L 332 256" stroke="url(#neonCyanPink)" />
+    <polygon points="320,226 362,256 320,286" fill="#ec4899" stroke="none" />
+
+    <!-- Center to Bottom arrow -->
+    <path d="M 242 272 L 242 325" stroke="#a855f7" />
+    <polygon points="212,314 242,356 272,314" fill="#a855f7" stroke="none" />
+
+    <!-- Bottom right branch -->
+    <path d="M 268 380 C 300 375, 290 330, 320 315 C 345 302, 350 290, 348 274" stroke="url(#neonViolet)" />
+
+    <!-- Main Git Nodes -->
+    <circle cx="128" cy="256" r="24" stroke-width="20" stroke="#00f0ff" fill="#0f172a" />
+    <circle cx="256" cy="256" r="23" stroke-width="20" stroke="#a855f7" fill="#0f172a" />
+    <circle cx="392" cy="135" r="24" stroke-width="20" stroke="#ec4899" fill="#0f172a" />
+    <circle cx="238" cy="382" r="23" stroke-width="20" stroke="#06b6d4" fill="#0f172a" />
+  </g>
+</svg>
