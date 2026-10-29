@@ -105,6 +105,28 @@ const comparisonModalClose = document.getElementById('comparison-modal-close') a
 const comparisonModalBody = document.getElementById('comparison-modal-body') as HTMLElement | null;
 const comparisonModalTitle = document.getElementById('comparison-modal-title') as HTMLElement | null;
 
+// Git Bisect Assistant & Conflict Forecaster Elements
+let bisectStatus: GitBisectStatus | null = null;
+const btnBisect = document.getElementById('btn-bisect') as HTMLButtonElement | null;
+const bisectBanner = document.getElementById('bisect-banner') as HTMLElement | null;
+const bisectCurrentHash = document.getElementById('bisect-current-hash') as HTMLElement | null;
+const bisectStepsLeft = document.getElementById('bisect-steps-left') as HTMLElement | null;
+const btnBisectGood = document.getElementById('btn-bisect-good') as HTMLButtonElement | null;
+const btnBisectBad = document.getElementById('btn-bisect-bad') as HTMLButtonElement | null;
+const btnBisectSkip = document.getElementById('btn-bisect-skip') as HTMLButtonElement | null;
+const btnBisectReset = document.getElementById('btn-bisect-reset') as HTMLButtonElement | null;
+
+const bisectModal = document.getElementById('bisect-modal') as HTMLElement | null;
+const bisectModalClose = document.getElementById('bisect-modal-close') as HTMLButtonElement | null;
+const bisectBadInput = document.getElementById('bisect-bad-input') as HTMLInputElement | null;
+const bisectGoodInput = document.getElementById('bisect-good-input') as HTMLInputElement | null;
+const bisectBtnCancel = document.getElementById('bisect-btn-cancel') as HTMLButtonElement | null;
+const bisectBtnStart = document.getElementById('bisect-btn-start') as HTMLButtonElement | null;
+
+const cherryPickForecastModal = document.getElementById('cherry-pick-forecast-modal') as HTMLElement | null;
+const cherryPickForecastClose = document.getElementById('cherry-pick-forecast-close') as HTMLButtonElement | null;
+const cherryPickForecastBody = document.getElementById('cherry-pick-forecast-body') as HTMLElement | null;
+
 // Tag Modal
 const tagCreateModal = document.getElementById('tag-create-modal') as HTMLElement | null;
 const tagModalClose = document.getElementById('tag-modal-close') as HTMLButtonElement | null;
@@ -178,6 +200,7 @@ let issueSearchQuery = '';
 
 // Responsive Layout State
 let isCompactLayout = false;
+let isNanoLayout = false;
 
 // Modals
 const stashModal = document.getElementById('stash-modal') as HTMLElement;
@@ -212,6 +235,7 @@ function getRowHeight(): number {
 }
 
 function getLaneWidth(): number {
+  if (isNanoLayout) return 9;
   if (isCompactLayout) return 11;
   if (currentDensity === 'compact') return 14;
   if (currentDensity === 'spacious') return 18;
@@ -219,6 +243,7 @@ function getLaneWidth(): number {
 }
 
 function getLaneOffset(): number {
+  if (isNanoLayout) return 6;
   if (isCompactLayout) return 8;
   if (currentDensity === 'compact') return 12;
   if (currentDensity === 'spacious') return 16;
@@ -226,6 +251,7 @@ function getLaneOffset(): number {
 }
 
 function getNodeRadius(): number {
+  if (isNanoLayout) return 2.5;
   if (isCompactLayout) return 3;
   if (currentDensity === 'compact') return 3;
   if (currentDensity === 'spacious') return 5;
@@ -319,9 +345,22 @@ window.addEventListener('message', (event) => {
           message.payload.forkInstalled && message.payload.forkEnabled !== false ? 'inline-flex' : 'none';
       }
 
+      bisectStatus = message.payload.bisectStatus || null;
+      updateBisectBanner();
+
       if (activeTab === 'tab-worktrees') renderWorktrees();
       if (activeTab === 'tab-prs') renderPullRequests();
       if (activeTab === 'tab-issues') renderIssues();
+      break;
+
+    case 'bisectStatusData':
+      bisectStatus = message.payload || null;
+      updateBisectBanner();
+      renderTable();
+      break;
+
+    case 'cherryPickPreviewData':
+      handleCherryPickPreview(message.payload);
       break;
 
     case 'issuesData':
@@ -753,6 +792,22 @@ function renderGraph(): void {
   filteredNodes.forEach((node, index) => {
     const row = document.createElement('div');
     const isSelected = selectedNode?.commit.hash === node.commit.hash;
+    const isBisectCurrent = Boolean(
+      bisectStatus?.isActive &&
+        (bisectStatus.currentCommit === node.commit.hash ||
+          bisectStatus.currentShortCommit === node.commit.shortHash)
+    );
+    const isBisectGood = Boolean(
+      bisectStatus?.isActive &&
+        bisectStatus.goodCommits.some((h) => h === node.commit.hash || node.commit.hash.startsWith(h))
+    );
+    const isBisectBad = Boolean(
+      bisectStatus?.isActive &&
+        bisectStatus.badCommit &&
+        (node.commit.hash === bisectStatus.badCommit ||
+          node.commit.hash.startsWith(bisectStatus.badCommit))
+    );
+    const bisectClass = isBisectCurrent ? 'row-bisect-current' : '';
     row.style.height = `${rowHeight}px`;
 
     // 1. Canvas Column with High-DPI support
@@ -770,7 +825,7 @@ function renderGraph(): void {
 
     if (isCompact) {
       // Compact 2-line layout (Sidebar mode)
-      row.className = `commit-row compact-card ${isSelected ? 'selected' : ''}`;
+      row.className = `commit-row compact-card ${isSelected ? 'selected' : ''} ${bisectClass}`;
 
       const cardBody = document.createElement('div');
       cardBody.className = 'commit-card-body';
@@ -778,6 +833,23 @@ function renderGraph(): void {
       // Line 1: Refs + Subject
       const cardTop = document.createElement('div');
       cardTop.className = 'commit-card-top';
+
+      if (isBisectCurrent) {
+        const bBadge = document.createElement('span');
+        bBadge.className = 'bisect-badge-tag current';
+        bBadge.innerHTML = `<i class="codicon codicon-search"></i> PROBE`;
+        cardTop.appendChild(bBadge);
+      } else if (isBisectGood) {
+        const bBadge = document.createElement('span');
+        bBadge.className = 'bisect-badge-tag good';
+        bBadge.innerHTML = `<i class="codicon codicon-check"></i> GOOD`;
+        cardTop.appendChild(bBadge);
+      } else if (isBisectBad) {
+        const bBadge = document.createElement('span');
+        bBadge.className = 'bisect-badge-tag bad';
+        bBadge.innerHTML = `<i class="codicon codicon-close"></i> BAD`;
+        cardTop.appendChild(bBadge);
+      }
 
       node.commit.refs.forEach((ref) => {
         const pill = document.createElement('span');
@@ -862,11 +934,28 @@ function renderGraph(): void {
       row.appendChild(cardBody);
     } else {
       // Standard multi-column layout (Wide mode)
-      row.className = `commit-row ${isSelected ? 'selected' : ''}`;
+      row.className = `commit-row ${isSelected ? 'selected' : ''} ${bisectClass}`;
 
       // 2. Info Column (Refs + Subject)
       const infoCol = document.createElement('div');
       infoCol.className = 'commit-info-col';
+
+      if (isBisectCurrent) {
+        const bBadge = document.createElement('span');
+        bBadge.className = 'bisect-badge-tag current';
+        bBadge.innerHTML = `<i class="codicon codicon-search"></i> PROBE`;
+        infoCol.appendChild(bBadge);
+      } else if (isBisectGood) {
+        const bBadge = document.createElement('span');
+        bBadge.className = 'bisect-badge-tag good';
+        bBadge.innerHTML = `<i class="codicon codicon-check"></i> GOOD`;
+        infoCol.appendChild(bBadge);
+      } else if (isBisectBad) {
+        const bBadge = document.createElement('span');
+        bBadge.className = 'bisect-badge-tag bad';
+        bBadge.innerHTML = `<i class="codicon codicon-close"></i> BAD`;
+        infoCol.appendChild(bBadge);
+      }
 
       node.commit.refs.forEach((ref) => {
         const pill = document.createElement('span');
@@ -982,9 +1071,7 @@ function renderGraph(): void {
       btnCherryPick.innerHTML = `<i class="codicon codicon-git-pull-request-go-to-changes"></i>`;
       btnCherryPick.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (confirm(tr('drawer.confirmCherryPick', { hash: node.commit.shortHash }))) {
-          vscode.postMessage({ command: 'cherryPickCommit', payload: { hash: node.commit.hash } });
-        }
+        initiateCherryPick(node.commit.hash, node.commit.shortHash);
       });
 
       const btnCreateTag = document.createElement('button');
@@ -1159,12 +1246,25 @@ function showHoverPopover(e: MouseEvent, node: GraphNode): void {
     }
   `;
 
+  const popoverWidth = Math.min(300, window.innerWidth - 20);
+  const popoverHeight = 130;
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-  const top = Math.min(rect.bottom + 4, window.innerHeight - 150);
-  const left = Math.min(rect.left + 80, window.innerWidth - 330);
 
-  hoverPopover.style.top = `${top}px`;
-  hoverPopover.style.left = `${left}px`;
+  // Clamp top position: if bottom doesn't fit, flip to top
+  let top = rect.bottom + 4;
+  if (top + popoverHeight > window.innerHeight) {
+    top = Math.max(8, rect.top - popoverHeight - 4);
+  }
+
+  // Clamp left position: ensure at least 8px from left and right viewport edges
+  let left = rect.left + 40;
+  if (left + popoverWidth > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - popoverWidth - 8);
+  }
+
+  hoverPopover.style.top = `${Math.round(top)}px`;
+  hoverPopover.style.left = `${Math.round(left)}px`;
+  hoverPopover.style.maxWidth = `${popoverWidth}px`;
   hoverPopover.classList.add('visible');
 }
 
@@ -1229,6 +1329,9 @@ function selectCommit(node: GraphNode): void {
       <button class="btn-icon" id="btn-drawer-cherry-pick" title="${tr('drawer.cherryPick')}">
         <i class="codicon codicon-git-pull-request-go-to-changes"></i> ${tr('drawer.cherryPick')}
       </button>
+      <button class="btn-icon" id="btn-drawer-bisect" title="Iniciar Bisect usando este commit como Malo (Bad)">
+        <i class="codicon codicon-search"></i> Bisect
+      </button>
       <button class="btn-icon" id="btn-drawer-revert" title="${tr('drawer.revert')}">
         <i class="codicon codicon-history"></i> ${tr('drawer.revert')}
       </button>
@@ -1288,9 +1391,11 @@ function selectCommit(node: GraphNode): void {
   });
 
   document.getElementById('btn-drawer-cherry-pick')?.addEventListener('click', () => {
-    if (confirm(tr('drawer.confirmCherryPick', { hash: commit.shortHash }))) {
-      vscode.postMessage({ command: 'cherryPickCommit', payload: { hash: commit.hash } });
-    }
+    initiateCherryPick(commit.hash, commit.shortHash);
+  });
+
+  document.getElementById('btn-drawer-bisect')?.addEventListener('click', () => {
+    openBisectModal(commit.hash);
   });
 
   document.getElementById('btn-drawer-revert')?.addEventListener('click', () => {
@@ -1343,11 +1448,11 @@ function renderCommitFiles(files: GitFileChange[]): void {
     row.className = 'file-row';
 
     row.innerHTML = `
-      <div style="display:flex; align-items:center; gap:6px; overflow:hidden; text-overflow:ellipsis;">
-        <span class="status-badge status-${file.status}">${file.status}</span>
-        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${file.path}</span>
+      <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden; text-overflow:ellipsis; flex:1;">
+        <span class="status-badge status-${file.status}" style="flex-shrink:0;">${file.status}</span>
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;" title="${escapeHtml(file.path)}">${escapeHtml(file.path)}</span>
       </div>
-      <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+      <div style="display:flex; align-items:center; gap:4px; flex-shrink:0; margin-left:6px;">
         <button class="btn-icon btn-file-diff" title="${tr('drawer.diffHint')}" style="padding:1px 4px; font-size:10px;">
           <i class="codicon codicon-diff"></i>
         </button>
@@ -2062,6 +2167,105 @@ function renderComparisonModal(comparison: CommitComparisonResult): void {
   comparisonModal.classList.add('open');
 }
 
+// Git Bisect Assistant
+function updateBisectBanner(): void {
+  if (!bisectBanner) return;
+  if (bisectStatus?.isActive) {
+    bisectBanner.style.display = 'block';
+    if (bisectCurrentHash) {
+      bisectCurrentHash.textContent =
+        bisectStatus.currentShortCommit ||
+        bisectStatus.currentCommit?.slice(0, 7) ||
+        'HEAD';
+    }
+    if (bisectStepsLeft) {
+      bisectStepsLeft.textContent = bisectStatus.stepsRemainingApprox
+        ? `~${bisectStatus.stepsRemainingApprox}`
+        : '1';
+    }
+  } else {
+    bisectBanner.style.display = 'none';
+  }
+}
+
+function openBisectModal(defaultBad = 'HEAD'): void {
+  if (bisectBadInput) bisectBadInput.value = defaultBad;
+  if (bisectGoodInput) bisectGoodInput.value = '';
+  bisectModal?.classList.add('open');
+}
+
+function closeBisectModal(): void {
+  bisectModal?.classList.remove('open');
+}
+
+// Pre-Flight Cherry-Pick Conflict Forecaster
+function initiateCherryPick(commitHash: string, shortHash: string): void {
+  vscode.postMessage({ command: 'previewCherryPick', payload: { commitHash } });
+}
+
+function handleCherryPickPreview(preview: CherryPickPreviewResult): void {
+  if (preview.clean) {
+    if (
+      confirm(
+        tr('drawer.confirmCherryPick', { hash: preview.shortHash }) +
+          '\n\n✔ Análisis de conflictos: Limpio (Sin choques detectados).'
+      )
+    ) {
+      vscode.postMessage({ command: 'cherryPickCommit', payload: { hash: preview.commitHash } });
+    }
+  } else {
+    renderCherryPickForecastModal(preview);
+  }
+}
+
+function renderCherryPickForecastModal(preview: CherryPickPreviewResult): void {
+  if (!cherryPickForecastModal || !cherryPickForecastBody) return;
+  cherryPickForecastBody.innerHTML = `
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div class="health-status-banner warning">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <i class="codicon codicon-warning" style="font-size:20px; color:#f59e0b;"></i>
+          <div>
+            <div style="font-weight:600; color:#f59e0b;">¡Riesgo de Conflictos Detectado!</div>
+            <div style="font-size:var(--font-size-xs); color:var(--text-muted);">
+              La aplicación del commit <code>${escapeHtml(preview.shortHash)}</code> generará conflictos automáticos de fusión con HEAD.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:var(--font-size-sm); font-weight:600; margin-bottom:6px;">Archivos en conflicto:</div>
+        <div class="conflict-file-list">
+          ${preview.conflicts
+            .map(
+              (f) => `
+            <div class="conflict-file-item">
+              <i class="codicon codicon-diff-modified"></i>
+              <span>${escapeHtml(f)}</span>
+            </div>
+          `
+            )
+            .join('')}
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+        <button id="btn-cancel-cherry-pick" class="btn-sm">Cancelar</button>
+        <button id="btn-force-cherry-pick" class="btn-sm" style="background:rgba(239, 68, 68, 0.2); border-color:#ef4444; color:#f87171;">
+          Continuar y Resolver
+        </button>
+      </div>
+    </div>
+  `;
+  cherryPickForecastModal.classList.add('open');
+  document.getElementById('btn-cancel-cherry-pick')?.addEventListener('click', () => {
+    cherryPickForecastModal.classList.remove('open');
+  });
+  document.getElementById('btn-force-cherry-pick')?.addEventListener('click', () => {
+    cherryPickForecastModal.classList.remove('open');
+    vscode.postMessage({ command: 'cherryPickCommit', payload: { hash: preview.commitHash } });
+  });
+}
+
 // ==========================================================================
 // CommitFlow v0.4.5: Layout Switcher, Themes, Dev Tools, File History, PRs, Worktrees, Cloud Patches
 // ==========================================================================
@@ -2587,6 +2791,45 @@ repoHealthModalClose?.addEventListener('click', closeRepoHealthModal);
 
 comparisonModalClose?.addEventListener('click', closeComparisonModal);
 
+// Bisect Banner & Launcher Listeners
+btnBisect?.addEventListener('click', () => openBisectModal('HEAD'));
+bisectModalClose?.addEventListener('click', closeBisectModal);
+bisectBtnCancel?.addEventListener('click', closeBisectModal);
+
+bisectBtnStart?.addEventListener('click', () => {
+  const bad = bisectBadInput?.value.trim() || 'HEAD';
+  const good = bisectGoodInput?.value.trim();
+  if (!good) {
+    alert('Introduce el commit o referencia bueno (Good).');
+    return;
+  }
+  closeBisectModal();
+  vscode.postMessage({
+    command: 'startBisect',
+    payload: { badCommit: bad, goodCommit: good },
+  });
+});
+
+btnBisectGood?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'stepBisect', payload: { step: 'good' } });
+});
+
+btnBisectBad?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'stepBisect', payload: { step: 'bad' } });
+});
+
+btnBisectSkip?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'stepBisect', payload: { step: 'skip' } });
+});
+
+btnBisectReset?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'resetBisect' });
+});
+
+cherryPickForecastClose?.addEventListener('click', () => {
+  cherryPickForecastModal?.classList.remove('open');
+});
+
 btnPopout?.addEventListener('click', () => {
   vscode.postMessage({ command: 'openFullPanel' });
 });
@@ -2613,6 +2856,8 @@ window.addEventListener('keydown', (e) => {
     closeReflogModal();
     closeRepoHealthModal();
     closeComparisonModal();
+    closeBisectModal();
+    cherryPickForecastModal?.classList.remove('open');
     layoutPickerPopover?.classList.remove('visible');
     themePickerPopover?.classList.remove('visible');
     hideHoverPopover();
@@ -2798,22 +3043,58 @@ btnRefresh?.addEventListener('click', () => {
 // Real-Time Container & Sidebar Responsiveness
 function checkLayoutMode(): void {
   const width = document.body.clientWidth;
+  const height = document.body.clientHeight;
   const wasCompact = isCompactLayout;
-  isCompactLayout = width <= 360;
+  const wasNano = isNanoLayout;
 
-  if (isCompactLayout) {
-    document.body.classList.add('layout-sidebar-compact');
+  isCompactLayout = width <= 440;
+  isNanoLayout = width <= 260;
+
+  // Clean all previous layout tier classes
+  document.body.classList.remove(
+    'layout-sidebar-compact',
+    'layout-nano',
+    'layout-width-nano',
+    'layout-width-compact',
+    'layout-width-medium',
+    'layout-width-expanded',
+    'layout-width-ultrawide',
+    'layout-height-nano',
+    'layout-height-short',
+    'auto-detected-bottom',
+    'auto-detected-left'
+  );
+
+  // Width classification tiers
+  if (width <= 260) {
+    document.body.classList.add('layout-nano', 'layout-width-nano', 'layout-sidebar-compact');
+  } else if (width <= 440) {
+    document.body.classList.add('layout-sidebar-compact', 'layout-width-compact');
+  } else if (width <= 750) {
+    document.body.classList.add('layout-width-medium');
+  } else if (width <= 1200) {
+    document.body.classList.add('layout-width-expanded');
   } else {
-    document.body.classList.remove('layout-sidebar-compact');
+    document.body.classList.add('layout-width-ultrawide');
   }
 
-  if (width <= 240) {
-    document.body.classList.add('layout-nano');
-  } else {
-    document.body.classList.remove('layout-nano');
+  // Height classification tiers (for compact bottom docks)
+  if (height <= 220) {
+    document.body.classList.add('layout-height-nano', 'layout-height-short');
+  } else if (height <= 340) {
+    document.body.classList.add('layout-height-short');
   }
 
-  if (wasCompact !== isCompactLayout && allNodes.length > 0) {
+  // Intelligent auto-detection when user selected 'auto' layout
+  if (currentLayoutMode === 'auto') {
+    if (width >= 540 && height <= 380) {
+      document.body.classList.add('auto-detected-bottom');
+    } else if (width <= 440) {
+      document.body.classList.add('auto-detected-left');
+    }
+  }
+
+  if ((wasCompact !== isCompactLayout || wasNano !== isNanoLayout) && allNodes.length > 0) {
     renderGraph();
   }
 }

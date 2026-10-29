@@ -37,6 +37,9 @@
   - [Visual Git Reflog Time Machine and Lost-Commit Recovery](#visual-git-reflog-time-machine-and-lost-commit-recovery)
   - [Multi-Commit Diff Comparison Engine](#multi-commit-diff-comparison-engine)
   - [Repository Health and Garbage Collection Diagnostics](#repository-health-and-garbage-collection-diagnostics)
+  - [Visual Git Bisect Assistant and Regression Hunter](#visual-git-bisect-assistant-and-regression-hunter)
+  - [Pre-Flight Cherry-Pick Conflict Forecaster](#pre-flight-cherry-pick-conflict-forecaster)
+  - [Adaptive Universal Responsive Layout Engine](#adaptive-universal-responsive-layout-engine)
   - [Model Context Protocol (MCP) Server](#model-context-protocol-mcp-server)
 - [Installation and Prerequisites](#installation-and-prerequisites)
 - [Getting Started](#getting-started)
@@ -243,6 +246,28 @@ A dedicated navigation hub (`Issues`) integrated directly into the extension vie
 - **Proactive Maintenance Advisories:** Alerts developers when loose objects or unreferenced commits exceed performance thresholds.
 - **One-Click Git Garbage Collection:** Triggers `git gc --prune=now --quiet` directly from the user interface to optimize repository packfiles and reclaim disk storage.
 
+### Visual Git Bisect Assistant and Regression Hunter
+
+- **Interactive Binary Search Navigation:** Initiates, steps through, and resolves Git Bisect sessions directly within the graph view.
+- **Head-Up Status Banner:** Displays the current revision under evaluation, active bad and good boundaries, and an approximate estimation of remaining diagnostic steps.
+- **One-Click State Transitions:** Developers can mark commits as Good, Bad, Skip (for unbuildable intermediate revisions), or Abort directly via top-level buttons.
+- **Topological DAG Highlighting:** The active probe commit pulses with a distinctive cyan highlight, while confirmed good commits receive emerald tags and confirmed bad commits receive crimson markers.
+- **Offline Direct Filesystem State Inspection:** In air-gapped or process-restricted workspaces, `GitFsReader` inspects `.git/BISECT_START`, `.git/BISECT_EXPECTED_REV`, and `.git/refs/bisect/*` markers to restore state without terminal calls.
+
+### Pre-Flight Cherry-Pick Conflict Forecaster
+
+- **In-Memory Three-Way Merge Tree Simulation:** Executes non-destructive `git merge-tree` analysis prior to altering the working directory or staging index.
+- **Collision Risk Warning Modal:** If conflicts are anticipated, CommitFlow interrupts execution and displays the exact conflicting file paths in an advisory dialog.
+- **Safe Force-Apply Mode:** Gives the developer the choice to proceed into standard conflict resolution or abort with zero working directory pollution.
+
+### Adaptive Universal Responsive Layout Engine
+
+- **Full Multi-Dock Placement Support:** Architected to adapt to any Visual Studio Code window configuration, including the Primary Left Activity Bar, Secondary Right Sidebar, Bottom Terminal Dock, Editor Tabs, and detached Popout auxiliary windows.
+- **Multi-Tier Viewport Breakpoints:** Automatically optimizes layout metrics across standard (>600px), compact (440px - 600px), sidebar compact (260px - 440px), and ultra-narrow nano viewports (<= 260px).
+- **Collapsing Navigation Tab Bar:** On narrow sidebars, tab titles collapse smoothly into icon-only pills with native hover tooltips, allowing all primary navigation views to fit without horizontal wrapping.
+- **Dual-Pane Bottom Dock Split:** In bottom panel placement, graph visualization and inspector drawers run side-by-side in dual-column split mode, avoiding intrusive overlay obstructions.
+- **Clamped Floating Overlays:** Popovers, tooltips, and inspector drawers dynamically calculate boundary clamping against window edges, preventing off-screen clipping on compact sidebars.
+
 ### Model Context Protocol (MCP) Server
 
 CommitFlow includes a built-in Model Context Protocol server (`CommitFlowMcpServer`) compliant with the JSON-RPC 2.0 specification. Any MCP client (such as Claude Desktop, Cursor IDE, or custom agent systems) can query repository state, execute operations, and read structured resources over stdio.
@@ -446,6 +471,8 @@ To connect external tools such as Claude Desktop, add CommitFlow to your client 
 | `compare_revisions` | `baseHash: string`, `targetHash: string` | Compares two arbitrary commits, reporting file diffs, additions, deletions, and commits between. |
 | `restore_lost_commit` | `commitHash: string`, `branchName: string` | Restores an orphaned reflog commit onto a newly created branch. |
 | `analyze_repo_health` | _None_ | Performs storage diagnostics, calculating loose objects, packfiles, disk size, and dangling commits. |
+| `git_bisect_operation` | `action: 'start' \| 'step' \| 'reset' \| 'status'`, `badCommit?: string`, `goodCommit?: string`, `step?: 'good' \| 'bad' \| 'skip'` | Controls Git Bisect binary search sessions, advances probes, and detects regression culprits. |
+| `preview_cherry_pick` | `commitHash: string` | Simulates an in-memory three-way merge to forecast cherry-pick conflicts before application. |
 | `read_offline_repo_state` | _None_ | Direct filesystem snapshot of the `.git` directory without executing external processes. |
 | `commitflow_get_user_impact` | _None_ | Analyzes author impact, total commits, and branch participation metrics. |
 | `commitflow_get_line_blame` | `filePath: string`, `line: number` | Returns precise authorship, date, and commit SHA for a specific file line. |
@@ -459,6 +486,7 @@ To connect external tools such as Claude Desktop, add CommitFlow to your client 
 | `commitflow://repo/offline-status` | `application/json` | Raw `.git` filesystem snapshot (HEAD, packed-refs, reflog, active operations). |
 | `commitflow://reflog/recent` | `application/json` | Recent chronological reflog entries parsed from disk or git client. |
 | `commitflow://repo/health` | `application/json` | Repository health diagnostics (disk size, loose objects, packfiles, dangling commits). |
+| `commitflow://bisect/status` | `application/json` | Current Git Bisect state, current probe revision, bad commit, and good boundaries. |
 | `commitflow://issues/assigned` | `application/json` | Live feed of issues currently assigned to the active user. |
 | `commitflow://branch/current/diff` | `text/x-diff` | Full diff between the current branch and its base tracking branch. |
 | `commitflow://repo/user-context` | `text/markdown` | Formatted summary of author contributions and repository impact. |

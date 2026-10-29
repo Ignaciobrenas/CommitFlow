@@ -854,7 +854,91 @@ Host *.internal.corp
   assert.strictEqual(typeof mcpHealthRes.looseObjectsCount, 'number');
   console.log('  ✔ Extended MCP Tools & Dynamic Resources tests passed!');
 
-  console.log('\n🎉 ALL 33 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  // 34. Test Visual Git Bisect Engine & Offline State Detection
+  console.log('\n▶ Testing Visual Git Bisect Engine & Offline State Detection...');
+  const bisectStatus = await gitClient.getBisectStatus(process.cwd());
+  assert.strictEqual(typeof bisectStatus.isActive, 'boolean');
+  assert.ok(Array.isArray(bisectStatus.goodCommits));
+
+  // Test offline .git/BISECT_* inspection using temporary mock git directory
+  const tempBisectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cf-bisect-test-'));
+  try {
+    const gitDir = path.join(tempBisectDir, '.git');
+    fs.mkdirSync(path.join(gitDir, 'refs', 'bisect'), { recursive: true });
+    fs.writeFileSync(path.join(gitDir, 'BISECT_START'), 'branch-foo\n');
+    fs.writeFileSync(path.join(gitDir, 'refs', 'bisect', 'bad'), '1111222233334444555566667777888899990000\n');
+    fs.writeFileSync(path.join(gitDir, 'refs', 'bisect', 'good-aaa'), 'aaaabbbbccccddddeeeeffff0000111122223333\n');
+
+    const fsReader = GitFsReader.getInstance();
+    const offlineOpState = fsReader.readOperationState(gitDir);
+    assert.strictEqual(offlineOpState.isBisecting, true);
+    assert.strictEqual(offlineOpState.bisectBad, '1111222233334444555566667777888899990000');
+    assert.strictEqual(offlineOpState.bisectGood?.length, 1);
+  } finally {
+    fs.rmSync(tempBisectDir, { recursive: true, force: true });
+  }
+
+  // Bisect MCP Tool
+  const bisectMcpCall = await rpcHandlerFn({
+    jsonrpc: '2.0',
+    id: 104,
+    method: 'tools/call',
+    params: {
+      name: 'git_bisect_operation',
+      arguments: {
+        action: 'status',
+      },
+    },
+  });
+  assert.ok(bisectMcpCall.result.content[0].text);
+  const mcpBisectData = JSON.parse(bisectMcpCall.result.content[0].text);
+  assert.strictEqual(typeof mcpBisectData.isActive, 'boolean');
+
+  // Bisect MCP Resource
+  const bisectRes = await rpcHandlerFn({
+    jsonrpc: '2.0',
+    id: 105,
+    method: 'resources/read',
+    params: {
+      uri: 'commitflow://bisect/status',
+    },
+  });
+  assert.ok(bisectRes.result.contents[0].text);
+  const mcpBisectRes = JSON.parse(bisectRes.result.contents[0].text);
+  assert.strictEqual(typeof mcpBisectRes.isActive, 'boolean');
+  console.log('  ✔ Visual Git Bisect Engine & Offline State Detection tests passed!');
+
+  // 35. Test Pre-Flight Cherry-Pick Conflict Forecaster
+  console.log('\n▶ Testing Pre-Flight Cherry-Pick Conflict Forecaster...');
+  if (commits.length > 0) {
+    const previewResult = await gitClient.previewCherryPick(process.cwd(), commits[0].hash);
+    assert.strictEqual(typeof previewResult.clean, 'boolean');
+    assert.ok(Array.isArray(previewResult.conflicts));
+    assert.strictEqual(previewResult.commitHash, commits[0].hash);
+    assert.strictEqual(previewResult.shortHash, commits[0].shortHash);
+  }
+
+  // MCP Cherry-Pick Preview Tool
+  if (commits.length > 0) {
+    const previewMcpCall = await rpcHandlerFn({
+      jsonrpc: '2.0',
+      id: 106,
+      method: 'tools/call',
+      params: {
+        name: 'preview_cherry_pick',
+        arguments: {
+          commitHash: commits[0].hash,
+        },
+      },
+    });
+    assert.ok(previewMcpCall.result.content[0].text);
+    const mcpPreviewData = JSON.parse(previewMcpCall.result.content[0].text);
+    assert.strictEqual(typeof mcpPreviewData.clean, 'boolean');
+    assert.ok(Array.isArray(mcpPreviewData.conflicts));
+  }
+  console.log('  ✔ Pre-Flight Cherry-Pick Conflict Forecaster tests passed!');
+
+  console.log('\n🎉 ALL 35 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('❌ Test suite failed:', err);
   process.exit(1);

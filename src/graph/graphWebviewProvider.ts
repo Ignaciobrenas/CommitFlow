@@ -188,6 +188,7 @@ export class GraphWebviewProvider
         stashes,
         worktrees,
         pullRequests,
+        bisectStatus,
       ] = await Promise.all([
         this.gitClient.getCommits(root, limit),
         this.gitClient.getBranches(root),
@@ -199,6 +200,7 @@ export class GraphWebviewProvider
         this.gitClient.getStashes(root),
         this.gitClient.getWorktrees(root),
         this.gitClient.getPullRequests(root),
+        this.gitClient.getBisectStatus(root),
       ]);
 
       const themeConfig = config.get<any>('graph.theme', 'auto');
@@ -261,6 +263,7 @@ export class GraphWebviewProvider
         systemLanguage: vscode.env.language,
         totalCommits: graphNodes.length,
         hasMore: false,
+        bisectStatus,
         forkInstalled: this.forkIntegration.findForkExecutable() !== null,
         forkEnabled: this.persistence.isForkIntegrationEnabled(),
       };
@@ -1009,6 +1012,96 @@ export class GraphWebviewProvider
             }
           }
           break;
+
+        case 'requestBisectStatus':
+          if (root) {
+            try {
+              const bisect = await this.gitClient.getBisectStatus(root);
+              webview.postMessage({
+                command: 'bisectStatusData',
+                payload: bisect,
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to get bisect status: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'startBisect':
+          if (root && msg.payload?.badCommit && msg.payload?.goodCommit) {
+            try {
+              const bisect = await this.gitClient.startBisect(
+                root,
+                msg.payload.badCommit,
+                msg.payload.goodCommit
+              );
+              vscode.window.showInformationMessage(
+                `Git Bisect initiated! Testing commit ${bisect.currentShortCommit || 'HEAD'}`
+              );
+              webview.postMessage({
+                command: 'bisectStatusData',
+                payload: bisect,
+              } as ExtensionToWebviewMessage);
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to start bisect: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'stepBisect':
+          if (root && msg.payload?.step) {
+            try {
+              const bisect = await this.gitClient.stepBisect(
+                root,
+                msg.payload.step,
+                msg.payload.commitHash
+              );
+              if (bisect.firstBadCommit) {
+                vscode.window.showInformationMessage(
+                  `CommitFlow Bisect found culprit! First bad commit is: ${bisect.firstBadCommit.slice(0, 7)}`
+                );
+              }
+              webview.postMessage({
+                command: 'bisectStatusData',
+                payload: bisect,
+              } as ExtensionToWebviewMessage);
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Bisect step failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'resetBisect':
+          if (root) {
+            try {
+              const bisect = await this.gitClient.resetBisect(root);
+              vscode.window.showInformationMessage('Git Bisect session aborted/reset.');
+              webview.postMessage({
+                command: 'bisectStatusData',
+                payload: bisect,
+              } as ExtensionToWebviewMessage);
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to reset bisect: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'previewCherryPick':
+          if (root && msg.payload?.commitHash) {
+            try {
+              const preview = await this.gitClient.previewCherryPick(root, msg.payload.commitHash);
+              webview.postMessage({
+                command: 'cherryPickPreviewData',
+                payload: preview,
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to preview cherry-pick: ${err.message}`);
+            }
+          }
+          break;
       }
     });
   }
@@ -1170,6 +1263,11 @@ export class GraphWebviewProvider
           <i class="codicon codicon-pulse"></i>
         </button>
 
+        <!-- Git Bisect Assistant Button -->
+        <button id="btn-bisect" class="btn-icon" title="Asistente Git Bisect (Búsqueda de Regresiones)">
+          <i class="codicon codicon-search"></i>
+        </button>
+
         <!-- Changelog Export Button -->
         <button id="btn-changelog" class="btn-icon" title="${tr('toolbar.changelog')}">
           <i class="codicon codicon-markdown"></i>
@@ -1285,6 +1383,33 @@ export class GraphWebviewProvider
   <div class="main-viewport" id="main-viewport">
     <!-- TAB 1: INTERACTIVE COMMIT GRAPH -->
     <div id="tab-graph" class="tab-pane active">
+      <!-- Visual Git Bisect Assistant Banner -->
+      <div id="bisect-banner" class="bisect-banner" style="display:none;">
+        <div class="bisect-banner-content">
+          <div class="bisect-status-pill">
+            <i class="codicon codicon-search"></i>
+            <span class="bisect-badge-text">Git Bisect Activo</span>
+          </div>
+          <div class="bisect-info" id="bisect-info-text">
+            Probando commit <code id="bisect-current-hash">...</code> (<span id="bisect-steps-left">~0</span> pasos restantes)
+          </div>
+          <div class="bisect-actions">
+            <button id="btn-bisect-good" class="btn-sm btn-bisect-good" title="Marcar commit actual como Bueno (sin fallo)">
+              <i class="codicon codicon-check"></i> Bueno (Good)
+            </button>
+            <button id="btn-bisect-bad" class="btn-sm btn-bisect-bad" title="Marcar commit actual como Malo (reproduce fallo)">
+              <i class="codicon codicon-close"></i> Malo (Bad)
+            </button>
+            <button id="btn-bisect-skip" class="btn-sm" title="Omitir este commit (imposible de probar)">
+              <i class="codicon codicon-debug-step-over"></i> Skip
+            </button>
+            <button id="btn-bisect-reset" class="btn-sm btn-bisect-abort" title="Abortar sesión de Git Bisect">
+              <i class="codicon codicon-debug-stop"></i> Abortar
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div id="graph-table-container" class="graph-table-container">
         <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
           <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
@@ -1740,6 +1865,52 @@ export class GraphWebviewProvider
           <button id="comparison-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
         </div>
         <div id="comparison-modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Git Bisect Launcher Modal -->
+    <div id="bisect-modal" class="modal-overlay">
+      <div class="modal-card" style="width: min(560px, calc(100vw - 20px));">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-search" style="font-size:16px; color:var(--accent-cyan);"></i>
+            <span style="font-weight:700; font-size:var(--font-size-base);">Asistente Git Bisect (Caza de Bugs)</span>
+          </div>
+          <button id="bisect-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body">
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <p style="font-size:var(--font-size-sm); color:var(--text-muted); margin:0;">
+              Git Bisect utiliza búsqueda binaria en tu historial para encontrar el commit exacto que introdujo un bug o regresión.
+            </p>
+            <label style="font-size:var(--font-size-sm);">
+              Commit con fallo (Bad / Regresión detectada):
+              <input type="text" id="bisect-bad-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="HEAD o commit hash..." />
+            </label>
+            <label style="font-size:var(--font-size-sm);">
+              Último commit conocido correcto (Good / Sin fallo):
+              <input type="text" id="bisect-good-input" class="search-input" style="width:100%; margin-top:4px;" placeholder="Hash de commit anterior correcto (ej. v1.0.0, a1b2c3d)..." />
+            </label>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+              <button id="bisect-btn-cancel" class="btn-sm">Cancelar</button>
+              <button id="bisect-btn-start" class="btn-sm btn-primary">Iniciar Bisect</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pre-Flight Cherry-Pick Conflict Forecaster Modal -->
+    <div id="cherry-pick-forecast-modal" class="modal-overlay">
+      <div class="modal-card" style="width: min(600px, calc(100vw - 20px));">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-warning" style="font-size:16px; color:var(--accent-amber);"></i>
+            <span style="font-weight:700; font-size:var(--font-size-base);">Pre-Flight Conflict Forecaster (Cherry-Pick)</span>
+          </div>
+          <button id="cherry-pick-forecast-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div id="cherry-pick-forecast-body" class="modal-body"></div>
       </div>
     </div>
 

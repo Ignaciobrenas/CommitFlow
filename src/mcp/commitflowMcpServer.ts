@@ -318,6 +318,36 @@ export class CommitFlowMcpServer {
                 },
               },
               {
+                name: 'git_bisect_operation',
+                description:
+                  'Control a Git bisect session to pinpoint regressions: start, mark good/bad, skip, reset, or query status.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    action: {
+                      type: 'string',
+                      enum: ['start', 'good', 'bad', 'skip', 'reset', 'status'],
+                      description: 'Bisect operation to perform',
+                    },
+                    badCommit: { type: 'string', description: 'Known faulty commit (defaults to HEAD)' },
+                    goodCommit: { type: 'string', description: 'Known working past commit' },
+                  },
+                  required: ['action'],
+                },
+              },
+              {
+                name: 'preview_cherry_pick',
+                description:
+                  'Simulates a cherry-pick of a commit onto HEAD using merge-tree in memory to forecast potential conflicts.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    commitHash: { type: 'string', description: 'Commit SHA to test for cherry-picking' },
+                  },
+                  required: ['commitHash'],
+                },
+              },
+              {
                 name: 'commitflow_get_repo_summary',
                 description:
                   'Get high-level repository analytics: total commits, active branches, total contributors, stash count, and top author rankings.',
@@ -387,6 +417,12 @@ export class CommitFlowMcpServer {
                 uri: 'commitflow://repo/health',
                 name: 'Repository Storage Health & GC Status',
                 description: 'Detailed object metrics, packfile counts, and dangling commit counts.',
+                mimeType: 'application/json',
+              },
+              {
+                uri: 'commitflow://bisect/status',
+                name: 'Active Git Bisect State',
+                description: 'Real-time bisect status, current testing probe commit, remaining steps, and good/bad hashes.',
                 mimeType: 'application/json',
               },
             ],
@@ -652,6 +688,32 @@ export class CommitFlowMcpServer {
           break;
         }
 
+        case 'git_bisect_operation':
+        case 'commitflow_git_bisect_operation': {
+          const action = args?.action;
+          if (!action) throw new Error('action is required (start, good, bad, skip, reset, status)');
+          if (action === 'start') {
+            resultData = await this.gitClient.startBisect(this.repoRoot, args.badCommit, args.goodCommit);
+          } else if (action === 'reset') {
+            await this.gitClient.resetBisect(this.repoRoot);
+            resultData = { success: true, message: 'Bisect session successfully reset' };
+          } else if (action === 'status') {
+            resultData = await this.gitClient.getBisectStatus(this.repoRoot);
+          } else if (action === 'good' || action === 'bad' || action === 'skip') {
+            resultData = await this.gitClient.stepBisect(this.repoRoot, action);
+          } else {
+            throw new Error(`Unsupported bisect action: ${action}`);
+          }
+          break;
+        }
+
+        case 'preview_cherry_pick':
+        case 'commitflow_preview_cherry_pick': {
+          if (!args?.commitHash) throw new Error('commitHash is required');
+          resultData = await this.gitClient.previewCherryPick(this.repoRoot, args.commitHash);
+          break;
+        }
+
         default:
           return {
             jsonrpc: '2.0',
@@ -777,6 +839,10 @@ export class CommitFlowMcpServer {
       } else if (uri === 'commitflow://repo/health') {
         const health = await this.gitClient.getRepoHealth(this.repoRoot);
         contentText = JSON.stringify(health, null, 2);
+        mimeType = 'application/json';
+      } else if (uri === 'commitflow://bisect/status') {
+        const bisectStatus = await this.gitClient.getBisectStatus(this.repoRoot);
+        contentText = JSON.stringify(bisectStatus, null, 2);
         mimeType = 'application/json';
       } else {
         return {

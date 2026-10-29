@@ -49,6 +49,10 @@ export interface OfflineOperationState {
   isReverting: boolean;
   revertHead?: string;
   isBisecting: boolean;
+  bisectStart?: string;
+  bisectExpectedRev?: string;
+  bisectBad?: string;
+  bisectGood?: string[];
 }
 
 export interface OfflineRepoState {
@@ -561,6 +565,39 @@ export class GitFsReader {
       const bisectStart = path.join(gitDir, 'BISECT_START');
       if (fs.existsSync(bisectStart)) {
         state.isBisecting = true;
+        try {
+          state.bisectStart = fs.readFileSync(bisectStart, 'utf8').trim();
+        } catch {}
+
+        const expectedRevFile = path.join(gitDir, 'BISECT_EXPECTED_REV');
+        if (fs.existsSync(expectedRevFile)) {
+          try {
+            state.bisectExpectedRev = fs.readFileSync(expectedRevFile, 'utf8').trim();
+          } catch {}
+        }
+
+        const badRefFile = path.join(gitDir, 'refs', 'bisect', 'bad');
+        if (fs.existsSync(badRefFile)) {
+          try {
+            state.bisectBad = fs.readFileSync(badRefFile, 'utf8').trim();
+          } catch {}
+        }
+
+        const bisectRefsDir = path.join(gitDir, 'refs', 'bisect');
+        if (fs.existsSync(bisectRefsDir)) {
+          try {
+            const files = fs.readdirSync(bisectRefsDir);
+            const goodRefs: string[] = [];
+            for (const f of files) {
+              if (f.startsWith('good-')) {
+                try {
+                  goodRefs.push(fs.readFileSync(path.join(bisectRefsDir, f), 'utf8').trim());
+                } catch {}
+              }
+            }
+            if (goodRefs.length > 0) state.bisectGood = goodRefs;
+          } catch {}
+        }
       }
 
       // 5. Rebase (rebase-merge or rebase-apply)

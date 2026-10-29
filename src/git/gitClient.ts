@@ -5,11 +5,13 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 import {
   BranchParticipation,
+  CherryPickPreviewResult,
   CloudPatch,
   CommitComparisonResult,
   ContributorStat,
   FileCommitRevision,
   GitAuthor,
+  GitBisectStatus,
   GitBlameLine,
   GitBranch,
   GitCommit,
@@ -1926,5 +1928,150 @@ export class GitClient {
    */
   public async runRepoGc(cwd: string): Promise<string> {
     return await this.execute(['gc', '--prune=now', '--quiet'], cwd);
+  }
+
+  /**
+   * Retrieves active bisect state and remaining step estimates
+   */
+  public async getBisectStatus(cwd: string): Promise<GitBisectStatus> {
+    const gitDir = path.join(cwd, '.git');
+    const fsReader = GitFsReader.getInstance();
+    const opState = fsReader.readOperationState(gitDir);
+
+    if (!opState.isBisecting) {
+      return {
+        isActive: false,
+        goodCommits: [],
+        badCommits: [],
+      };
+    }
+
+    let logLines: string[] = [];
+    try {
+      const logRaw = await this.execute(['bisect', 'log'], cwd);
+      logLines = logRaw.split('\n').map((l) => l.trim()).filter(Boolean);
+    } catch {}
+
+    const goodCommits = opState.bisectGood || [];
+    const badCommit = opState.bisectBad;
+    const currentCommit = opState.bisectExpectedRev;
+
+    let stepsRemainingApprox: number | undefined;
+    let commitsRemainingApprox: number | undefined;
+
+    try {
+      const statusOut = await this.execute(['status'], cwd);
+      const match = /roughly\s+(\d+)\s+steps?/i.exec(statusOut);
+      if (match) {
+        stepsRemainingApprox = parseInt(match[1], 10);
+      }
+      const revMatch = /(\d+)\s+revisions?\s+left\s+to\s+test/i.exec(statusOut);
+      if (revMatch) {
+        commitsRemainingApprox = parseInt(revMatch[1], 10);
+      }
+    } catch {}
+
+    return {
+      isActive: true,
+      currentCommit,
+      currentShortCommit: currentCommit ? currentCommit.slice(0, 7) : undefined,
+      badCommit,
+      goodCommits,
+      stepsRemainingApprox,
+      commitsRemainingApprox,
+      log: logLines,
+    };
+  }
+
+  /**
+   * Starts a git bisect session with optional bad and good commit targets
+   */
+  public async startBisect(cwd: string, badCommit?: string, goodCommit?: string): Promise<GitBisectStatus> {
+    const args = ['bisect', 'start'];
+    if (badCommit && goodCommit) {
+      args.push(badCommit, goodCommit);
+    } else if (badCommit) {
+      args.push(badCommit);
+    }
+    await this.execute(args, cwd);
+    return await this.getBisectStatus(cwd);
+  }
+
+  /**
+   * Steps the git bisect session (good, bad, or skip)
+   */
+  public async stepBisect(
+    cwd: string,
+    action: 'good' | 'bad' | 'skip'
+  ): Promise<{ status: GitBisectStatus; message: string; isFinished: boolean; firstBadCommit?: string }> {
+    const output = await this.execute(['bisect', action], cwd);
+    let isFinished = false;
+    let firstBadCommit: string | undefined;
+
+    const badMatch = /([a-f0-9]{40}|[a-f0-9]{7,12})\s+is\s+the\s+first\s+bad\s+commit/i.exec(output);
+    if (badMatch) {
+      isFinished = true;
+      firstBadCommit = badMatch[1];
+    }
+
+    const status = await this.getBisectStatus(cwd);
+    if (firstBadCommit) {
+      status.firstBadCommit = firstBadCommit;
+    }
+
+    return {
+      status,
+      message: output.trim(),
+      isFinished,
+      firstBadCommit,
+    };
+  }
+
+  /**
+   * Resets and cleans up the active git bisect session
+   */
+  public async resetBisect(cwd: string): Promise<void> {
+    await this.execute(['bisect', 'reset'], cwd);
+  }
+
+  /**
+   * Simulates a cherry-pick in-memory using git merge-tree to forecast potential conflicts
+   */
+  public async previewCherryPick(cwd: string, commitHash: string): Promise<CherryPickPreviewResult> {
+    let parentHash: string | undefined;
+    try {
+      const parentOut = await this.execute(['rev-parse', `${commitHash}^`], cwd);
+      parentHash = parentOut.trim();
+    } catch {}
+
+    const conflicts: string[] = [];
+    let clean = true;
+    let rawDetails = '';
+
+    try {
+      const output = await this.execute(['merge-tree', '--write-tree', 'HEAD', commitHash], cwd);
+      rawDetails = output.trim();
+    } catch (err: any) {
+      clean = false;
+      const raw = `${err.message || ''}\n${err.stdout || ''}\n${err.stderr || ''}`;
+      rawDetails = raw;
+      const conflictRegex = /CONFLICT\s*(?:\([^)]+\))?:\s*(?:Merge conflict in\s+)?(.+)/gi;
+      let match: RegExpExecArray | null;
+      while ((match = conflictRegex.exec(raw)) !== null) {
+        const file = match[1].trim().replace(/^Merge conflict in\s+/i, '');
+        if (!conflicts.includes(file)) {
+          conflicts.push(file);
+        }
+      }
+    }
+
+    return {
+      commitHash,
+      shortHash: commitHash.slice(0, 7),
+      parentHash,
+      clean,
+      conflicts,
+      rawDetails,
+    };
   }
 }

@@ -154,3 +154,26 @@ The architecture emphasizes:
 
 3. **Data Sanitization:**
    - All text rendered into HTML elements passes through `escapeHtml()` to eliminate Stored Cross-Site Scripting (XSS) risks.
+
+---
+
+### 3.6 Git Bisect & Conflict Forecaster Engine
+
+1. **`GitBisect` Assistant:**
+   - Automates the binary search regression finding workflow.
+   - Computes logarithmic remaining step estimates and detects culprit commits with automatic notifications.
+   - Highlights the current probe node in the DAG graph canvas with animated pulsating indicators.
+   - Interacts with `.git/BISECT_START`, `BISECT_EXPECTED_REV`, and `refs/bisect/*` directly via filesystem reader for zero-downtime offline state recovery.
+
+2. **Cherry-Pick Conflict Forecaster:**
+   - Performs pre-flight in-memory merge simulation via `git merge-tree --write-tree` before invoking cherry-pick checkouts.
+   - Identifies exact conflicting file paths and warns developers prior to dirtying working trees or staging areas.
+
+---
+
+### 3.7 Universal Responsive Layout Subsystem
+
+1. **Multi-Dock Container Architecture:**
+   - Seamlessly adapts across Primary Left Sidebar, Secondary Right Sidebar, Bottom Terminal Panel, Editor Tabs, and Popout Auxiliary Windows.
+   - Enforces multi-tier responsive breakpoints: Standard (>600px), Medium (440px - 600px), Compact Sidebar (260px - 440px), and Ultra-Compact Nano (<= 260px).
+   - Features icon-only navigation tabs with hover tooltips on narrow sidebars, dual-pane side-by-side mode on bottom dock placements, and boundary-clamped overlays.

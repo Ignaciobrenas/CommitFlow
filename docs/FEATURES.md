@@ -239,3 +239,30 @@ This document provides a comprehensive operational manual and technical specific
 - **Storage Metrics Inspection:** Evaluates the `.git` directory to count loose objects, packfiles, disk footprint, and unreferenced dangling commits.
 - **Proactive Maintenance Advisories:** Alerts the developer when object fragmentation degrades Git performance.
 - **Integrated Garbage Collection:** One-click execution of `git gc --prune=now --quiet` to compress loose objects into packfiles, prune unreachable objects, and optimize repository read speeds.
+
+---
+
+## 19. Visual Git Bisect Assistant & Regression Hunter
+
+- **Integrated Binary Search Workflow:** Step-by-step assistant for identifying the exact commit that introduced a defect or regression.
+- **Top-Level Probe Status Banner:** Displays the current revision under evaluation, remaining binary search step approximations, and buttons for Good, Bad, Skip, and Abort actions.
+- **Chromatic DAG Graph Highlights:** The probe commit is illuminated with a pulsating cyan highlight, confirmed good commits receive emerald badges, and culprit/bad commits receive crimson indicators.
+- **Offline Filesystem Recovery:** Detects `.git/BISECT_START`, `.git/BISECT_EXPECTED_REV`, and `.git/refs/bisect/*` to resume or display active bisect sessions without external command executions.
+
+---
+
+## 20. Pre-Flight Cherry-Pick Conflict Forecaster
+
+- **Zero-Mutation Conflict Analysis:** Executes `git merge-tree --write-tree` in memory to test commit applicability before modifying working trees or HEAD.
+- **Conflict Warning Modal:** Proactively warns developers if a cherry-pick will collide, detailing exact conflicting file paths.
+- **Controlled Force Application:** Enables developers to proceed deliberately into merge conflicts or abort cleanly without leaving dirty states.
+
+---
+
+## 21. Adaptive Universal Responsive Layout Engine
+
+- **Comprehensive Dock Adaptability:** Renders flawlessly in the Primary Left Sidebar, Secondary Right Sidebar, Bottom Terminal Dock, Popout Auxiliary Windows, and Editor Panes.
+- **Multi-Tier Viewport Breakpoints:** Dynamic adjustment across standard (>600px), compact (440px - 600px), sidebar compact (260px - 440px), and ultra-narrow nano viewports (<= 260px).
+- **Collapsing Navigation Bar:** On compact sidebars, tab titles collapse smoothly into icon-only pills with hover tooltips, fitting all six modules without horizontal wrapping.
+- **Dual-Pane Bottom Panel Mode:** Bottom terminal panel placement splits the viewport cleanly into a dual-column layout (graph 62%, drawer 38%), eliminating intrusive overlays.
+- **Clamped Overlays:** Popovers and drawers dynamically clamp to viewport boundaries, preventing off-screen overflow.

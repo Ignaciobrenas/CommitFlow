@@ -263,6 +263,7 @@ export interface GraphDataPayload {
   upstreamStatus?: UpstreamStatus | null;
   stashes?: GitStash[];
   cloudPatches?: CloudPatch[];
+  bisectStatus?: GitBisectStatus | null;
   settings?: CommitFlowSettings;
   systemLanguage?: string;
   totalCommits: number;
@@ -327,7 +328,13 @@ export interface WebviewToExtensionMessage {
     | 'restoreReflogCommit'
     | 'compareCommits'
     | 'requestRepoHealth'
-    | 'runRepoGc';
+    | 'runRepoGc'
+    // Bisect & Conflict Forecaster:
+    | 'startBisect'
+    | 'stepBisect'
+    | 'resetBisect'
+    | 'requestBisectStatus'
+    | 'previewCherryPick';
   payload?: any;
 }
 
@@ -354,6 +361,8 @@ export interface ExtensionToWebviewMessage {
     | 'reflogData'
     | 'comparisonData'
     | 'repoHealthData'
+    | 'bisectStatusData'
+    | 'cherryPickPreviewData'
     | 'error'
     | 'loading';
   payload?: any;
@@ -394,4 +403,25 @@ export interface CommitComparisonResult {
   totalAdditions: number;
   totalDeletions: number;
   commitsBetween: GitCommit[];
+}
+
+export interface GitBisectStatus {
+  isActive: boolean;
+  currentCommit?: string;
+  currentShortCommit?: string;
+  badCommit?: string;
+  goodCommits: string[];
+  stepsRemainingApprox?: number;
+  commitsRemainingApprox?: number;
+  log?: string[];
+  firstBadCommit?: string;
+}
+
+export interface CherryPickPreviewResult {
+  commitHash: string;
+  shortHash: string;
+  parentHash?: string;
+  clean: boolean;
+  conflicts: string[];
+  rawDetails?: string;
 }
