@@ -108,7 +108,7 @@ export interface GraphNode {
   isWorkingTree?: boolean;
 }
 
-export type RemoteProviderType = 'github' | 'gitlab' | 'bitbucket' | 'other';
+export type RemoteProviderType = 'github' | 'gitlab' | 'bitbucket' | 'forgejo' | 'other';
 
 export interface RemoteRepoInfo {
   provider: RemoteProviderType;
@@ -117,6 +117,10 @@ export interface RemoteRepoInfo {
   webUrl: string;
   isPrivate: boolean;
   authConnected: boolean;
+  host?: string;
+  port?: number;
+  badgeType?: 'forgejo' | 'github' | 'gitlab' | 'bitbucket' | 'private';
+  badgeLabel?: string;
 }
 
 export interface GitHubRepoInfo {
@@ -307,7 +311,15 @@ export interface WebviewToExtensionMessage {
     | 'createTag'
     | 'deleteTag'
     | 'undoLastCommit'
-    | 'generateChangelog';
+    | 'generateChangelog'
+    // Issues & Fork Hub:
+    | 'requestIssues'
+    | 'startWorkOnIssue'
+    | 'insertIssueRef'
+    | 'requestIssueDetails'
+    | 'createIssueComment'
+    | 'setIssueState'
+    | 'openInFork';
   payload?: any;
 }
 
@@ -327,6 +339,10 @@ export interface ExtensionToWebviewMessage {
     | 'patchApplied'
     | 'changelogReady'
     | 'actionResult'
+    | 'issuesData'
+    | 'issueDetailsData'
+    | 'issueCommentAdded'
+    | 'forkStatus'
     | 'error'
     | 'loading';
   payload?: any;
