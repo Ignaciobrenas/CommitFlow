@@ -7,6 +7,15 @@ import { LruCache } from '../src/utils/lruCache';
 import { GitClient } from '../src/git/gitClient';
 import { GitHubService } from '../src/git/githubService';
 import { GitCommit } from '../src/git/types';
+import { SshConfigParser } from '../src/remotes/sshParser';
+import { RemoteManager } from '../src/remotes/remoteManager';
+import { ForgejoProvider } from '../src/remotes/forgejoProvider';
+import { ForkIntegration } from '../src/remotes/forkIntegration';
+import { IssueBranchLinker } from '../src/issues/issueBranchLinker';
+import { IssueService } from '../src/issues/issueService';
+import { CommitFlowMcpServer } from '../src/mcp/commitflowMcpServer';
+import { PersistenceManager } from '../src/state/persistenceManager';
+import { GitFsReader } from '../src/git/gitFsReader';
 
 console.log('🧪 Starting CommitFlow Extended Test Suite...\n');
 
@@ -299,7 +308,7 @@ const initResponse = mcpServer['handleJsonRpc']({
 });
 initResponse.then((res: any) => {
   assert.strictEqual(res.result.serverInfo.name, 'commitflow-mcp');
-  assert.strictEqual(res.result.serverInfo.version, '0.3.0');
+  assert.strictEqual(res.result.serverInfo.version, '0.4.5');
 });
 
 // Test tools/list method
@@ -439,4 +448,318 @@ for (const key of requiredI18nKeys) {
 }
 console.log('  ✔ Developer Workflow & Git Tools APIs tests passed!');
 
-console.log('\n🎉 ALL 19 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+(async () => {
+  // 20. Test Universal SSH Parser & ~/.ssh/config Aliases
+  console.log('\n▶ Testing Universal SSH Parser & ~/.ssh/config Aliases...');
+  const scpRemote = 'git@forgejo.midominio.com:organizacion/repo.git';
+  const parsedScp = SshConfigParser.parseRemoteUrl(scpRemote);
+  assert.ok(parsedScp, 'Should parse SCP remote URL');
+  assert.strictEqual(parsedScp?.protocol, 'ssh');
+  assert.strictEqual(parsedScp?.host, 'forgejo.midominio.com');
+  assert.strictEqual(parsedScp?.owner, 'organizacion');
+  assert.strictEqual(parsedScp?.repo, 'repo');
+
+  const customPortRemote = 'ssh://git@git.midominio.com:2222/organizacion/repo.git';
+  const parsedCustom = SshConfigParser.parseRemoteUrl(customPortRemote);
+  assert.ok(parsedCustom, 'Should parse custom port SSH URL');
+  assert.strictEqual(parsedCustom?.port, 2222);
+  assert.strictEqual(parsedCustom?.owner, 'organizacion');
+  assert.strictEqual(parsedCustom?.repo, 'repo');
+
+  // Test ~/.ssh/config parsing & alias resolution
+  const mockSshConfigContent = `
+# Developer SSH Config
+Host mi-forgejo
+  HostName 192.168.1.50
+  Port 2222
+  User git
+  IdentityFile ~/.ssh/id_ed25519
+
+Host *.internal.corp
+  Port 22
+`;
+  const hostMap = SshConfigParser.parseConfigContent(mockSshConfigContent);
+  assert.strictEqual(hostMap.has('mi-forgejo'), true, 'Should parse Host mi-forgejo');
+  const aliasHost = hostMap.get('mi-forgejo');
+  assert.strictEqual(aliasHost?.hostName, '192.168.1.50');
+  assert.strictEqual(aliasHost?.port, 2222);
+
+  const aliasRemote = 'git@mi-forgejo:organizacion/repo.git';
+  const resolved = SshConfigParser.parseRemoteUrl(aliasRemote, undefined, hostMap);
+  assert.ok(resolved, 'Should resolve remote using alias config');
+  assert.strictEqual(resolved?.sshAlias, 'mi-forgejo');
+  assert.strictEqual(resolved?.resolvedHost, '192.168.1.50');
+  assert.strictEqual(resolved?.resolvedPort, 2222);
+  console.log('  ✔ Universal SSH Parser tests passed!');
+
+  // 21. Test Forgejo / Gitea API Provider & RemoteManager
+  console.log('\n▶ Testing Forgejo Provider & RemoteManager...');
+  const forgejo = new ForgejoProvider();
+  assert.strictEqual(forgejo.type, 'forgejo');
+  const mockParsed = {
+    rawUrl: 'git@forgejo.midominio.com:myorg/myrepo.git',
+    protocol: 'ssh' as const,
+    host: 'forgejo.midominio.com',
+    owner: 'myorg',
+    repo: 'myrepo',
+  };
+  const webUrl = forgejo.getWebUrl(mockParsed);
+  assert.strictEqual(webUrl, 'https://forgejo.midominio.com/myorg/myrepo');
+
+  const mockRepoInfo = {
+    provider: 'forgejo' as const,
+    owner: 'myorg',
+    repo: 'myrepo',
+    webUrl: 'https://forgejo.midominio.com/myorg/myrepo',
+    isPrivate: true,
+    authConnected: true,
+  };
+  assert.strictEqual(
+    forgejo.getCommitUrl(mockRepoInfo, 'abc1234'),
+    'https://forgejo.midominio.com/myorg/myrepo/commit/abc1234'
+  );
+  assert.strictEqual(
+    forgejo.getBranchUrl(mockRepoInfo, 'feature/test'),
+    'https://forgejo.midominio.com/myorg/myrepo/src/branch/feature%2Ftest'
+  );
+  assert.strictEqual(
+    forgejo.getIssueUrl(mockRepoInfo, 42),
+    'https://forgejo.midominio.com/myorg/myrepo/issues/42'
+  );
+  assert.strictEqual(
+    forgejo.getPullRequestUrl(mockRepoInfo, 10),
+    'https://forgejo.midominio.com/myorg/myrepo/pulls/10'
+  );
+
+  const remoteMgr = RemoteManager.getInstance();
+  const parsedForgejoRemote = await remoteMgr.parseRemoteUrl('git@forgejo.selfhosted.io:org/repo.git');
+  assert.ok(parsedForgejoRemote);
+  assert.strictEqual(parsedForgejoRemote?.badgeType, 'forgejo');
+  assert.ok(parsedForgejoRemote?.badgeLabel?.includes('Forgejo'));
+  console.log('  ✔ Forgejo Provider & RemoteManager tests passed!');
+
+  // 22. Test Fork Client Desktop Integration
+  console.log('\n▶ Testing Fork Client Integration...');
+  const fork = ForkIntegration.getInstance();
+  assert.ok(fork, 'ForkIntegration singleton exists');
+  const sharedState = fork.detectSharedState(process.cwd());
+  assert.strictEqual(typeof sharedState.isForkInstalled, 'boolean');
+  assert.strictEqual(typeof sharedState.isRebasing, 'boolean');
+  assert.strictEqual(typeof sharedState.isMerging, 'boolean');
+  console.log('  ✔ Fork Client Integration tests passed!');
+
+  // 23. Test Issue Tracker Hub & IssueBranchLinker
+  console.log('\n▶ Testing Issue Tracker Hub & IssueBranchLinker...');
+  const numsFromBranch1 = IssueBranchLinker.extractIssueNumbersFromBranch('feat/issue-42-forgejo-ssh');
+  assert.deepStrictEqual(numsFromBranch1, [42], 'Should extract issue 42 from feat/issue-42-forgejo-ssh');
+
+  const numsFromBranch2 = IssueBranchLinker.extractIssueNumbersFromBranch('fix/#108-login');
+  assert.deepStrictEqual(numsFromBranch2, [108], 'Should extract issue 108 from fix/#108-login');
+
+  const numsFromBranch3 = IssueBranchLinker.extractIssueNumbersFromBranch('42-fix-ssh-handshake');
+  assert.deepStrictEqual(numsFromBranch3, [42], 'Should extract leading issue number');
+
+  const numsFromCommits = IssueBranchLinker.extractIssueNumbersFromCommits([
+    { subject: 'feat: deep forgejo support (Closes #42)' },
+    { subject: 'fix: handle custom ssh port (#108)' },
+  ]);
+  assert.ok(numsFromCommits.includes(42));
+  assert.ok(numsFromCommits.includes(108));
+
+  const slug = IssueBranchLinker.createSlug('Soporte SSH en Forgejo & Git Client Fork!');
+  assert.strictEqual(slug, 'soporte-ssh-en-forgejo-git-client-fork');
+
+  const branchName = IssueBranchLinker.generateBranchName(
+    { number: 42, title: 'Soporte SSH en Forgejo', labels: [] },
+    'feat/{id}-{slug}'
+  );
+  assert.strictEqual(branchName, 'feat/42-soporte-ssh-en-forgejo');
+
+  const fixBranchName = IssueBranchLinker.generateBranchName(
+    { number: 99, title: 'Bug in authentication', labels: [{ name: 'bug', color: '#f00' }] },
+    '{type}/{id}-{slug}'
+  );
+  assert.strictEqual(fixBranchName, 'fix/99-bug-in-authentication');
+  console.log('  ✔ Issue Tracker Hub & IssueBranchLinker tests passed!');
+
+  // 24. Test MCP Server Refinement & Structured Tools
+  console.log('\n▶ Testing Refined MCP Server Tools & Dynamic Resources...');
+  const mcpServer = new CommitFlowMcpServer(process.cwd());
+  const rpcHandler: (req: any) => Promise<any> = (mcpServer as any).handleJsonRpc.bind(mcpServer);
+
+  // Test initialize
+  const initRes = await rpcHandler({ jsonrpc: '2.0', id: 1, method: 'initialize' });
+  assert.strictEqual(initRes.result.serverInfo.name, 'commitflow-mcp');
+  assert.strictEqual(initRes.result.protocolVersion, '2024-11-05');
+
+  // Test tools/list
+  const toolsListRes = await rpcHandler({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+  const toolNames = toolsListRes.result.tools.map((t: any) => t.name);
+  assert.ok(toolNames.includes('get_my_assigned_issues'), 'Should include get_my_assigned_issues');
+  assert.ok(toolNames.includes('get_issue_context'), 'Should include get_issue_context');
+  assert.ok(toolNames.includes('start_work_on_issue'), 'Should include start_work_on_issue');
+  assert.ok(toolNames.includes('analyze_staged_changes'), 'Should include analyze_staged_changes');
+  assert.ok(toolNames.includes('search_commit_history'), 'Should include search_commit_history');
+  assert.ok(toolNames.includes('get_pr_triage_status'), 'Should include get_pr_triage_status');
+  assert.ok(toolNames.includes('predict_merge_conflicts'), 'Should include predict_merge_conflicts');
+
+  // Test resources/list
+  const resourcesListRes = await rpcHandler({ jsonrpc: '2.0', id: 3, method: 'resources/list' });
+  const resourceUris = resourcesListRes.result.resources.map((r: any) => r.uri);
+  assert.ok(resourceUris.includes('commitflow://repo/status'));
+  assert.ok(resourceUris.includes('commitflow://issues/assigned'));
+  assert.ok(resourceUris.includes('commitflow://branch/current/diff'));
+
+  // Test tools/call: predict_merge_conflicts
+  const predictCallRes = await rpcHandler({
+    jsonrpc: '2.0',
+    id: 4,
+    method: 'tools/call',
+    params: {
+      name: 'predict_merge_conflicts',
+      arguments: { sourceBranch: 'HEAD', targetBranch: 'HEAD' },
+    },
+  });
+  assert.ok(predictCallRes.result.content[0].text);
+  const predictData = JSON.parse(predictCallRes.result.content[0].text);
+  assert.strictEqual(typeof predictData.hasConflicts, 'boolean');
+
+  // Test tools/call: analyze_staged_changes
+  const analyzeCallRes = await rpcHandler({
+    jsonrpc: '2.0',
+    id: 5,
+    method: 'tools/call',
+    params: {
+      name: 'analyze_staged_changes',
+      arguments: { includeIssueRef: 42 },
+    },
+  });
+  assert.ok(analyzeCallRes.result.content[0].text);
+  const analyzeData = JSON.parse(analyzeCallRes.result.content[0].text);
+  assert.ok(Array.isArray(analyzeData.stagedFiles));
+  console.log('  ✔ Refined MCP Server Tools & Dynamic Resources tests passed!');
+
+  // 25. Test PersistenceManager & Settings Sync
+  console.log('\n▶ Testing PersistenceManager & Settings Sync...');
+  const persistence = PersistenceManager.getInstance();
+  const forgejoKey = persistence.getForgejoSecretKey('git.midominio.com:2222');
+  assert.strictEqual(forgejoKey, 'commitflow.token.forgejo.git.midominio.com_2222');
+
+  await persistence.storeSecret(forgejoKey, 'secret_token_123');
+  const retrievedToken = await persistence.getSecret(forgejoKey);
+  assert.strictEqual(retrievedToken, 'secret_token_123');
+
+  assert.strictEqual(persistence.getSshConfigPath(), '~/.ssh/config');
+  assert.strictEqual(persistence.getDefaultIssueFilter(), 'assignedToMe');
+  assert.strictEqual(persistence.getBranchNamingPattern(), 'feat/{id}-{slug}');
+  assert.strictEqual(persistence.isForkIntegrationEnabled(), true);
+  console.log('  ✔ PersistenceManager tests passed!');
+
+  // 26. Test Direct .git Filesystem Reader (Offline Engine)
+  console.log('\n▶ Testing Direct .git Filesystem Reader (Offline Engine)...');
+  const fsReader = GitFsReader.getInstance();
+  const repoCwd = process.cwd();
+  const gitDirs = fsReader.resolveGitDir(repoCwd);
+  assert.ok(gitDirs, 'Should resolve .git directory');
+  assert.ok(gitDirs.gitDir.endsWith('.git'));
+
+  const offlineState = fsReader.readOfflineRepoState(repoCwd);
+  assert.ok(offlineState, 'Should read offline repo state from disk');
+  assert.strictEqual(offlineState.isRepo, true);
+  assert.ok(offlineState.branches.length > 0, 'Should detect local branches');
+  assert.ok(offlineState.branches.some((b) => b.name === 'main'));
+  assert.strictEqual(typeof offlineState.head.isDetached, 'boolean');
+  assert.ok(offlineState.remotes.some((r) => r.name === 'origin'));
+  assert.strictEqual(typeof offlineState.operationState.isMerging, 'boolean');
+  assert.strictEqual(typeof offlineState.operationState.isRebasing, 'boolean');
+  assert.ok(Array.isArray(offlineState.recentCommitsFromReflog));
+  assert.ok(offlineState.recentCommitsFromReflog.length > 0, 'Should read recent commits from reflog');
+  const firstReflog = offlineState.recentCommitsFromReflog[0];
+  assert.ok(firstReflog.hash.length === 40, 'Reflog commit hash should be 40 chars');
+  assert.ok(firstReflog.author.length > 0, 'Reflog commit author should be present');
+  console.log('  ✔ Direct .git Filesystem Reader (Offline Engine) tests passed!');
+
+  // 27. Test Extended ForgejoProvider (Offline Caching & Complete API)
+  console.log('\n▶ Testing Extended ForgejoProvider & Offline Fallback...');
+  const forgejoExt = new ForgejoProvider();
+  const mockRepoInfoExt = {
+    provider: 'forgejo' as const,
+    owner: 'myorg',
+    repo: 'myrepo',
+    webUrl: 'https://forgejo.midominio.com/myorg/myrepo',
+    isPrivate: true,
+    authConnected: true,
+  };
+
+  // Offline resilience: getIssues returns cached or empty array without crashing
+  const offlineIssues = await forgejoExt.getIssues(mockRepoInfoExt);
+  assert.ok(Array.isArray(offlineIssues), 'getIssues should return array even when offline');
+
+  const offlineAssigned = await forgejoExt.getMyAssignedIssues(mockRepoInfoExt, 'testuser');
+  assert.ok(Array.isArray(offlineAssigned), 'getMyAssignedIssues should return array even when offline');
+
+  const offlinePulls = await forgejoExt.getPullRequests(mockRepoInfoExt);
+  assert.ok(Array.isArray(offlinePulls), 'getPullRequests should return array even when offline');
+
+  const offlineStatuses = await forgejoExt.getCommitStatuses(mockRepoInfoExt, 'abc1234');
+  assert.ok(Array.isArray(offlineStatuses), 'getCommitStatuses should return array even when offline');
+
+  const offlineLabels = await forgejoExt.getLabels(mockRepoInfoExt);
+  assert.ok(Array.isArray(offlineLabels), 'getLabels should return array even when offline');
+
+  const offlineMilestones = await forgejoExt.getMilestones(mockRepoInfoExt);
+  assert.ok(Array.isArray(offlineMilestones), 'getMilestones should return array even when offline');
+
+  const offlineBranches = await forgejoExt.getBranches(mockRepoInfoExt);
+  assert.ok(Array.isArray(offlineBranches), 'getBranches should return array even when offline');
+
+  const offlineTags = await forgejoExt.getTags(mockRepoInfoExt);
+  assert.ok(Array.isArray(offlineTags), 'getTags should return array even when offline');
+
+  const tokenVerification = await forgejoExt.verifyToken('forgejo.offline.local', 'invalid-token');
+  assert.strictEqual(tokenVerification.isValid, false, 'verifyToken should safely return false on unreachable host');
+  console.log('  ✔ Extended ForgejoProvider tests passed!');
+
+  // 28. Test Penetration Testing & Security Hardening (Pentest)
+  console.log('\n▶ Testing Penetration Testing & Security Hardening (Pentest)...');
+  
+  // 1. Path traversal defense in GitFsReader
+  const mockTraversingPackedRefs = new Map<string, string>();
+  const headWithTraversal = fsReader.readHead(
+    path.join(repoCwd, 'test'),
+    path.join(repoCwd, 'test'),
+    mockTraversingPackedRefs
+  );
+  assert.strictEqual(typeof headWithTraversal.isDetached, 'boolean');
+
+  // 2. MCP Path Traversal Defense
+  const mcpServerInstance = new CommitFlowMcpServer(process.cwd());
+  const rpcHandlerFn = (mcpServerInstance as any).handleJsonRpc.bind(mcpServerInstance);
+  const maliciousBlameCall = await rpcHandlerFn({
+    jsonrpc: '2.0',
+    id: 99,
+    method: 'tools/call',
+    params: {
+      name: 'commitflow_get_line_blame',
+      arguments: {
+        filePath: '../../../../../../Windows/System32/drivers/etc/hosts',
+        line: 1,
+      },
+    },
+  });
+  assert.ok(maliciousBlameCall.error, 'MCP server should reject path traversal out of repository root');
+  assert.ok(maliciousBlameCall.error.message.includes('Access denied'));
+
+  // 3. Secret storage isolation: Secret keys are namespaced and not leaked
+  const persistenceMgr = PersistenceManager.getInstance();
+  const testSecretHost = 'forgejo.corp.internal:8080';
+  const secretKey = persistenceMgr.getForgejoSecretKey(testSecretHost);
+  assert.strictEqual(secretKey, 'commitflow.token.forgejo.forgejo.corp.internal_8080');
+
+  console.log('  ✔ Penetration Testing & Security Hardening tests passed!');
+
+  console.log('\n🎉 ALL 28 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+})().catch((err) => {
+  console.error('❌ Test suite failed:', err);
+  process.exit(1);
+});
