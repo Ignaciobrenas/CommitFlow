@@ -596,18 +596,113 @@ function updateActiveBranchBadge(): void {
   }
 }
 
+function parseSearchQuery(query: string): {
+  tokens: string[];
+  authors: string[];
+  messages: string[];
+  hashes: string[];
+  refs: string[];
+  issues: string[];
+  requireSigned?: boolean;
+} {
+  const parts = query.trim().split(/\s+/);
+  const result: {
+    tokens: string[];
+    authors: string[];
+    messages: string[];
+    hashes: string[];
+    refs: string[];
+    issues: string[];
+    requireSigned?: boolean;
+  } = {
+    tokens: [],
+    authors: [],
+    messages: [],
+    hashes: [],
+    refs: [],
+    issues: [],
+  };
+
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (lower.startsWith('author:') || lower.startsWith('by:')) {
+      const val = lower.slice(lower.indexOf(':') + 1);
+      if (val) result.authors.push(val);
+    } else if (lower.startsWith('msg:') || lower.startsWith('message:')) {
+      const val = lower.slice(lower.indexOf(':') + 1);
+      if (val) result.messages.push(val);
+    } else if (lower.startsWith('hash:') || lower.startsWith('sha:')) {
+      const val = lower.slice(lower.indexOf(':') + 1);
+      if (val) result.hashes.push(val);
+    } else if (lower.startsWith('ref:') || lower.startsWith('branch:')) {
+      const val = lower.slice(lower.indexOf(':') + 1);
+      if (val) result.refs.push(val);
+    } else if (
+      lower === 'is:signed' ||
+      lower === 'is:verified' ||
+      lower === 'signed:true'
+    ) {
+      result.requireSigned = true;
+    } else if (lower.startsWith('#') && /^#\d+$/.test(lower)) {
+      result.issues.push(lower);
+    } else if (lower) {
+      result.tokens.push(lower);
+    }
+  }
+
+  return result;
+}
+
 function applyFilters(): void {
   filteredNodes = allNodes.filter((node) => {
     const commit = node.commit;
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchSubject = commit.subject.toLowerCase().includes(q);
-      const matchAuthor =
-        commit.author.name.toLowerCase().includes(q) ||
-        commit.author.email.toLowerCase().includes(q);
-      const matchHash = commit.hash.toLowerCase().startsWith(q);
-      if (!matchSubject && !matchAuthor && !matchHash) {
+      const parsed = parseSearchQuery(searchQuery);
+
+      if (parsed.requireSigned && commit.signatureStatus !== 'valid') {
         return false;
+      }
+
+      for (const a of parsed.authors) {
+        const matchName = commit.author.name.toLowerCase().includes(a);
+        const matchEmail = commit.author.email.toLowerCase().includes(a);
+        if (!matchName && !matchEmail) return false;
+      }
+
+      for (const m of parsed.messages) {
+        const matchSubj = commit.subject.toLowerCase().includes(m);
+        const matchBody = commit.body ? commit.body.toLowerCase().includes(m) : false;
+        if (!matchSubj && !matchBody) return false;
+      }
+
+      for (const h of parsed.hashes) {
+        const matchH = commit.hash.toLowerCase().startsWith(h) || commit.shortHash.toLowerCase().startsWith(h);
+        if (!matchH) return false;
+      }
+
+      for (const r of parsed.refs) {
+        const matchR = commit.refs.some((ref) => ref.name.toLowerCase().includes(r));
+        if (!matchR) return false;
+      }
+
+      for (const iss of parsed.issues) {
+        const matchSubj = commit.subject.toLowerCase().includes(iss);
+        const matchBody = commit.body ? commit.body.toLowerCase().includes(iss) : false;
+        if (!matchSubj && !matchBody) return false;
+      }
+
+      for (const t of parsed.tokens) {
+        const matchSubj = commit.subject.toLowerCase().includes(t);
+        const matchAuth =
+          commit.author.name.toLowerCase().includes(t) ||
+          commit.author.email.toLowerCase().includes(t);
+        const matchHash =
+          commit.hash.toLowerCase().startsWith(t) ||
+          commit.shortHash.toLowerCase().startsWith(t);
+        const matchRef = commit.refs.some((r) => r.name.toLowerCase().includes(t));
+        if (!matchSubj && !matchAuth && !matchHash && !matchRef) {
+          return false;
+        }
       }
     }
 
@@ -618,7 +713,7 @@ function applyFilters(): void {
           r.name.endsWith('/' + selectedBranchFilter)
       );
       if (!hasRef) {
-        // Simple branch filter
+        return false;
       }
     }
 
@@ -2844,6 +2939,10 @@ searchClearBtn?.addEventListener('click', () => {
 });
 
 window.addEventListener('keydown', (e) => {
+  const isInput =
+    document.activeElement instanceof HTMLInputElement ||
+    document.activeElement instanceof HTMLTextAreaElement;
+
   if (e.key === 'Escape') {
     closeDrawer();
     closePersonalModal();
@@ -2861,6 +2960,41 @@ window.addEventListener('keydown', (e) => {
     layoutPickerPopover?.classList.remove('visible');
     themePickerPopover?.classList.remove('visible');
     hideHoverPopover();
+    return;
+  }
+
+  if (isInput) return;
+
+  if (activeTab === 'tab-graph' && filteredNodes.length > 0) {
+    if (e.key === 'ArrowDown' || e.key === 'j') {
+      e.preventDefault();
+      const currentIdx = selectedNode ? filteredNodes.indexOf(selectedNode) : -1;
+      const nextIdx = Math.min(filteredNodes.length - 1, currentIdx + 1);
+      const targetNode = filteredNodes[nextIdx];
+      if (targetNode) {
+        selectCommit(targetNode);
+        const rows = tableContainer.querySelectorAll('.commit-row');
+        rows[nextIdx]?.scrollIntoView({ block: 'nearest' });
+      }
+    } else if (e.key === 'ArrowUp' || e.key === 'k') {
+      e.preventDefault();
+      const currentIdx = selectedNode ? filteredNodes.indexOf(selectedNode) : 1;
+      const prevIdx = Math.max(0, currentIdx - 1);
+      const targetNode = filteredNodes[prevIdx];
+      if (targetNode) {
+        selectCommit(targetNode);
+        const rows = tableContainer.querySelectorAll('.commit-row');
+        rows[prevIdx]?.scrollIntoView({ block: 'nearest' });
+      }
+    } else if (e.key === 'Enter') {
+      if (selectedNode) {
+        drawer.classList.add('open');
+      }
+    } else if (e.key === 'c' && selectedNode) {
+      initiateCherryPick(selectedNode.commit.hash, selectedNode.commit.shortHash);
+    } else if (e.key === 't' && selectedNode) {
+      openTagModal(selectedNode.commit.hash);
+    }
   }
 });
 

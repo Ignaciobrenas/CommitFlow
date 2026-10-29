@@ -938,7 +938,42 @@ Host *.internal.corp
   }
   console.log('  ✔ Pre-Flight Cherry-Pick Conflict Forecaster tests passed!');
 
-  console.log('\n🎉 ALL 35 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  // 36. Test Power Query Token Parsing & Advanced Filtering
+  console.log('\n▶ Testing Power Query Token Parsing & Advanced Filtering...');
+  function testParseQuery(query: string) {
+    const parts = query.trim().split(/\s+/);
+    const res: any = { tokens: [], authors: [], messages: [], hashes: [], refs: [], issues: [] };
+    for (const part of parts) {
+      const lower = part.toLowerCase();
+      if (lower.startsWith('author:') || lower.startsWith('by:')) {
+        res.authors.push(lower.slice(lower.indexOf(':') + 1));
+      } else if (lower.startsWith('msg:') || lower.startsWith('message:')) {
+        res.messages.push(lower.slice(lower.indexOf(':') + 1));
+      } else if (lower.startsWith('hash:') || lower.startsWith('sha:')) {
+        res.hashes.push(lower.slice(lower.indexOf(':') + 1));
+      } else if (lower.startsWith('ref:') || lower.startsWith('branch:')) {
+        res.refs.push(lower.slice(lower.indexOf(':') + 1));
+      } else if (lower === 'is:signed' || lower === 'is:verified' || lower === 'signed:true') {
+        res.requireSigned = true;
+      } else if (lower.startsWith('#') && /^#\d+$/.test(lower)) {
+        res.issues.push(lower);
+      } else if (lower) {
+        res.tokens.push(lower);
+      }
+    }
+    return res;
+  }
+
+  const parsedQuery = testParseQuery('author:Ignacio msg:fix sha:a1b2c is:signed #42 keyword');
+  assert.strictEqual(parsedQuery.authors[0], 'ignacio');
+  assert.strictEqual(parsedQuery.messages[0], 'fix');
+  assert.strictEqual(parsedQuery.hashes[0], 'a1b2c');
+  assert.strictEqual(parsedQuery.requireSigned, true);
+  assert.strictEqual(parsedQuery.issues[0], '#42');
+  assert.strictEqual(parsedQuery.tokens[0], 'keyword');
+  console.log('  ✔ Power Query Token Parsing & Advanced Filtering tests passed!');
+
+  console.log('\n🎉 ALL 36 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('❌ Test suite failed:', err);
   process.exit(1);

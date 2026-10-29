@@ -1452,6 +1452,14 @@ body.layout-sidebar-compact .stats-bar,
   }
 }
 
+body.layout-nano .compact-card .card-author-name {
+  max-width: 50px;
+}
+body.layout-nano .compact-card .card-meta-dot,
+body.layout-nano .compact-card .card-time {
+  display: none !important;
+}
+
 /* 2. Ultra-Nano Sidebar Mode (width <= 260px) */
 body.layout-nano .brand-title,
 @media (max-width: 260px) {
@@ -1483,6 +1491,10 @@ body.layout-nano .brand-title,
   }
   .compact-card .card-author-name {
     max-width: 50px;
+  }
+  .compact-card .card-meta-dot,
+  .compact-card .card-time {
+    display: none !important;
   }
 }
 
