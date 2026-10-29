@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/Ignaciobrenas/CommitFlow/actions"><img src="https://img.shields.io/badge/Build-Passing-10b981?style=flat-square&logo=githubactions&logoColor=white" alt="Build Status" /></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/Marketplace-v0.4.5-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/Marketplace-v0.4.6-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-6366f1?style=flat-square" alt="License" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.6_Strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js" /></a>

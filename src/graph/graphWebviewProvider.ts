@@ -95,7 +95,7 @@ export class GraphWebviewProvider
       this.panel.iconPath = vscode.Uri.joinPath(
         this.extensionUri,
         'resources',
-        'icon.png'
+        'commitflow-logo-color.png'
       );
       this.panel.webview.html = this.getHtmlForWebview(this.panel.webview);
       this.setupMessageListener(this.panel.webview);
@@ -1187,17 +1187,14 @@ export class GraphWebviewProvider
     const codiconCssUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'codicon.css')
     );
-    const logoDarkUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'resources', 'logo-dark.png')
-    );
-    const logoLightUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'resources', 'logo-light.png')
-    );
     const resourcesUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'resources')
     );
     const isotipoColorUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'resources', 'commitflow-isotipo-color.svg')
+    );
+    const isotipoWhiteUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'resources', 'commitflow-isotipo-white.svg')
     );
     const logotipoWhiteUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'resources', 'commitflow-logotipo-white.svg')
@@ -1221,8 +1218,6 @@ export class GraphWebviewProvider
     <div class="header-row-primary">
       <div class="brand-section">
         <img src="${isotipoColorUri}" alt="CommitFlow" class="brand-logo logo-neon" />
-        <img src="${logoDarkUri}" alt="CommitFlow" class="brand-logo logo-dark-mode" />
-        <img src="${logoLightUri}" alt="CommitFlow" class="brand-logo logo-light-mode" />
         <span class="brand-title">CommitFlow</span>
       </div>
 

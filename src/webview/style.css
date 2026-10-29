@@ -306,35 +306,16 @@ body {
 }
 
 .brand-logo {
-  height: 18px;
-  width: auto;
+  height: 20px;
+  width: 20px;
   max-width: 24px;
   object-fit: contain;
   vertical-align: middle;
+  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.45));
 }
 
 .brand-title {
   white-space: nowrap;
-}
-
-body.theme-light .logo-dark-mode,
-body.vscode-light:not(.theme-dark) .logo-dark-mode {
-  display: none !important;
-}
-
-body.theme-light .logo-light-mode,
-body.vscode-light:not(.theme-dark) .logo-light-mode {
-  display: inline-block !important;
-}
-
-body.theme-dark .logo-light-mode,
-body.vscode-dark:not(.theme-light) .logo-light-mode {
-  display: none !important;
-}
-
-body.theme-dark .logo-dark-mode,
-body.vscode-dark:not(.theme-light) .logo-dark-mode {
-  display: inline-block !important;
 }
 
 .header-quick-actions {

@@ -2,7 +2,7 @@
   "name": "commitflow",
   "displayName": "CommitFlow - Git Graph, Visual History & Developer Hub",
   "description": "High-performance interactive Git commit & branch graph visualizer, real-time live blame with author avatars, visual file history, PR launchpad, worktrees & multi-WIP, cloud patches, and adaptive layout modes for VS Code.",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "publisher": "Ignaciobrenas",
   "icon": "resources/commitflow-logo-color.png",
   "engines": {
