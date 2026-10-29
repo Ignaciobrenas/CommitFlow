@@ -200,3 +200,42 @@ This document provides a comprehensive operational manual and technical specific
   - **Neon Blue:** Electric cybernetic blue.
   - **Clean Light:** High-contrast light theme for bright environments.
   - **Auto:** Dynamically inherits VS Code active theme.
+
+---
+
+## 15. GPG & OpenSSH Cryptographic Signature Verification
+
+- **Dual Standard Verification:** Accurately parses and validates signatures created by both GPG (OpenPGP) and OpenSSH (`ssh-keygen -Y sign`).
+- **Signature Tokens:** Evaluates Git log tokens `%G?` (validity flag), `%GS` (signer name/identifier), and `%GK` (key fingerprint/ID).
+- **Security Categorization:**
+  - `valid`: Cryptographically verified and trusted key.
+  - `invalid`: Signature verification failed or tampered content.
+  - `untrusted`: Valid cryptographic signature but untrusted signer identity.
+  - `none`: Unsigned commit.
+- **Visual Interface:** Verified shield badges displayed directly beside commit subjects in both wide and compact table modes, accompanied by a verified banner in the Commit Inspector Drawer.
+
+---
+
+## 16. Visual Git Reflog Time Machine & Lost-Commit Recovery
+
+- **Reference Log Tracking:** Renders historical movements of `HEAD`, including checkouts, rebase steps, fast-forward merges, and soft/hard resets.
+- **Zero-Process Direct Disk Fallback:** Reads directly from `.git/logs/HEAD` when external processes are unavailable.
+- **1-Click Lost-Commit Recovery:** Allows developers to immediately resurrect discarded or orphaned commits by creating a new branch at that commit hash.
+- **Reflog Action Highlighting:** Color-coded action badges distinguish commits, checkouts, merges, and resets at a glance.
+
+---
+
+## 17. Multi-Commit Diff Comparison Engine
+
+- **Arbitrary Revision Comparison:** Compares any two commits in the repository history without requiring branches or checkouts.
+- **In-Memory Diff Analysis:** Executes non-blocking `git diff --numstat <base>..<target>` to compute exact additions, deletions, and affected files in milliseconds.
+- **Intermediate Commit Enumeration:** Identifies and displays all intermediate commits between the selected base and target revisions.
+- **Direct Code Diff Integration:** Clicking any file in the comparison modal immediately opens the VS Code side-by-side diff editor.
+
+---
+
+## 18. Repository Storage Health & Garbage Collection Diagnostics
+
+- **Storage Metrics Inspection:** Evaluates the `.git` directory to count loose objects, packfiles, disk footprint, and unreferenced dangling commits.
+- **Proactive Maintenance Advisories:** Alerts the developer when object fragmentation degrades Git performance.
+- **Integrated Garbage Collection:** One-click execution of `git gc --prune=now --quiet` to compress loose objects into packfiles, prune unreachable objects, and optimize repository read speeds.

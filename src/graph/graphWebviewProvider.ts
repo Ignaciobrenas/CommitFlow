@@ -929,6 +929,86 @@ export class GraphWebviewProvider
             await this.forkIntegration.openInFork(root);
           }
           break;
+
+        case 'requestReflog':
+          if (root) {
+            try {
+              const reflog = await this.gitClient.getReflog(root, 100);
+              webview.postMessage({
+                command: 'reflogData',
+                payload: { reflog },
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to load reflog: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'restoreReflogCommit':
+          if (root && msg.payload?.commitHash && msg.payload?.branchName) {
+            try {
+              await this.gitClient.restoreReflogCommit(
+                root,
+                msg.payload.commitHash,
+                msg.payload.branchName
+              );
+              vscode.window.showInformationMessage(
+                `Restored commit ${msg.payload.commitHash.slice(0, 7)} onto new branch '${msg.payload.branchName}'!`
+              );
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Could not restore commit: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'compareCommits':
+          if (root && msg.payload?.baseHash && msg.payload?.targetHash) {
+            try {
+              const comparison = await this.gitClient.compareCommits(
+                root,
+                msg.payload.baseHash,
+                msg.payload.targetHash
+              );
+              webview.postMessage({
+                command: 'comparisonData',
+                payload: comparison,
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Comparison failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'requestRepoHealth':
+          if (root) {
+            try {
+              const health = await this.gitClient.getRepoHealth(root);
+              webview.postMessage({
+                command: 'repoHealthData',
+                payload: health,
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to get repository health: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'runRepoGc':
+          if (root) {
+            try {
+              await this.gitClient.runRepoGc(root);
+              vscode.window.showInformationMessage('Repository optimized successfully via Git GC!');
+              const health = await this.gitClient.getRepoHealth(root);
+              webview.postMessage({
+                command: 'repoHealthData',
+                payload: health,
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Git GC failed: ${err.message}`);
+            }
+          }
+          break;
       }
     });
   }
@@ -1078,6 +1158,16 @@ export class GraphWebviewProvider
         <!-- Theme Switcher Button -->
         <button id="btn-theme-mode" class="btn-icon btn-theme-toggle" title="${tr('toolbar.themePicker')}">
           <i class="codicon codicon-symbol-color"></i>
+        </button>
+
+        <!-- Git Reflog Time Machine -->
+        <button id="btn-reflog" class="btn-icon" title="Git Reflog Time Machine">
+          <i class="codicon codicon-history"></i>
+        </button>
+
+        <!-- Repo Health & Storage Diagnostics -->
+        <button id="btn-repo-health" class="btn-icon" title="Salud y Almacenamiento Git">
+          <i class="codicon codicon-pulse"></i>
         </button>
 
         <!-- Changelog Export Button -->
@@ -1608,6 +1698,48 @@ export class GraphWebviewProvider
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Git Reflog Time Machine Modal -->
+    <div id="reflog-modal" class="modal-overlay">
+      <div class="modal-card" style="width: min(720px, calc(100vw - 20px));">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-history" style="font-size:16px; color:var(--accent-cyan);"></i>
+            <span style="font-weight:700; font-size:var(--font-size-base);">Git Reflog Time Machine & Recuperación</span>
+          </div>
+          <button id="reflog-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div id="reflog-modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Repository Health & Storage Diagnostics Modal -->
+    <div id="repo-health-modal" class="modal-overlay">
+      <div class="modal-card" style="width: min(640px, calc(100vw - 20px));">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-pulse" style="font-size:16px; color:var(--accent-emerald);"></i>
+            <span style="font-weight:700; font-size:var(--font-size-base);">Diagnóstico de Salud & Almacenamiento Git</span>
+          </div>
+          <button id="repo-health-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div id="repo-health-modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Multi-Commit Diff Comparison Modal -->
+    <div id="comparison-modal" class="modal-overlay">
+      <div class="modal-card" style="width: min(780px, calc(100vw - 20px));">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-diff" style="font-size:16px; color:var(--accent-purple);"></i>
+            <span id="comparison-modal-title" style="font-weight:700; font-size:var(--font-size-base);">Comparación de Revisiones</span>
+          </div>
+          <button id="comparison-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div id="comparison-modal-body" class="modal-body"></div>
       </div>
     </div>
 

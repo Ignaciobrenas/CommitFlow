@@ -33,6 +33,10 @@
   - [Visual File Evolution and Line Delta Tracking](#visual-file-evolution-and-line-delta-tracking)
   - [Cloud Patches (Zero-Push Collaboration)](#cloud-patches-zero-push-collaboration)
   - [Inline Blame and Author Contributions](#inline-blame-and-author-contributions)
+  - [GPG and OpenSSH Cryptographic Signature Verification](#gpg-and-openssh-cryptographic-signature-verification)
+  - [Visual Git Reflog Time Machine and Lost-Commit Recovery](#visual-git-reflog-time-machine-and-lost-commit-recovery)
+  - [Multi-Commit Diff Comparison Engine](#multi-commit-diff-comparison-engine)
+  - [Repository Health and Garbage Collection Diagnostics](#repository-health-and-garbage-collection-diagnostics)
   - [Model Context Protocol (MCP) Server](#model-context-protocol-mcp-server)
 - [Installation and Prerequisites](#installation-and-prerequisites)
 - [Getting Started](#getting-started)
@@ -214,6 +218,30 @@ A dedicated navigation hub (`Issues`) integrated directly into the extension vie
 - **Inline Ghost Text:** Displays discreet inline blame annotations at the end of the active cursor line.
 - **Status Bar Integration:** Shows the commit author, relative timestamp, and commit SHA in the VS Code status bar.
 - **Personal Contribution Analytics:** Calculates total commits, participation percentages across repository branches, and active contributor rankings.
+
+### GPG and OpenSSH Cryptographic Signature Verification
+
+- **Dual Cryptographic Parsing:** Evaluates commit signatures generated via GNU Privacy Guard (OpenPGP/GPG) and OpenSSH signature keys (`ssh-keygen -Y sign`).
+- **Signature Status Classification:** Categorizes commits as `valid`, `invalid`, `untrusted`, or `none` by extracting `%G?`, `%GS`, and `%GK` tokens.
+- **Visual Verification Badges:** Displays verified shields in wide and compact views with detailed popover banners indicating key IDs, signer names, and validity statuses.
+
+### Visual Git Reflog Time Machine and Lost-Commit Recovery
+
+- **Chronological Reference Log:** Renders full movements of `HEAD` recorded in `.git/logs/HEAD` (or via `git reflog`), tracing checkouts, merges, soft/hard resets, rebases, and orphaned commits.
+- **One-Click Branch Recovery:** Allows immediate creation of a new branch from any orphaned or historically discarded commit hash, preventing accidental data loss.
+- **Zero-Process Direct Disk Fallback:** Operates directly over raw filesystem logs when external processes are unavailable.
+
+### Multi-Commit Diff Comparison Engine
+
+- **Arbitrary Revision Range Inspection:** Select any historical commit and compare it against `HEAD` or any secondary revision.
+- **Unified Change Metrics:** Summarizes total additions (`+N`), deletions (`-M`), and files altered across the range, including a list of intermediate commits.
+- **Integrated File Level Diffs:** Click on any modified file in the comparison modal to open side-by-side diff editors in Visual Studio Code.
+
+### Repository Health and Garbage Collection Diagnostics
+
+- **Storage Metrics Inspection:** Analyzes total repository size on disk, loose object counts, packfile counts, and dangling commit objects.
+- **Proactive Maintenance Advisories:** Alerts developers when loose objects or unreferenced commits exceed performance thresholds.
+- **One-Click Git Garbage Collection:** Triggers `git gc --prune=now --quiet` directly from the user interface to optimize repository packfiles and reclaim disk storage.
 
 ### Model Context Protocol (MCP) Server
 
@@ -415,6 +443,9 @@ To connect external tools such as Claude Desktop, add CommitFlow to your client 
 | `search_commit_history` | `query: string`, `author?: string`, `file?: string` | Searches commit graph and historical diffs for specific changes or keywords. |
 | `get_pr_triage_status` | `filter?: 'blocked' \| 'ready' \| 'mine' \| 'all'` | Returns pull request triage metrics, CI/CD statuses, and reviewer blocks. |
 | `predict_merge_conflicts` | `sourceBranch: string`, `targetBranch: string` | Simulates `git merge-tree` in memory to report exact conflicting files and lines. |
+| `compare_revisions` | `baseHash: string`, `targetHash: string` | Compares two arbitrary commits, reporting file diffs, additions, deletions, and commits between. |
+| `restore_lost_commit` | `commitHash: string`, `branchName: string` | Restores an orphaned reflog commit onto a newly created branch. |
+| `analyze_repo_health` | _None_ | Performs storage diagnostics, calculating loose objects, packfiles, disk size, and dangling commits. |
 | `read_offline_repo_state` | _None_ | Direct filesystem snapshot of the `.git` directory without executing external processes. |
 | `commitflow_get_user_impact` | _None_ | Analyzes author impact, total commits, and branch participation metrics. |
 | `commitflow_get_line_blame` | `filePath: string`, `line: number` | Returns precise authorship, date, and commit SHA for a specific file line. |
@@ -426,6 +457,8 @@ To connect external tools such as Claude Desktop, add CommitFlow to your client 
 | :--- | :--- | :--- |
 | `commitflow://repo/status` | `application/json` | Current branch, remote configuration, active worktrees, and provider type. |
 | `commitflow://repo/offline-status` | `application/json` | Raw `.git` filesystem snapshot (HEAD, packed-refs, reflog, active operations). |
+| `commitflow://reflog/recent` | `application/json` | Recent chronological reflog entries parsed from disk or git client. |
+| `commitflow://repo/health` | `application/json` | Repository health diagnostics (disk size, loose objects, packfiles, dangling commits). |
 | `commitflow://issues/assigned` | `application/json` | Live feed of issues currently assigned to the active user. |
 | `commitflow://branch/current/diff` | `text/x-diff` | Full diff between the current branch and its base tracking branch. |
 | `commitflow://repo/user-context` | `text/markdown` | Formatted summary of author contributions and repository impact. |
@@ -546,7 +579,7 @@ If Fork is installed in a non-standard path, verify that the `fork://open` URI h
    ```bash
    npm install
    ```
-3. Run the automated test suite (27 suites covering all core subsystems):
+3. Run the automated test suite (33 suites covering all core subsystems):
    ```bash
    npm test
    ```

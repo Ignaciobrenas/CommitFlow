@@ -2757,5 +2757,246 @@ body.layout-right .layout-picker-popover {
   box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35);
 }
 
+/* --- GPG & SSH Commit Signature Badges --- */
+.commit-sig-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.commit-sig-badge.valid {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.sig-verified-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  margin-top: 4px;
+}
+
+.sig-invalid-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  margin-top: 4px;
+}
+
+/* --- Reflog Time Machine Styles --- */
+.reflog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.reflog-entry-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: all 0.18s ease;
+}
+
+.reflog-entry-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  transform: translateX(2px);
+}
+
+.reflog-entry-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.reflog-entry-row1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reflog-selector-pill {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  font-weight: 600;
+}
+
+.reflog-action-badge {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.reflog-action-badge.commit {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.reflog-action-badge.checkout {
+  background: rgba(168, 85, 247, 0.12);
+  color: #a855f7;
+}
+
+.reflog-action-badge.merge {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.reflog-action-badge.reset {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.reflog-entry-message {
+  font-size: var(--font-size-sm);
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Repo Health Diagnostics Styles --- */
+.health-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.health-metric-tile {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.health-metric-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: var(--font-family-mono);
+  color: var(--accent-cyan);
+  margin-top: 4px;
+}
+
+.health-metric-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.health-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.health-status-banner.warning {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+/* --- Commit Comparison Styles --- */
+.comparison-summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.comparison-stats-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-additions-pill {
+  color: #10b981;
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+  background: rgba(16, 185, 129, 0.12);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.diff-deletions-pill {
+  color: #ef4444;
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+  background: rgba(239, 68, 68, 0.12);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.comparison-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.comparison-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.comparison-file-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+
+
 
 

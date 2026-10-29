@@ -68,6 +68,10 @@ The architecture emphasizes:
    - Injects non-blocking environment: `GIT_TERMINAL_PROMPT=0`, `LC_ALL=C.UTF-8`, `GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"`.
    - Propagates system SSH authentication socket (`SSH_AUTH_SOCK`).
    - Implements in-memory merge conflict prediction via `git merge-tree`.
+   - Implements multi-commit revision comparison via `git diff --numstat <base>..<target>`.
+   - Extracts chronological reflog entries via `git reflog` with pure disk fallback to `.git/logs/HEAD`.
+   - Restores orphaned or lost commits onto new branches via `restoreReflogCommit`.
+   - Computes repository storage health metrics (`getRepoHealth`) and executes maintenance garbage collection (`runRepoGc`).
 
 2. **`GitFsReader` (Offline Direct Reader):**
    - Pure Node.js filesystem implementation targeting `.git`.
@@ -80,6 +84,7 @@ The architecture emphasizes:
 3. **`GitParser`:**
    - High-throughput streaming parser for `git log` output using null-byte and custom delimiter tokens.
    - Extracts commit hashes, tree hashes, parent references, author timestamps, author names, emails, and commit subjects.
+   - Parses GPG and OpenSSH cryptographic signature indicators: `%G?` (status), `%GS` (signer identity), and `%GK` (key fingerprint).
 
 ---
 
@@ -129,8 +134,8 @@ The architecture emphasizes:
 
 1. **`CommitFlowMcpServer`:**
    - Implements JSON-RPC 2.0 protocol over standard input/output (stdio).
-   - Exposes tools for issue triage, conflict prediction, staged change analysis, commit searching, and offline repository inspection.
-   - Serves dynamic real-time resources (`commitflow://repo/status`, `commitflow://repo/offline-status`, `commitflow://issues/assigned`, `commitflow://branch/current/diff`).
+   - Exposes tools for issue triage, conflict prediction, staged change analysis, commit searching, revision comparison, lost-commit recovery, repository health analysis, and offline repository inspection.
+   - Serves dynamic real-time resources (`commitflow://repo/status`, `commitflow://repo/offline-status`, `commitflow://reflog/recent`, `commitflow://repo/health`, `commitflow://issues/assigned`, `commitflow://branch/current/diff`).
    - Enforces path containment checks preventing agents from accessing files outside the repository root.
 
 ---

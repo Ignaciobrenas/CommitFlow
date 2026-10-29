@@ -283,6 +283,41 @@ export class CommitFlowMcpServer {
                 },
               },
               {
+                name: 'compare_revisions',
+                description:
+                  'Compare any two commits or revisions, computing cumulative diff stats, additions/deletions per file, and commits between.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    baseHash: { type: 'string', description: 'Base commit SHA or branch name' },
+                    targetHash: { type: 'string', description: 'Target commit SHA or branch name' },
+                  },
+                  required: ['baseHash', 'targetHash'],
+                },
+              },
+              {
+                name: 'restore_lost_commit',
+                description:
+                  'Recover a lost or dangling commit from reflog by creating a new recovery branch at that commit SHA.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    commitHash: { type: 'string', description: 'Commit SHA to restore' },
+                    branchName: { type: 'string', description: 'Name of the branch to create' },
+                  },
+                  required: ['commitHash', 'branchName'],
+                },
+              },
+              {
+                name: 'analyze_repo_health',
+                description:
+                  'Inspect repository storage health: disk footprint of .git/objects, loose objects, packfile count, and dangling commits.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {},
+                },
+              },
+              {
                 name: 'commitflow_get_repo_summary',
                 description:
                   'Get high-level repository analytics: total commits, active branches, total contributors, stash count, and top author rankings.',
@@ -341,6 +376,18 @@ export class CommitFlowMcpServer {
                 name: 'Git Branch & Commit Overview',
                 description: 'Overview of recent commits and active branches.',
                 mimeType: 'text/markdown',
+              },
+              {
+                uri: 'commitflow://reflog/recent',
+                name: 'Recent Reflog Timeline',
+                description: 'Stream of recent HEAD reflog transitions and operations.',
+                mimeType: 'application/json',
+              },
+              {
+                uri: 'commitflow://repo/health',
+                name: 'Repository Storage Health & GC Status',
+                description: 'Detailed object metrics, packfile counts, and dangling commit counts.',
+                mimeType: 'application/json',
               },
             ],
           },
@@ -569,6 +616,42 @@ export class CommitFlowMcpServer {
           break;
         }
 
+        case 'compare_revisions':
+        case 'commitflow_compare_revisions': {
+          if (!args.baseHash || !args.targetHash) {
+            throw new Error('baseHash and targetHash are required');
+          }
+          resultData = await this.gitClient.compareCommits(
+            this.repoRoot,
+            args.baseHash,
+            args.targetHash
+          );
+          break;
+        }
+
+        case 'restore_lost_commit':
+        case 'commitflow_restore_lost_commit': {
+          if (!args.commitHash || !args.branchName) {
+            throw new Error('commitHash and branchName are required');
+          }
+          await this.gitClient.restoreReflogCommit(
+            this.repoRoot,
+            args.commitHash,
+            args.branchName
+          );
+          resultData = {
+            success: true,
+            message: `Successfully created recovery branch '${args.branchName}' at commit ${args.commitHash}`,
+          };
+          break;
+        }
+
+        case 'analyze_repo_health':
+        case 'commitflow_analyze_repo_health': {
+          resultData = await this.gitClient.getRepoHealth(this.repoRoot);
+          break;
+        }
+
         default:
           return {
             jsonrpc: '2.0',
@@ -687,6 +770,14 @@ export class CommitFlowMcpServer {
             )
             .join('\n');
         mimeType = 'text/markdown';
+      } else if (uri === 'commitflow://reflog/recent') {
+        const reflog = await this.gitClient.getReflog(this.repoRoot, 50);
+        contentText = JSON.stringify(reflog, null, 2);
+        mimeType = 'application/json';
+      } else if (uri === 'commitflow://repo/health') {
+        const health = await this.gitClient.getRepoHealth(this.repoRoot);
+        contentText = JSON.stringify(health, null, 2);
+        mimeType = 'application/json';
       } else {
         return {
           jsonrpc: '2.0',

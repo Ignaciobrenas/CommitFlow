@@ -758,7 +758,103 @@ Host *.internal.corp
 
   console.log('  ✔ Penetration Testing & Security Hardening tests passed!');
 
-  console.log('\n🎉 ALL 28 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  // 29. Test GPG & SSH Commit Signature Extraction
+  console.log('\n▶ Testing GPG & SSH Commit Signature Extraction...');
+  const signedLogRaw = `abcdef0123456789abcdef0123456789abcdef01\x1fparent1\x1fAlice\x1falice@example.com\x1f1700000000\x1fAlice\x1falice@example.com\x1f1700000000\x1f\x1fSigned commit\x1fBody\x1fG\x1fAlice Dev <alice@example.com>\x1f4A8B9C0D\x1e` +
+    `1234567890abcdef1234567890abcdef12345678\x1fparent2\x1fBob\x1fbob@example.com\x1f1700000010\x1fBob\x1fbob@example.com\x1f1700000010\x1f\x1fBad sig\x1fBody\x1fB\x1fUnknown\x1fFFFFFFFF\x1e` +
+    `9876543210fedcba9876543210fedcba98765432\x1fparent3\x1fCarol\x1fcarol@example.com\x1f1700000020\x1fCarol\x1fcarol@example.com\x1f1700000020\x1f\x1fNo sig\x1fBody\x1fN\x1f\x1f\x1e`;
+
+  const parsedSignedCommits = GitParser.parseLogOutput(signedLogRaw);
+  assert.strictEqual(parsedSignedCommits.length, 3);
+  assert.strictEqual(parsedSignedCommits[0].signatureStatus, 'valid');
+  assert.strictEqual(parsedSignedCommits[0].signer, 'Alice Dev <alice@example.com>');
+  assert.strictEqual(parsedSignedCommits[0].keyId, '4A8B9C0D');
+  assert.strictEqual(parsedSignedCommits[1].signatureStatus, 'invalid');
+  assert.strictEqual(parsedSignedCommits[2].signatureStatus, 'none');
+  console.log('  ✔ GPG & SSH Commit Signature Extraction tests passed!');
+
+  // 30. Test Reflog Time Machine
+  console.log('\n▶ Testing Reflog Time Machine...');
+  const gitClient = GitClient.getInstance();
+  const reflogEntries = await gitClient.getReflog(process.cwd(), 20);
+  assert.ok(Array.isArray(reflogEntries), 'Reflog entries should be an array');
+  assert.ok(reflogEntries.length > 0, 'Reflog should have at least 1 entry');
+  const firstRef = reflogEntries[0];
+  assert.ok(firstRef.selector.startsWith('HEAD@'), 'Selector should match HEAD@{n}');
+  assert.ok(firstRef.hash.length >= 7, 'Commit hash should be valid');
+  assert.ok(firstRef.action, 'Action should be present');
+  console.log('  ✔ Reflog Time Machine tests passed!');
+
+  // 31. Test Multi-Commit Diff Comparison Engine
+  console.log('\n▶ Testing Multi-Commit Diff Comparison Engine...');
+  const commits = await gitClient.getCommits(process.cwd(), 5);
+  if (commits.length >= 2) {
+    const baseCommit = commits[1].hash;
+    const targetCommit = commits[0].hash;
+    const comparison = await gitClient.compareCommits(process.cwd(), baseCommit, targetCommit);
+    assert.strictEqual(comparison.baseHash, baseCommit);
+    assert.strictEqual(comparison.targetHash, targetCommit);
+    assert.ok(Array.isArray(comparison.files), 'Files should be an array');
+    assert.strictEqual(typeof comparison.totalAdditions, 'number');
+    assert.strictEqual(typeof comparison.totalDeletions, 'number');
+    assert.ok(Array.isArray(comparison.commitsBetween));
+  }
+  console.log('  ✔ Multi-Commit Diff Comparison Engine tests passed!');
+
+  // 32. Test Repository Health & Storage Diagnostics
+  console.log('\n▶ Testing Repository Health & Storage Diagnostics...');
+  const healthMetrics = await gitClient.getRepoHealth(process.cwd());
+  assert.strictEqual(typeof healthMetrics.looseObjectsCount, 'number');
+  assert.strictEqual(typeof healthMetrics.packfilesCount, 'number');
+  assert.strictEqual(typeof healthMetrics.diskSizeBytes, 'number');
+  assert.ok(healthMetrics.diskSizeFormatted.length > 0);
+  assert.strictEqual(typeof healthMetrics.danglingCommitsCount, 'number');
+  console.log('  ✔ Repository Health & Storage Diagnostics tests passed!');
+
+  // 33. Test Extended MCP Tools & Dynamic Resources
+  console.log('\n▶ Testing Extended MCP Tools & Dynamic Resources...');
+  // Tool: analyze_repo_health
+  const healthCallRes = await rpcHandlerFn({
+    jsonrpc: '2.0',
+    id: 101,
+    method: 'tools/call',
+    params: {
+      name: 'analyze_repo_health',
+      arguments: {},
+    },
+  });
+  assert.ok(healthCallRes.result.content[0].text);
+  const mcpHealthData = JSON.parse(healthCallRes.result.content[0].text);
+  assert.strictEqual(typeof mcpHealthData.diskSizeBytes, 'number');
+
+  // Resource: commitflow://reflog/recent
+  const reflogRes = await rpcHandlerFn({
+    jsonrpc: '2.0',
+    id: 102,
+    method: 'resources/read',
+    params: {
+      uri: 'commitflow://reflog/recent',
+    },
+  });
+  assert.ok(reflogRes.result.contents[0].text);
+  const mcpReflog = JSON.parse(reflogRes.result.contents[0].text);
+  assert.ok(Array.isArray(mcpReflog));
+
+  // Resource: commitflow://repo/health
+  const healthRes = await rpcHandlerFn({
+    jsonrpc: '2.0',
+    id: 103,
+    method: 'resources/read',
+    params: {
+      uri: 'commitflow://repo/health',
+    },
+  });
+  assert.ok(healthRes.result.contents[0].text);
+  const mcpHealthRes = JSON.parse(healthRes.result.contents[0].text);
+  assert.strictEqual(typeof mcpHealthRes.looseObjectsCount, 'number');
+  console.log('  ✔ Extended MCP Tools & Dynamic Resources tests passed!');
+
+  console.log('\n🎉 ALL 33 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('❌ Test suite failed:', err);
   process.exit(1);

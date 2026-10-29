@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import {
   BranchParticipation,
   CloudPatch,
+  CommitComparisonResult,
   ContributorStat,
   FileCommitRevision,
   GitAuthor,
@@ -13,10 +14,12 @@ import {
   GitBranch,
   GitCommit,
   GitFileChange,
+  GitReflogEntry,
   GitStash,
   GitWorktree,
   PullRequestInfo,
   RemoteRepoInfo,
+  RepoHealthMetrics,
   RepoStats,
   UserPersonalStats,
 } from './types';
@@ -196,7 +199,7 @@ export class GitClient {
     skip = 0
   ): Promise<GitCommit[]> {
     const format =
-      '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%ct%x1f%D%x1f%s%x1f%b%x1e';
+      '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%ct%x1f%D%x1f%s%x1f%b%x1f%G?%x1f%GS%x1f%GK%x1e';
     const args = [
       'log',
       '--all',
@@ -1712,5 +1715,216 @@ export class GitClient {
         filesChanged: stagedFiles.length,
       },
     };
+  }
+
+  /**
+   * Retrieves chronological reflog entries with offline fallback
+   */
+  public async getReflog(cwd: string, limit = 100): Promise<GitReflogEntry[]> {
+    try {
+      const format = '%gD%x1f%h%x1f%H%x1f%gs%x1f%an%x1f%ae%x1f%at';
+      const output = await this.execute(
+        ['reflog', 'show', '-n', limit.toString(), `--format=${format}`],
+        cwd
+      );
+      const lines = output.split('\n').filter((l) => l.trim().length > 0);
+      return lines.map((line, idx) => {
+        const parts = line.split('\x1f');
+        const selector = parts[0] || `HEAD@{${idx}}`;
+        const shortHash = parts[1] || '';
+        const hash = parts[2] || '';
+        const actionAndMsg = parts[3] || '';
+        const authorName = parts[4] || 'You';
+        const authorEmail = parts[5] || '';
+        const timestamp = parseInt(parts[6] || '0', 10) * 1000;
+        const date = timestamp ? new Date(timestamp) : new Date();
+
+        const colonIdx = actionAndMsg.indexOf(':');
+        const action = colonIdx !== -1 ? actionAndMsg.slice(0, colonIdx).trim() : 'action';
+        const message = colonIdx !== -1 ? actionAndMsg.slice(colonIdx + 1).trim() : actionAndMsg.trim();
+
+        return {
+          index: idx,
+          hash,
+          shortHash,
+          selector,
+          action,
+          message,
+          author: {
+            name: authorName,
+            email: authorEmail,
+            date,
+            relativeTime: GitParser.formatRelativeTime(date),
+            avatarUrl: this.avatarService.getAvatarUrl(authorName, authorEmail),
+          },
+        };
+      });
+    } catch {
+      const offline = this.fsReader.readReflog(path.join(cwd, '.git'), limit);
+      return offline.map((entry, idx) => ({
+        index: idx,
+        hash: entry.hash,
+        shortHash: entry.hash.slice(0, 7),
+        selector: `HEAD@{${idx}}`,
+        action: entry.action,
+        message: entry.message,
+        author: {
+          name: entry.author,
+          email: entry.email,
+          date: entry.date,
+          relativeTime: GitParser.formatRelativeTime(entry.date),
+          avatarUrl: this.avatarService.getAvatarUrl(entry.author, entry.email),
+        },
+      }));
+    }
+  }
+
+  /**
+   * Recovers a lost commit from reflog by creating a new branch at that commit SHA
+   */
+  public async restoreReflogCommit(cwd: string, commitHash: string, branchName: string): Promise<void> {
+    await this.execute(['checkout', '-b', branchName, commitHash], cwd);
+  }
+
+  /**
+   * Compares two arbitrary commits in the graph, computing cumulative file diffs and commits between
+   */
+  public async compareCommits(
+    cwd: string,
+    baseHash: string,
+    targetHash: string
+  ): Promise<CommitComparisonResult> {
+    const statOutput = await this.execute(
+      ['diff', '--numstat', `${baseHash}..${targetHash}`],
+      cwd
+    );
+    const files: CommitComparisonResult['files'] = [];
+    let totalAdditions = 0;
+    let totalDeletions = 0;
+
+    const lines = statOutput.split('\n').filter((l) => l.trim().length > 0);
+    for (const line of lines) {
+      const parts = line.split('\t');
+      if (parts.length >= 3) {
+        const adds = parts[0] === '-' ? 0 : parseInt(parts[0], 10) || 0;
+        const dels = parts[1] === '-' ? 0 : parseInt(parts[1], 10) || 0;
+        const filePath = parts[2].trim();
+        totalAdditions += adds;
+        totalDeletions += dels;
+        files.push({
+          status: adds > 0 && dels === 0 ? 'A' : dels > 0 && adds === 0 ? 'D' : 'M',
+          path: filePath,
+          additions: adds,
+          deletions: dels,
+        });
+      }
+    }
+
+    let commitsBetween: GitCommit[] = [];
+    try {
+      const format =
+        '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%ct%x1f%D%x1f%s%x1f%b%x1f%G?%x1f%GS%x1f%GK%x1e';
+      const logRaw = await this.execute(
+        ['log', '--topo-order', `--format=${format}`, `${baseHash}..${targetHash}`],
+        cwd
+      );
+      commitsBetween = GitParser.parseLogOutput(logRaw);
+    } catch {}
+
+    return {
+      baseHash,
+      targetHash,
+      baseShortHash: baseHash.slice(0, 7),
+      targetShortHash: targetHash.slice(0, 7),
+      files,
+      totalAdditions,
+      totalDeletions,
+      commitsBetween,
+    };
+  }
+
+  /**
+   * Inspects .git directory size, packfiles, and object metrics
+   */
+  public async getRepoHealth(cwd: string): Promise<RepoHealthMetrics> {
+    const gitDir = path.join(cwd, '.git');
+    const objectsDir = path.join(gitDir, 'objects');
+    const packDir = path.join(objectsDir, 'pack');
+
+    let looseObjectsCount = 0;
+    let packfilesCount = 0;
+    let diskSizeBytes = 0;
+
+    const calcDirSize = (d: string) => {
+      if (!fs.existsSync(d)) return;
+      try {
+        const entries = fs.readdirSync(d, { withFileTypes: true });
+        for (const e of entries) {
+          const full = path.join(d, e.name);
+          if (e.isDirectory()) {
+            calcDirSize(full);
+          } else if (e.isFile()) {
+            try {
+              const s = fs.statSync(full);
+              diskSizeBytes += s.size;
+            } catch {}
+          }
+        }
+      } catch {}
+    };
+
+    calcDirSize(objectsDir);
+
+    // Count loose objects in 2-char hex folders
+    try {
+      if (fs.existsSync(objectsDir)) {
+        const dirs = fs.readdirSync(objectsDir);
+        for (const d of dirs) {
+          if (/^[0-9a-f]{2}$/i.test(d)) {
+            const looseInSub = fs.readdirSync(path.join(objectsDir, d));
+            looseObjectsCount += looseInSub.length;
+          }
+        }
+      }
+    } catch {}
+
+    // Count packfiles
+    try {
+      if (fs.existsSync(packDir)) {
+        const packEntries = fs.readdirSync(packDir);
+        packfilesCount = packEntries.filter((f) => f.endsWith('.pack')).length;
+      }
+    } catch {}
+
+    // Dangling commits check
+    let danglingCommitsCount = 0;
+    try {
+      const fsckOut = await this.execute(['fsck', '--lost-found', '--unreachable'], cwd);
+      const danglingLines = fsckOut.split('\n').filter((l) => l.includes('dangling commit'));
+      danglingCommitsCount = danglingLines.length;
+    } catch {}
+
+    const formatBytes = (bytes: number): string => {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    };
+
+    return {
+      looseObjectsCount,
+      packfilesCount,
+      packedObjectsApprox: packfilesCount * 250,
+      diskSizeBytes,
+      diskSizeFormatted: formatBytes(diskSizeBytes),
+      danglingCommitsCount,
+    };
+  }
+
+  /**
+   * Executes git gc --prune=now to optimize repository storage
+   */
+  public async runRepoGc(cwd: string): Promise<string> {
+    return await this.execute(['gc', '--prune=now', '--quiet'], cwd);
   }
 }

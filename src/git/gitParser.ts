@@ -108,6 +108,26 @@ export class GitParser {
 
       const refs = GitParser.parseRefs(refsRaw);
 
+      let signatureStatus: 'valid' | 'invalid' | 'untrusted' | 'none' | undefined;
+      let signer: string | undefined;
+      let keyId: string | undefined;
+
+      if (parts.length >= 14) {
+        const sigFlag = parts[11]?.trim();
+        signer = parts[12]?.trim() || undefined;
+        keyId = parts[13]?.trim() || undefined;
+
+        if (sigFlag === 'G') {
+          signatureStatus = 'valid';
+        } else if (sigFlag === 'B' || sigFlag === 'R' || sigFlag === 'E') {
+          signatureStatus = 'invalid';
+        } else if (sigFlag === 'U' || sigFlag === 'X' || sigFlag === 'Y') {
+          signatureStatus = 'untrusted';
+        } else {
+          signatureStatus = 'none';
+        }
+      }
+
       commits.push({
         hash: hash.trim(),
         shortHash: hash.trim().slice(0, 7),
@@ -117,6 +137,9 @@ export class GitParser {
         subject: subject || '(no commit message)',
         body: body ? body.trim() : '',
         refs,
+        signatureStatus,
+        signer,
+        keyId,
       });
     }
 

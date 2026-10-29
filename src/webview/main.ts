@@ -88,6 +88,22 @@ const btnThemeMode = document.getElementById('btn-theme-mode') as HTMLButtonElem
 const themePickerPopover = document.getElementById('theme-picker-popover') as HTMLElement | null;
 const btnChangelog = document.getElementById('btn-changelog') as HTMLButtonElement | null;
 const btnUndoCommit = document.getElementById('btn-undo-commit') as HTMLButtonElement | null;
+const btnReflog = document.getElementById('btn-reflog') as HTMLButtonElement | null;
+const btnRepoHealth = document.getElementById('btn-repo-health') as HTMLButtonElement | null;
+
+// Diagnostics & Time Machine Modals
+const reflogModal = document.getElementById('reflog-modal') as HTMLElement | null;
+const reflogModalClose = document.getElementById('reflog-modal-close') as HTMLButtonElement | null;
+const reflogModalBody = document.getElementById('reflog-modal-body') as HTMLElement | null;
+
+const repoHealthModal = document.getElementById('repo-health-modal') as HTMLElement | null;
+const repoHealthModalClose = document.getElementById('repo-health-modal-close') as HTMLButtonElement | null;
+const repoHealthModalBody = document.getElementById('repo-health-modal-body') as HTMLElement | null;
+
+const comparisonModal = document.getElementById('comparison-modal') as HTMLElement | null;
+const comparisonModalClose = document.getElementById('comparison-modal-close') as HTMLButtonElement | null;
+const comparisonModalBody = document.getElementById('comparison-modal-body') as HTMLElement | null;
+const comparisonModalTitle = document.getElementById('comparison-modal-title') as HTMLElement | null;
 
 // Tag Modal
 const tagCreateModal = document.getElementById('tag-create-modal') as HTMLElement | null;
@@ -336,6 +352,18 @@ window.addEventListener('message', (event) => {
       pullRequests = message.payload || [];
       updateTabBadges();
       renderPullRequests();
+      break;
+
+    case 'reflogData':
+      renderReflogModal(message.payload || []);
+      break;
+
+    case 'repoHealthData':
+      renderRepoHealthModal(message.payload);
+      break;
+
+    case 'comparisonData':
+      renderComparisonModal(message.payload);
       break;
 
     case 'fileHistoryData':
@@ -777,6 +805,14 @@ function renderGraph(): void {
       subjectSpan.title = node.commit.subject;
       cardTop.appendChild(subjectSpan);
 
+      if (node.commit.signatureStatus === 'valid') {
+        const sigBadge = document.createElement('span');
+        sigBadge.className = 'commit-sig-badge valid';
+        sigBadge.title = `Firma digital verificada (GPG/SSH)\nFirmante: ${node.commit.signer || 'Desconocido'}\nKey ID: ${node.commit.keyId || 'N/A'}`;
+        sigBadge.innerHTML = `<i class="codicon codicon-verified" style="font-size:11px;"></i>`;
+        cardTop.appendChild(sigBadge);
+      }
+
       // Line 2: Avatar + Author + Relative Time + Hash
       const cardBottom = document.createElement('div');
       cardBottom.className = 'commit-card-bottom';
@@ -856,6 +892,14 @@ function renderGraph(): void {
       subjectSpan.innerHTML = formatCommitSubjectWithIssues(node.commit.subject);
       subjectSpan.title = node.commit.subject;
       infoCol.appendChild(subjectSpan);
+
+      if (node.commit.signatureStatus === 'valid') {
+        const sigBadge = document.createElement('span');
+        sigBadge.className = 'commit-sig-badge valid';
+        sigBadge.title = `Firma digital verificada (GPG/SSH)\nFirmante: ${node.commit.signer || 'Desconocido'}\nKey ID: ${node.commit.keyId || 'N/A'}`;
+        sigBadge.innerHTML = `<i class="codicon codicon-verified" style="font-size:11px;"></i>`;
+        infoCol.appendChild(sigBadge);
+      }
 
       // 3. Author Column
       const authorCol = document.createElement('div');
@@ -1155,12 +1199,32 @@ function selectCommit(node: GraphNode): void {
       </div>
     </div>
 
+    ${
+      commit.signatureStatus === 'valid'
+        ? `<div class="sig-verified-banner">
+             <i class="codicon codicon-verified" style="color:#10b981; font-size:16px;"></i>
+             <div style="display:flex; flex-direction:column;">
+               <span style="font-weight:600; font-size:var(--font-size-xs); color:#10b981;">Firma Digital Verificada (GPG/SSH)</span>
+               <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(commit.signer || 'Firmante verificado')} ${commit.keyId ? `(Key ID: ${escapeHtml(commit.keyId)})` : ''}</span>
+             </div>
+           </div>`
+        : commit.signatureStatus === 'invalid'
+        ? `<div class="sig-invalid-banner">
+             <i class="codicon codicon-error" style="color:#ef4444; font-size:16px;"></i>
+             <span style="font-size:var(--font-size-xs); color:#ef4444; font-weight:600;">Firma Digital Inválida</span>
+           </div>`
+        : ''
+    }
+
     <div style="display:flex; gap:6px; flex-wrap:wrap;">
       <button class="btn-icon" id="btn-copy-sha">
         <i class="codicon codicon-copy"></i> ${tr('drawer.copySha')} (${commit.shortHash})
       </button>
       <button class="btn-icon" id="btn-copy-msg">
         <i class="codicon codicon-comment"></i> ${tr('drawer.copyMsg')}
+      </button>
+      <button class="btn-icon" id="btn-drawer-compare" title="Comparar con HEAD">
+        <i class="codicon codicon-diff"></i> Comparar con HEAD
       </button>
       <button class="btn-icon" id="btn-drawer-cherry-pick" title="${tr('drawer.cherryPick')}">
         <i class="codicon codicon-git-pull-request-go-to-changes"></i> ${tr('drawer.cherryPick')}
@@ -1214,6 +1278,13 @@ function selectCommit(node: GraphNode): void {
   document.getElementById('btn-copy-msg')?.addEventListener('click', () => {
     const fullMsg = commit.subject + (commit.body ? '\n\n' + commit.body : '');
     vscode.postMessage({ command: 'copyToClipboard', payload: fullMsg });
+  });
+
+  document.getElementById('btn-drawer-compare')?.addEventListener('click', () => {
+    vscode.postMessage({
+      command: 'compareCommits',
+      payload: { baseHash: commit.hash, targetHash: 'HEAD' },
+    });
   });
 
   document.getElementById('btn-drawer-cherry-pick')?.addEventListener('click', () => {
@@ -1762,6 +1833,235 @@ function renderStashModalBody(): void {
   });
 }
 
+// Git Reflog Time Machine Modal
+function openReflogModal(): void {
+  vscode.postMessage({ command: 'requestReflog', payload: { limit: 50 } });
+}
+
+function closeReflogModal(): void {
+  reflogModal?.classList.remove('open');
+}
+
+function renderReflogModal(entries: GitReflogEntry[]): void {
+  if (!reflogModal || !reflogModalBody) return;
+  if (!entries || entries.length === 0) {
+    reflogModalBody.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted);">No hay entradas de reflog disponibles.</div>`;
+    reflogModal.classList.add('open');
+    return;
+  }
+
+  reflogModalBody.innerHTML = `
+    <div style="font-size:var(--font-size-xs); color:var(--text-muted); margin-bottom:8px;">
+      El Git Reflog registra cada movimiento de HEAD (checkouts, merges, resets, commits huérfanos). Puedes restaurar cualquier commit perdido en una nueva rama con 1-clic.
+    </div>
+    <div class="reflog-list">
+      ${entries
+        .map((entry) => {
+          let actionClass = 'commit';
+          const actLower = (entry.action || '').toLowerCase();
+          if (actLower.includes('checkout')) actionClass = 'checkout';
+          else if (actLower.includes('merge')) actionClass = 'merge';
+          else if (actLower.includes('reset')) actionClass = 'reset';
+
+          return `
+            <div class="reflog-entry-item">
+              <div class="reflog-entry-meta">
+                <div class="reflog-entry-row1">
+                  <span class="reflog-selector-pill">${escapeHtml(entry.selector)}</span>
+                  <span class="reflog-action-badge ${actionClass}">${escapeHtml(entry.action)}</span>
+                  <span class="commit-hash-badge">${entry.hash.slice(0, 7)}</span>
+                  <span style="font-size:var(--font-size-xs); color:var(--text-muted);">${escapeHtml(entry.date)}</span>
+                </div>
+                <div class="reflog-entry-message" title="${escapeHtml(entry.message)}">${escapeHtml(entry.message)}</div>
+              </div>
+              <button class="btn-sm btn-primary btn-restore-reflog" data-hash="${entry.hash}" title="Crear rama desde este commit">
+                <i class="codicon codicon-history"></i> Recuperar
+              </button>
+            </div>
+          `;
+        })
+        .join('')}
+    </div>
+  `;
+
+  reflogModalBody.querySelectorAll('.btn-restore-reflog').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const hash = btn.getAttribute('data-hash');
+      if (hash) {
+        const defaultBranchName = `recovered-${hash.slice(0, 7)}`;
+        const branchName = prompt('Nombre de la nueva rama para restaurar el commit:', defaultBranchName);
+        if (branchName && branchName.trim()) {
+          vscode.postMessage({
+            command: 'restoreReflogCommit',
+            payload: { commitHash: hash, branchName: branchName.trim() },
+          });
+          closeReflogModal();
+        }
+      }
+    });
+  });
+
+  reflogModal.classList.add('open');
+}
+
+// Repository Health & Storage Diagnostics Modal
+function openRepoHealthModal(): void {
+  vscode.postMessage({ command: 'requestRepoHealth' });
+}
+
+function closeRepoHealthModal(): void {
+  repoHealthModal?.classList.remove('open');
+}
+
+function renderRepoHealthModal(health: RepoHealthMetrics): void {
+  if (!repoHealthModal || !repoHealthModalBody) return;
+  if (!health) return;
+
+  const isWarning = health.looseObjectsCount > 500 || health.danglingCommitsCount > 20;
+
+  repoHealthModalBody.innerHTML = `
+    <div class="health-diagnostics-grid">
+      <div class="health-metric-tile">
+        <div class="health-metric-label">Espacio en Disco</div>
+        <div class="health-metric-value">${escapeHtml(health.diskSizeFormatted)}</div>
+      </div>
+      <div class="health-metric-tile">
+        <div class="health-metric-label">Objetos Sueltos</div>
+        <div class="health-metric-value">${health.looseObjectsCount}</div>
+      </div>
+      <div class="health-metric-tile">
+        <div class="health-metric-label">Archivos Pack</div>
+        <div class="health-metric-value">${health.packfilesCount}</div>
+      </div>
+      <div class="health-metric-tile">
+        <div class="health-metric-label">Commits Huérfanos</div>
+        <div class="health-metric-value">${health.danglingCommitsCount}</div>
+      </div>
+    </div>
+
+    <div class="health-status-banner ${isWarning ? 'warning' : ''}">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <i class="codicon ${isWarning ? 'codicon-warning' : 'codicon-check-all'}" style="font-size:20px; color:${isWarning ? 'var(--accent-amber)' : 'var(--accent-emerald)'};"></i>
+        <div style="font-size:var(--font-size-sm);">
+          <strong>${isWarning ? 'Atención de Mantenimiento Requerida' : 'Estado del Repositorio Óptimo'}</strong>
+          <div style="color:var(--text-muted); font-size:var(--font-size-xs); margin-top:2px;">
+            ${
+              isWarning
+                ? 'Se han detectado objetos sueltos o huérfanos. Ejecutar Git Garbage Collection compactará los packs y optimizará las consultas.'
+                : 'El almacenamiento está compactado y las estructuras de objetos .git responden con máxima velocidad.'
+            }
+          </div>
+        </div>
+      </div>
+      <button id="btn-run-gc-action" class="btn-sm btn-primary" style="white-space:nowrap;">
+        <i class="codicon codicon-zap"></i> Optimizar (git gc)
+      </button>
+    </div>
+  `;
+
+  document.getElementById('btn-run-gc-action')?.addEventListener('click', () => {
+    vscode.postMessage({ command: 'runRepoGc' });
+    closeRepoHealthModal();
+  });
+
+  repoHealthModal.classList.add('open');
+}
+
+// Multi-Commit Diff Comparison Modal
+function closeComparisonModal(): void {
+  comparisonModal?.classList.remove('open');
+}
+
+function renderComparisonModal(comparison: CommitComparisonResult): void {
+  if (!comparisonModal || !comparisonModalBody) return;
+  if (!comparison) return;
+
+  if (comparisonModalTitle) {
+    comparisonModalTitle.textContent = `Comparación: ${comparison.baseHash.slice(0, 7)} ➔ ${comparison.targetHash.slice(0, 7)}`;
+  }
+
+  const filesHtml = comparison.files
+    .map(
+      (f) => `
+      <div class="comparison-file-item" data-path="${escapeHtml(f.path)}">
+        <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
+          <i class="codicon codicon-file"></i>
+          <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(f.path)}</span>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
+          <span class="diff-additions-pill">+${f.additions}</span>
+          <span class="diff-deletions-pill">-${f.deletions}</span>
+        </div>
+      </div>
+    `
+    )
+    .join('');
+
+  const commitsBetweenHtml = (comparison.commitsBetween || [])
+    .map(
+      (c) => `
+      <div style="display:flex; align-items:center; gap:8px; padding:4px 0; font-size:var(--font-size-xs);">
+        <span class="commit-hash-badge">${c.slice(0, 7)}</span>
+        <span style="color:var(--text-muted);">${c}</span>
+      </div>
+    `
+    )
+    .join('');
+
+  comparisonModalBody.innerHTML = `
+    <div class="comparison-summary-header">
+      <div>
+        <div style="font-weight:600; font-size:var(--font-size-sm);">
+          ${comparison.files.length} archivos modificados
+        </div>
+        <div style="color:var(--text-muted); font-size:var(--font-size-xs); margin-top:2px;">
+          ${(comparison.commitsBetween || []).length} commits en este rango
+        </div>
+      </div>
+      <div class="comparison-stats-pills">
+        <span class="diff-additions-pill">+${comparison.totalAdditions}</span>
+        <span class="diff-deletions-pill">-${comparison.totalDeletions}</span>
+      </div>
+    </div>
+
+    ${
+      comparison.commitsBetween && comparison.commitsBetween.length > 0
+        ? `
+        <div style="background:var(--bg-glass); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:8px 12px; margin-top:8px;">
+          <div style="font-weight:600; font-size:var(--font-size-xs); color:var(--text-muted); margin-bottom:4px;">Commits incluidos en el rango:</div>
+          <div style="max-height:100px; overflow-y:auto;">${commitsBetweenHtml}</div>
+        </div>
+      `
+        : ''
+    }
+
+    <div style="margin-top:10px;">
+      <div style="font-weight:600; font-size:var(--font-size-xs); color:var(--text-muted); margin-bottom:6px;">Archivos afectados (haz clic para ver diff):</div>
+      <div class="comparison-files-list">
+        ${filesHtml || '<div style="color:var(--text-muted); font-size:var(--font-size-sm);">Sin cambios detectados entre estas dos revisiones.</div>'}
+      </div>
+    </div>
+  `;
+
+  comparisonModalBody.querySelectorAll('.comparison-file-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      const filePath = item.getAttribute('data-path');
+      if (filePath) {
+        vscode.postMessage({
+          command: 'openDiff',
+          payload: {
+            filePath,
+            commitHash: comparison.targetHash,
+            parentHash: comparison.baseHash,
+          },
+        });
+      }
+    });
+  });
+
+  comparisonModal.classList.add('open');
+}
+
 // ==========================================================================
 // CommitFlow v0.4.5: Layout Switcher, Themes, Dev Tools, File History, PRs, Worktrees, Cloud Patches
 // ==========================================================================
@@ -2279,6 +2579,14 @@ stashModalClose?.addEventListener('click', closeStashModal);
 btnSettings?.addEventListener('click', openSettingsModal);
 settingsModalClose?.addEventListener('click', closeSettingsModal);
 
+btnReflog?.addEventListener('click', openReflogModal);
+reflogModalClose?.addEventListener('click', closeReflogModal);
+
+btnRepoHealth?.addEventListener('click', openRepoHealthModal);
+repoHealthModalClose?.addEventListener('click', closeRepoHealthModal);
+
+comparisonModalClose?.addEventListener('click', closeComparisonModal);
+
 btnPopout?.addEventListener('click', () => {
   vscode.postMessage({ command: 'openFullPanel' });
 });
@@ -2302,6 +2610,9 @@ window.addEventListener('keydown', (e) => {
     closePatchCreateModal();
     closePatchApplyModal();
     closeTagModal();
+    closeReflogModal();
+    closeRepoHealthModal();
+    closeComparisonModal();
     layoutPickerPopover?.classList.remove('visible');
     themePickerPopover?.classList.remove('visible');
     hideHoverPopover();

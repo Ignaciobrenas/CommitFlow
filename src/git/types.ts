@@ -21,6 +21,9 @@ export interface GitCommit {
   subject: string;
   body: string;
   refs: GitCommitRef[];
+  signatureStatus?: 'valid' | 'invalid' | 'untrusted' | 'none';
+  signer?: string;
+  keyId?: string;
 }
 
 export interface GitBranch {
@@ -319,7 +322,12 @@ export interface WebviewToExtensionMessage {
     | 'requestIssueDetails'
     | 'createIssueComment'
     | 'setIssueState'
-    | 'openInFork';
+    | 'openInFork'
+    | 'requestReflog'
+    | 'restoreReflogCommit'
+    | 'compareCommits'
+    | 'requestRepoHealth'
+    | 'runRepoGc';
   payload?: any;
 }
 
@@ -343,7 +351,47 @@ export interface ExtensionToWebviewMessage {
     | 'issueDetailsData'
     | 'issueCommentAdded'
     | 'forkStatus'
+    | 'reflogData'
+    | 'comparisonData'
+    | 'repoHealthData'
     | 'error'
     | 'loading';
   payload?: any;
+}
+
+export interface GitReflogEntry {
+  index: number;
+  hash: string;
+  shortHash: string;
+  selector: string;
+  action: string;
+  message: string;
+  author: GitAuthor;
+  isDangling?: boolean;
+}
+
+export interface RepoHealthMetrics {
+  looseObjectsCount: number;
+  packfilesCount: number;
+  packedObjectsApprox: number;
+  diskSizeFormatted: string;
+  diskSizeBytes: number;
+  danglingCommitsCount: number;
+  lastGcTimestamp?: Date;
+}
+
+export interface CommitComparisonResult {
+  baseHash: string;
+  targetHash: string;
+  baseShortHash: string;
+  targetShortHash: string;
+  files: Array<{
+    status: 'A' | 'M' | 'D' | 'R' | 'C' | 'U';
+    path: string;
+    additions: number;
+    deletions: number;
+  }>;
+  totalAdditions: number;
+  totalDeletions: number;
+  commitsBetween: GitCommit[];
 }
