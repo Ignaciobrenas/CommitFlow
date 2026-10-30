@@ -1,0 +1,72 @@
+name: PR Approval Gate (Owner Only)
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+jobs:
+  verify-owner-approval:
+    name: Verify Owner Approval (@Ignaciobrenas)
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+    steps:
+      - name: Verify PR Approval from Repository Owner
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = 'Ignaciobrenas';
+            const pr = context.payload.pull_request;
+            
+            if (!pr) {
+              core.setFailed('This workflow must run within a pull_request or pull_request_review event context.');
+              return;
+            }
+
+            const prNumber = pr.number;
+            const prAuthor = pr.user.login;
+
+            core.info(`Evaluating PR #${prNumber} created by @${prAuthor}`);
+
+            // If the PR was authored directly by the repository owner, pass automatically
+            if (prAuthor.toLowerCase() === owner.toLowerCase()) {
+              core.info(`PR #${prNumber} authored directly by repository owner @${owner}. Approval gate passed!`);
+              return;
+            }
+
+            // Retrieve all reviews for this PR
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            // Filter reviews submitted by the owner
+            const ownerReviews = reviews.filter(
+              (r) => r.user && r.user.login.toLowerCase() === owner.toLowerCase()
+            );
+
+            if (ownerReviews.length === 0) {
+              core.setFailed(
+                `PR #${prNumber} has not been reviewed by repository owner @${owner}. Only @${owner} can approve pull requests to this repository.`
+              );
+              return;
+            }
+
+            const latestReview = ownerReviews[ownerReviews.length - 1];
+            core.info(`Latest review by @${owner} state: ${latestReview.state}`);
+
+            if (latestReview.state === 'APPROVED') {
+              core.info(`PR #${prNumber} has been verified and APPROVED by repository owner @${owner}. Merge gate open!`);
+            } else if (latestReview.state === 'CHANGES_REQUESTED') {
+              core.setFailed(
+                `Repository owner @${owner} has requested changes on PR #${prNumber}. Changes must be addressed and re-approved.`
+              );
+            } else {
+              core.setFailed(
+                `PR #${prNumber} is awaiting explicit APPROVED review from repository owner @${owner} (Current owner review state: ${latestReview.state}).`
+              );
+            }

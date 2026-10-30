@@ -1,0 +1,4 @@
+# CommitFlow - Global Repository Code Ownership
+# Defines that only the repository owner (@Ignaciobrenas) has review and approval authority.
+
+* @Ignaciobrenas

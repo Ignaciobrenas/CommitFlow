@@ -1942,7 +1942,7 @@ export class GitClient {
       return {
         isActive: false,
         goodCommits: [],
-        badCommits: [],
+        badCommit: undefined,
       };
     }
 
@@ -2002,9 +2002,11 @@ export class GitClient {
    */
   public async stepBisect(
     cwd: string,
-    action: 'good' | 'bad' | 'skip'
+    action: 'good' | 'bad' | 'skip',
+    commitHash?: string
   ): Promise<{ status: GitBisectStatus; message: string; isFinished: boolean; firstBadCommit?: string }> {
-    const output = await this.execute(['bisect', action], cwd);
+    const args = commitHash ? ['bisect', action, commitHash] : ['bisect', action];
+    const output = await this.execute(args, cwd);
     let isFinished = false;
     let firstBadCommit: string | undefined;
 

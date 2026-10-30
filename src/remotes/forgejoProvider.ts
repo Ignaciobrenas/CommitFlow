@@ -437,7 +437,9 @@ export class ForgejoProvider implements RemoteProvider {
         const rawPulls: any[] = await res.json();
         const prs = rawPulls.map((raw) => {
           const isDraft = raw.draft === true;
-          const state = isDraft ? 'draft' : (raw.state === 'closed' ? (raw.merged ? 'merged' : 'closed') : 'open');
+          const state: 'open' | 'closed' | 'merged' | 'draft' = isDraft
+            ? 'draft'
+            : (raw.state === 'closed' ? (raw.merged ? 'merged' : 'closed') : 'open');
           const isBlocked = raw.mergeable === false;
           const isReady = !isDraft && raw.mergeable === true;
           return {

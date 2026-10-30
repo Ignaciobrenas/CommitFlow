@@ -1,18 +1,23 @@
 import {
+  CherryPickPreviewResult,
   CloudPatch,
+  CommitComparisonResult,
   CommitFlowSettings,
   ContributorStat,
   FileCommitRevision,
+  GitBisectStatus,
   GitBranch,
   GitCommit,
   GitFileChange,
   GitHubRepoInfo,
+  GitReflogEntry,
   GitStash,
   GitWorktree,
   GraphNode,
   LayoutMode,
   PullRequestInfo,
   RemoteRepoInfo,
+  RepoHealthMetrics,
   RepoStats,
   ThemeMode,
   UpstreamStatus,
@@ -356,7 +361,7 @@ window.addEventListener('message', (event) => {
     case 'bisectStatusData':
       bisectStatus = message.payload || null;
       updateBisectBanner();
-      renderTable();
+      renderGraph();
       break;
 
     case 'cherryPickPreviewData':
@@ -894,7 +899,7 @@ function renderGraph(): void {
     );
     const isBisectGood = Boolean(
       bisectStatus?.isActive &&
-        bisectStatus.goodCommits.some((h) => h === node.commit.hash || node.commit.hash.startsWith(h))
+        bisectStatus.goodCommits.some((h: string) => h === node.commit.hash || node.commit.hash.startsWith(h))
     );
     const isBisectBad = Boolean(
       bisectStatus?.isActive &&
@@ -2070,7 +2075,7 @@ function renderReflogModal(entries: GitReflogEntry[]): void {
                   <span class="reflog-selector-pill">${escapeHtml(entry.selector)}</span>
                   <span class="reflog-action-badge ${actionClass}">${escapeHtml(entry.action)}</span>
                   <span class="commit-hash-badge">${entry.hash.slice(0, 7)}</span>
-                  <span style="font-size:var(--font-size-xs); color:var(--text-muted);">${escapeHtml(entry.date)}</span>
+                  <span style="font-size:var(--font-size-xs); color:var(--text-muted);">${escapeHtml(entry.author?.relativeTime || '')}</span>
                 </div>
                 <div class="reflog-entry-message" title="${escapeHtml(entry.message)}">${escapeHtml(entry.message)}</div>
               </div>
@@ -2182,7 +2187,7 @@ function renderComparisonModal(comparison: CommitComparisonResult): void {
 
   const filesHtml = comparison.files
     .map(
-      (f) => `
+      (f: any) => `
       <div class="comparison-file-item" data-path="${escapeHtml(f.path)}">
         <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
           <i class="codicon codicon-file"></i>
@@ -2199,10 +2204,10 @@ function renderComparisonModal(comparison: CommitComparisonResult): void {
 
   const commitsBetweenHtml = (comparison.commitsBetween || [])
     .map(
-      (c) => `
+      (c: any) => `
       <div style="display:flex; align-items:center; gap:8px; padding:4px 0; font-size:var(--font-size-xs);">
-        <span class="commit-hash-badge">${c.slice(0, 7)}</span>
-        <span style="color:var(--text-muted);">${c}</span>
+        <span class="commit-hash-badge">${c.shortHash || (typeof c === 'string' ? c.slice(0, 7) : c.hash?.slice(0, 7))}</span>
+        <span style="color:var(--text-muted);">${escapeHtml(typeof c === 'string' ? c : (c.subject || c.message || ''))}</span>
       </div>
     `
     )
@@ -2333,7 +2338,7 @@ function renderCherryPickForecastModal(preview: CherryPickPreviewResult): void {
         <div class="conflict-file-list">
           ${preview.conflicts
             .map(
-              (f) => `
+              (f: string) => `
             <div class="conflict-file-item">
               <i class="codicon codicon-diff-modified"></i>
               <span>${escapeHtml(f)}</span>

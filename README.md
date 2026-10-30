@@ -1,20 +1,70 @@
 <p align="center">
-  <img src="resources/commitflow-logo-color.png" width="160" height="160" alt="CommitFlow Logo" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="resources/commitflow-logotipo-white.svg">
+    <source media="(prefers-color-scheme: light)" srcset="resources/commitflow-isotipo-color.svg">
+    <img src="resources/commitflow-isotipo-color.svg" alt="CommitFlow Logo" width="340" />
+  </picture>
 </p>
 
 <h1 align="center">CommitFlow</h1>
 
 <p align="center">
-  <strong>Enterprise-Grade Git Graph Visualization, Direct Filesystem Engine, Multi-Provider Hub, and Model Context Protocol Server for Visual Studio Code.</strong>
+  <strong>Enterprise Git Graph Visualization, Direct Filesystem Engine, Multi-Provider Hub & Model Context Protocol (MCP) Server for Visual Studio Code</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Ignaciobrenas/CommitFlow/actions"><img src="https://img.shields.io/badge/Build-Passing-10b981?style=flat-square&logo=githubactions&logoColor=white" alt="Build Status" /></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/Marketplace-v0.4.6-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-6366f1?style=flat-square" alt="License" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.4.6-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
+  <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/CI_Gate-Passing-10b981?style=flat-square&logo=githubactions&logoColor=white" alt="CI Status" /></a>
+  <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/pr-approval-gate.yml"><img src="https://img.shields.io/badge/PR_Gate-Owner_Protected-6366f1?style=flat-square&logo=github&logoColor=white" alt="PR Approval Gate" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square" alt="License" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.6_Strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js" /></a>
+  <a href="PRIVACY.md"><img src="https://img.shields.io/badge/Telemetry-Zero_Private-14b8a6?style=flat-square" alt="Privacy" /></a>
+  <a href="#model-context-protocol-mcp-server"><img src="https://img.shields.io/badge/MCP-Protocol_2.0-8b5cf6?style=flat-square&logo=anthropic&logoColor=white" alt="Model Context Protocol" /></a>
 </p>
+
+<p align="center">
+  <a href="#installation-and-prerequisites">🚀 Installation</a> •
+  <a href="#core-features">✨ Features</a> •
+  <a href="#architectural-overview">🏛 Architecture</a> •
+  <a href="#configuration-reference">⚙️ Configuration</a> •
+  <a href="#model-context-protocol-mcp-setup">🤖 AI & MCP</a> •
+  <a href="https://github.com/Ignaciobrenas/CommitFlow/issues">🐛 Issues</a>
+</p>
+
+---
+
+<table width="100%">
+  <tr>
+    <td width="50%" valign="top">
+      <h3>⚡ Direct Filesystem Engine</h3>
+      <p>Reads <code>.git</code> metadata directly from disk with <b>zero child processes</b>. Instantaneous startup, offline readiness, and uninterrupted operation even if Git CLI is missing.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>🎨 Topological Spline DAG</h3>
+      <p>Continuous cubic Bézier lanes with zero line crossings, integrated stashes, lightweight/annotated tags, commit signatures, and adaptive multi-dock placement.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🌐 Unified Remote Provider Hub</h3>
+      <p>Deep native integration for <b>Forgejo</b>, <b>Gitea</b>, <b>GitHub</b>, and <b>GitLab</b>. Read/write issues, pull request triage, and automatic <code>~/.ssh/config</code> alias parsing.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>🤖 Built-in MCP Server</h3>
+      <p>Native JSON-RPC 2.0 Model Context Protocol stdio server empowering AI agents (Cursor, Claude, Antigravity) with structured Git tools and real-time repo resources.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>⏳ Reflog Time Machine & Bisect</h3>
+      <p>Recover lost or orphaned commits in one click from <code>.git/logs/HEAD</code>. Interactive visual <code>git bisect</code> assistant with good/bad DAG coloring.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>🔒 Cryptographic Security</h3>
+      <p>Dual OpenPGP/GPG and OpenSSH signature verification. Pre-flight <code>merge-tree</code> conflict forecaster to prevent merge collisions before staging.</p>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -82,7 +132,7 @@ Unlike traditional Git graph extensions that depend exclusively on synchronous c
 +---------------------------------------|-----------------------------------------------+
                                         | IPC Messages / RPC
 +---------------------------------------v-----------------------------------------------+
-|                                COMMITFLOW CORE CORE                                   |
+|                                COMMITFLOW CORE ENGINE                                 |
 |                                                                                       |
 |  +----------------------+  +---------------------+  +------------------------------+  |
 |  |    RemoteManager     |  |   IssueService &    |  |       GitFsReader            |  |
@@ -296,7 +346,7 @@ CommitFlow includes a built-in Model Context Protocol server (`CommitFlowMcpServ
 To install a pre-built `.vsix` release:
 
 ```bash
-code --install-extension commitflow-0.4.5.vsix
+code --install-extension commitflow-0.4.6.vsix
 ```
 
 ---
@@ -448,7 +498,7 @@ To connect external tools such as Claude Desktop, add CommitFlow to your client 
     "commitflow": {
       "command": "node",
       "args": [
-        "C:/Users/<Username>/.vscode/extensions/ignaciobrenas.commitflow-0.4.5/dist/mcp.js",
+        "C:/Users/<Username>/.vscode/extensions/ignaciobrenas.commitflow-0.4.6/dist/mcp.js",
         "--repo",
         "C:/Path/To/Your/Repository"
       ]
@@ -607,15 +657,19 @@ If Fork is installed in a non-standard path, verify that the `fork://open` URI h
    ```bash
    npm install
    ```
-3. Run the automated test suite (33 suites covering all core subsystems):
+3. Run TypeScript strict compilation:
+   ```bash
+   npm run compile
+   ```
+4. Run the automated test suite (36 test suites covering all core subsystems):
    ```bash
    npm test
    ```
-4. Build production bundles:
+5. Build production bundles:
    ```bash
    npm run build
    ```
-5. Package the extension into a `.vsix` file:
+6. Package the extension into a `.vsix` file:
    ```bash
    npx vsce package
    ```
@@ -632,5 +686,5 @@ If Fork is installed in a non-standard path, verify that the `fork://open` URI h
 
 ## License
 
-CommitFlow is open-source software licensed under the [MIT License](LICENSE).
+CommitFlow is open-source software licensed under the [MIT License](LICENSE).  
 Copyright (c) 2026 Ignacio Breñas. All rights reserved.
