@@ -1048,6 +1048,15 @@ Host *.internal.corp
   assert.ok(!readmeContent.includes('<img src="resources/commitflow-isotipo-color.svg"'), 'README.md must not include SVG images due to vsce marketplace restrictions');
   assert.ok(readmeContent.includes('commitflow-logo-color.png'), 'README.md should showcase the official PNG logo');
 
+  // Verify Popup and Modal Outside Click Dismissal in webview/main.ts
+  const mainTsContent = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'main.ts'), 'utf8');
+  assert.ok(mainTsContent.includes('closeAllModals()'), 'main.ts must define and invoke closeAllModals()');
+  assert.ok(mainTsContent.includes('modal-overlay'), 'main.ts must handle modal-overlay backdrop clicks');
+  assert.ok(mainTsContent.includes('layoutPickerPopover?.classList.contains(\'visible\')'), 'main.ts must handle layout popover outside clicks');
+  assert.ok(mainTsContent.includes('themePickerPopover?.classList.contains(\'visible\')'), 'main.ts must handle theme popover outside clicks');
+  assert.ok(mainTsContent.includes('hoverPopover?.classList.contains(\'visible\')'), 'main.ts must handle hover popover outside clicks');
+  assert.ok(mainTsContent.includes('issueDrawer?.classList.contains(\'open\')'), 'main.ts must handle issue drawer outside clicks');
+
   console.log('  ✔ Responsive Viewport Tiers, Multi-Dock Layouts & Brand Integrity tests passed!');
 
   console.log('\n🎉 ALL 37 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');

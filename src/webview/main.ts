@@ -2947,6 +2947,22 @@ searchClearBtn?.addEventListener('click', () => {
   }
 });
 
+function closeAllModals(): void {
+  closePersonalModal();
+  closeSettingsModal();
+  closeStashModal();
+  closeWorktreeModal();
+  closePatchCreateModal();
+  closePatchApplyModal();
+  closeTagModal();
+  closeReflogModal();
+  closeRepoHealthModal();
+  closeComparisonModal();
+  closeBisectModal();
+  cherryPickForecastModal?.classList.remove('open');
+  document.querySelectorAll<HTMLElement>('.modal-overlay.open').forEach((m) => m.classList.remove('open'));
+}
+
 window.addEventListener('keydown', (e) => {
   const isInput =
     document.activeElement instanceof HTMLInputElement ||
@@ -2955,18 +2971,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeDrawer();
     issueDrawer?.classList.remove('open');
-    closePersonalModal();
-    closeSettingsModal();
-    closeStashModal();
-    closeWorktreeModal();
-    closePatchCreateModal();
-    closePatchApplyModal();
-    closeTagModal();
-    closeReflogModal();
-    closeRepoHealthModal();
-    closeComparisonModal();
-    closeBisectModal();
-    cherryPickForecastModal?.classList.remove('open');
+    closeAllModals();
     layoutPickerPopover?.classList.remove('visible');
     themePickerPopover?.classList.remove('visible');
     hideHoverPopover();
@@ -3015,15 +3020,63 @@ btnLayoutMode?.addEventListener('click', (e) => {
   themePickerPopover?.classList.remove('visible');
 });
 
+// Modal overlay backdrop click listener (closing when clicking outside modal card)
+document.querySelectorAll<HTMLElement>('.modal-overlay').forEach((overlay) => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      closeAllModals();
+    }
+  });
+});
+
+// Global outside-click dismiss handler for all pop-ups, popovers, and drawers
 document.addEventListener('click', (e) => {
-  if (layoutPickerPopover && !layoutPickerPopover.contains(e.target as Node) && e.target !== btnLayoutMode) {
-    layoutPickerPopover.classList.remove('visible');
+  const target = e.target as HTMLElement;
+  if (!target) return;
+
+  // 1. Close Layout Picker Popover if clicking outside
+  if (layoutPickerPopover?.classList.contains('visible')) {
+    if (!layoutPickerPopover.contains(target) && !btnLayoutMode?.contains(target)) {
+      layoutPickerPopover.classList.remove('visible');
+    }
   }
-  if (themePickerPopover && !themePickerPopover.contains(e.target as Node) && e.target !== btnThemeMode) {
-    themePickerPopover.classList.remove('visible');
+
+  // 2. Close Theme Picker Popover if clicking outside
+  if (themePickerPopover?.classList.contains('visible')) {
+    if (!themePickerPopover.contains(target) && !btnThemeMode?.contains(target)) {
+      themePickerPopover.classList.remove('visible');
+    }
   }
-  if ((e.target as HTMLElement)?.classList?.contains('modal-overlay')) {
-    (e.target as HTMLElement).classList.remove('open');
+
+  // 3. Close Floating Hover Popover if clicking outside
+  if (hoverPopover?.classList.contains('visible')) {
+    if (!hoverPopover.contains(target)) {
+      hideHoverPopover();
+    }
+  }
+
+  // 4. Close any Modal Overlay if clicking outside the modal-card (on backdrop)
+  if (target.classList?.contains('modal-overlay') || (target.closest?.('.modal-overlay') && !target.closest?.('.modal-card'))) {
+    closeAllModals();
+  }
+
+  // 5. Close Issue Drawer if clicking outside
+  if (issueDrawer?.classList.contains('open')) {
+    if (!issueDrawer.contains(target) && !target.closest?.('.issue-card')) {
+      issueDrawer.classList.remove('open');
+    }
+  }
+
+  // 6. Close Commit Inspector Drawer if clicking on empty viewport / outside drawer
+  if (drawer?.classList.contains('open')) {
+    if (
+      !drawer.contains(target) &&
+      !target.closest?.('.commit-row') &&
+      !target.closest?.('.btn-row-action') &&
+      !target.closest?.('.btn-show-details')
+    ) {
+      closeDrawer();
+    }
   }
 });
 
