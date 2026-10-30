@@ -1301,9 +1301,9 @@ export class GraphWebviewProvider
         <i class="codicon codicon-history"></i>
         <span id="nav-tab-text-history">${tr('tabs.fileHistory')}</span>
       </button>
-      <button class="nav-tab-btn" data-tab="tab-issues" title="🎯 Issues Tracker Hub & Mis Issues">
+      <button class="nav-tab-btn" data-tab="tab-issues" title="${tr('tabs.issuesTitle')}">
         <i class="codicon codicon-issues"></i>
-        <span id="nav-tab-text-issues">Issues</span>
+        <span id="nav-tab-text-issues">${tr('tabs.issues')}</span>
         <span class="tab-badge" id="issues-badge-count">0</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-prs" title="${tr('tabs.prsTitle')}">

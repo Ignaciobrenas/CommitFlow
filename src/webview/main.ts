@@ -490,18 +490,22 @@ function applyLocalization(): void {
 
   if (tabGraph) tabGraph.title = tr('tabs.graphTitle');
   if (tabHistory) tabHistory.title = tr('tabs.fileHistoryTitle');
+  const tabIssues = document.querySelector('[data-tab="tab-issues"]') as HTMLElement;
+  if (tabIssues) tabIssues.title = tr('tabs.issuesTitle');
   if (tabPrs) tabPrs.title = tr('tabs.prsTitle');
   if (tabWorktrees) tabWorktrees.title = tr('tabs.worktreesTitle');
   if (tabPatches) tabPatches.title = tr('tabs.cloudPatchesTitle');
 
   const textGraph = document.getElementById('nav-tab-text-graph');
   const textHistory = document.getElementById('nav-tab-text-history');
+  const textIssues = document.getElementById('nav-tab-text-issues');
   const textPrs = document.getElementById('nav-tab-text-prs');
   const textWorktrees = document.getElementById('nav-tab-text-worktrees');
   const textPatches = document.getElementById('nav-tab-text-patches');
 
   if (textGraph) textGraph.textContent = tr('tabs.graph');
   if (textHistory) textHistory.textContent = tr('tabs.fileHistory');
+  if (textIssues) textIssues.textContent = tr('tabs.issues');
   if (textPrs) textPrs.textContent = tr('tabs.prs');
   if (textWorktrees) textWorktrees.textContent = tr('tabs.worktrees');
   if (textPatches) textPatches.textContent = tr('tabs.cloudPatches');
@@ -2950,6 +2954,7 @@ window.addEventListener('keydown', (e) => {
 
   if (e.key === 'Escape') {
     closeDrawer();
+    issueDrawer?.classList.remove('open');
     closePersonalModal();
     closeSettingsModal();
     closeStashModal();
@@ -3016,6 +3021,9 @@ document.addEventListener('click', (e) => {
   }
   if (themePickerPopover && !themePickerPopover.contains(e.target as Node) && e.target !== btnThemeMode) {
     themePickerPopover.classList.remove('visible');
+  }
+  if ((e.target as HTMLElement)?.classList?.contains('modal-overlay')) {
+    (e.target as HTMLElement).classList.remove('open');
   }
 });
 

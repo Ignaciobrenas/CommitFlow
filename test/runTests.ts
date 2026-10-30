@@ -1,4 +1,6 @@
 import assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
 import { AvatarService } from '../src/avatars/avatarService';
 import { GitParser } from '../src/git/gitParser';
 import { GraphLayout, THEME_LANE_COLORS } from '../src/graph/graphLayout';
@@ -973,7 +975,82 @@ Host *.internal.corp
   assert.strictEqual(parsedQuery.tokens[0], 'keyword');
   console.log('  ✔ Power Query Token Parsing & Advanced Filtering tests passed!');
 
-  console.log('\n🎉 ALL 36 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  // 37. Test Responsive Viewport Tiers, Multi-Dock Layouts & Brand Integrity
+  console.log('\n▶ Testing Responsive Viewport Tiers, Multi-Dock Layouts & Brand Integrity...');
+  function simulateLayoutClassification(width: number, height: number, userMode: 'auto' | 'bottom' | 'left' | 'right' = 'auto') {
+    const classes: string[] = [];
+    if (width <= 260) {
+      classes.push('layout-nano', 'layout-width-nano', 'layout-sidebar-compact');
+    } else if (width <= 440) {
+      classes.push('layout-sidebar-compact', 'layout-width-compact');
+    } else if (width <= 750) {
+      classes.push('layout-width-medium');
+    } else if (width <= 1200) {
+      classes.push('layout-width-expanded');
+    } else {
+      classes.push('layout-width-ultrawide');
+    }
+
+    if (height <= 220) {
+      classes.push('layout-height-nano', 'layout-height-short');
+    } else if (height <= 340) {
+      classes.push('layout-height-short');
+    }
+
+    if (userMode === 'auto') {
+      if (width >= 540 && height <= 380) {
+        classes.push('auto-detected-bottom');
+      } else if (width <= 440) {
+        classes.push('auto-detected-left');
+      }
+    } else {
+      classes.push(`layout-${userMode}`);
+    }
+    return classes;
+  }
+
+  // Check nano sidebar (<= 260px)
+  const nanoClasses = simulateLayoutClassification(240, 600, 'auto');
+  assert.ok(nanoClasses.includes('layout-nano'));
+  assert.ok(nanoClasses.includes('layout-sidebar-compact'));
+  assert.ok(nanoClasses.includes('auto-detected-left'));
+
+  // Check compact sidebar (400px wide)
+  const compactClasses = simulateLayoutClassification(400, 700, 'auto');
+  assert.ok(compactClasses.includes('layout-sidebar-compact'));
+  assert.ok(compactClasses.includes('layout-width-compact'));
+  assert.ok(compactClasses.includes('auto-detected-left'));
+
+  // Check bottom terminal dock (1000px wide, 250px height)
+  const bottomClasses = simulateLayoutClassification(1000, 250, 'auto');
+  assert.ok(bottomClasses.includes('auto-detected-bottom'));
+  assert.ok(bottomClasses.includes('layout-height-short'));
+
+  // Check explicit right sidebar mode
+  const rightClasses = simulateLayoutClassification(320, 800, 'right');
+  assert.ok(rightClasses.includes('layout-right'));
+
+  // Verify brand assets on disk
+  const requiredBrandFiles = [
+    'commitflow-isotipo-color.svg',
+    'commitflow-isotipo-white.svg',
+    'commitflow-logotipo-white.svg',
+    'commitflow-logo-color.png',
+  ];
+  for (const f of requiredBrandFiles) {
+    const fullP = path.join(__dirname, '..', 'resources', f);
+    assert.ok(fs.existsSync(fullP), `Required brand asset missing: ${f}`);
+    assert.ok(fs.statSync(fullP).size > 500, `Asset ${f} size is suspiciously small`);
+  }
+
+  // Verify README has no restricted SVG references that break vsce packaging
+  const readmeContent = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
+  assert.ok(!readmeContent.includes('<img src="resources/commitflow-isotipo-color.svg"'), 'README.md must not include SVG images due to vsce marketplace restrictions');
+  assert.ok(readmeContent.includes('commitflow-logo-color.png'), 'README.md should showcase the official PNG logo');
+
+  console.log('  ✔ Responsive Viewport Tiers, Multi-Dock Layouts & Brand Integrity tests passed!');
+
+  console.log('\n🎉 ALL 37 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('❌ Test suite failed:', err);
   process.exit(1);

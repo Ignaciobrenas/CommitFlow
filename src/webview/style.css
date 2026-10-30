@@ -1330,7 +1330,97 @@ input:checked + .slider:before {
    ========================================================================== */
 
 /* 1. Compact / Sidebar Mode (width <= 440px) */
-body.layout-sidebar-compact .header-row-primary,
+body.layout-sidebar-compact .header-row-primary {
+  flex-wrap: wrap;
+  row-gap: 5px;
+}
+body.layout-sidebar-compact .brand-section {
+  gap: 4px;
+}
+body.layout-sidebar-compact .active-branch-badge {
+  max-width: 90px;
+  font-size: var(--font-size-xs);
+  padding: 1px 6px;
+}
+body.layout-sidebar-compact .private-repo-badge #private-repo-label {
+  display: none;
+}
+body.layout-sidebar-compact .private-repo-badge {
+  padding: 2px 6px;
+}
+body.layout-sidebar-compact .header-quick-actions {
+  width: 100%;
+  justify-content: flex-start;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 3px;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+body.layout-sidebar-compact .header-quick-actions::-webkit-scrollbar {
+  display: none;
+}
+
+body.layout-sidebar-compact .toolbar-controls {
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+}
+body.layout-sidebar-compact .search-input-wrapper {
+  flex: 1 1 100%;
+  width: 100%;
+}
+body.layout-sidebar-compact .branch-select {
+  flex: 1 1 calc(100% - 38px);
+  max-width: none !important;
+}
+body.layout-sidebar-compact #btn-checkout {
+  flex-shrink: 0;
+}
+
+body.layout-sidebar-compact .nav-tab-btn span:not(.tab-badge) {
+  display: none;
+}
+body.layout-sidebar-compact .nav-tab-btn {
+  padding: 4px 8px;
+  gap: 4px;
+}
+
+body.layout-sidebar-compact .stats-bar {
+  gap: 6px;
+  padding: 2px 6px;
+  justify-content: flex-start;
+}
+body.layout-sidebar-compact .stat-label,
+body.layout-sidebar-compact .stat-divider,
+body.layout-sidebar-compact .top-contributors-row {
+  display: none !important;
+}
+body.layout-sidebar-compact .stat-item {
+  font-size: 11px;
+  gap: 2px;
+}
+body.layout-sidebar-compact .commit-drawer,
+body.layout-sidebar-compact .issue-drawer {
+  width: 100% !important;
+  box-shadow: none !important;
+}
+body.layout-sidebar-compact .upstream-sync-bar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 4px 8px;
+}
+body.layout-sidebar-compact .upstream-sync-actions {
+  width: 100%;
+  justify-content: flex-end;
+  gap: 4px;
+}
+body.layout-sidebar-compact .modal-card {
+  width: min(540px, calc(100vw - 16px)) !important;
+  margin: 4px auto;
+}
+
 @media (max-width: 440px) {
   .header-row-primary {
     flex-wrap: wrap;
@@ -1362,10 +1452,6 @@ body.layout-sidebar-compact .header-row-primary,
   .header-quick-actions::-webkit-scrollbar {
     display: none;
   }
-}
-
-body.layout-sidebar-compact .toolbar-controls,
-@media (max-width: 440px) {
   .toolbar-controls {
     flex-wrap: wrap;
     gap: 4px;
@@ -1382,10 +1468,6 @@ body.layout-sidebar-compact .toolbar-controls,
   #btn-checkout {
     flex-shrink: 0;
   }
-}
-
-body.layout-sidebar-compact .nav-tab-btn span:not(.tab-badge),
-@media (max-width: 440px) {
   .nav-tab-btn span:not(.tab-badge) {
     display: none;
   }
@@ -1393,10 +1475,6 @@ body.layout-sidebar-compact .nav-tab-btn span:not(.tab-badge),
     padding: 4px 8px;
     gap: 4px;
   }
-}
-
-body.layout-sidebar-compact .stats-bar,
-@media (max-width: 440px) {
   .stats-bar {
     gap: 6px;
     padding: 2px 6px;
@@ -1442,7 +1520,33 @@ body.layout-nano .compact-card .card-time {
 }
 
 /* 2. Ultra-Nano Sidebar Mode (width <= 260px) */
-body.layout-nano .brand-title,
+body.layout-nano .brand-title {
+  display: none !important;
+}
+body.layout-nano .header-bar {
+  padding: 2px 4px;
+  gap: 3px;
+}
+body.layout-nano .header-row-primary {
+  gap: 2px;
+}
+body.layout-nano .header-quick-actions {
+  gap: 2px;
+}
+body.layout-nano .btn-icon {
+  padding: 2px 4px;
+  font-size: 11px;
+  border-radius: var(--radius-xs);
+}
+body.layout-nano .active-branch-badge {
+  max-width: 55px;
+  font-size: 9px;
+  padding: 1px 4px;
+}
+body.layout-nano .nav-tab-btn {
+  padding: 3px 5px;
+}
+
 @media (max-width: 260px) {
   .brand-title {
     display: none !important;
@@ -1640,6 +1744,7 @@ body.theme-light .private-repo-badge {
   top: 42px;
   right: 12px;
   width: 260px;
+  max-width: calc(100vw - 16px);
   background: var(--bg-secondary);
   border: 1px solid var(--border-hover);
   border-radius: var(--radius-xl);
@@ -1659,9 +1764,10 @@ body.theme-light .private-repo-badge {
 .theme-picker-popover {
   position: absolute;
   top: 42px;
-  right: 48px;
+  right: 12px;
   width: 280px;
-  max-height: 420px;
+  max-width: calc(100vw - 16px);
+  max-height: min(420px, calc(100vh - 60px));
   overflow-y: auto;
   background: var(--bg-secondary);
   border: 1px solid var(--border-hover);
@@ -1991,7 +2097,44 @@ body.layout-right .theme-picker-popover {
 }
 
 /* Height-based Short Dock Adjustments (terminal area <= 280px) */
-body.layout-height-short .header-bar,
+body.layout-height-short .header-bar {
+  padding: 2px 8px;
+  gap: 3px;
+}
+body.layout-height-short .nav-tab-bar {
+  padding: 2px 6px;
+}
+body.layout-height-short .nav-tab-btn {
+  padding: 3px 8px;
+  font-size: var(--font-size-xs);
+}
+body.layout-height-short .stats-bar {
+  min-height: 18px;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+body.layout-height-short .toolbar-controls {
+  gap: 3px;
+}
+body.layout-height-short .search-input {
+  padding: 2px 20px;
+  font-size: var(--font-size-xs);
+}
+body.layout-height-short .branch-select {
+  padding: 2px 6px;
+  font-size: var(--font-size-xs);
+}
+body.layout-height-short .modal-header {
+  padding: 8px 14px;
+}
+body.layout-height-short .modal-body {
+  padding: 10px 14px;
+  gap: 10px;
+}
+body.layout-height-short .modal-footer {
+  padding: 8px 14px;
+}
+
 @media (max-height: 280px) {
   .header-bar {
     padding: 2px 8px;
@@ -2020,9 +2163,22 @@ body.layout-height-short .header-bar,
     padding: 2px 6px;
     font-size: var(--font-size-xs);
   }
+  .modal-header {
+    padding: 8px 14px;
+  }
+  .modal-body {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  .modal-footer {
+    padding: 8px 14px;
+  }
 }
 
-body.layout-height-nano .stats-bar,
+body.layout-height-nano .stats-bar {
+  display: none !important;
+}
+
 @media (max-height: 220px) {
   .stats-bar {
     display: none !important;

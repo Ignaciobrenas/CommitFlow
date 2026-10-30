@@ -1,9 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="resources/commitflow-logotipo-white.svg">
-    <source media="(prefers-color-scheme: light)" srcset="resources/commitflow-isotipo-color.svg">
-    <img src="resources/commitflow-isotipo-color.svg" alt="CommitFlow Logo" width="340" />
-  </picture>
+  <img src="resources/commitflow-logo-color.png" alt="CommitFlow Logo" width="180" height="180" />
 </p>
 
 <h1 align="center">CommitFlow</h1>
@@ -13,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.4.6-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.4.7-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
   <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/CI_Gate-Passing-10b981?style=flat-square&logo=githubactions&logoColor=white" alt="CI Status" /></a>
   <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/pr-approval-gate.yml"><img src="https://img.shields.io/badge/PR_Gate-Owner_Protected-6366f1?style=flat-square&logo=github&logoColor=white" alt="PR Approval Gate" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square" alt="License" /></a>
@@ -346,7 +342,7 @@ CommitFlow includes a built-in Model Context Protocol server (`CommitFlowMcpServ
 To install a pre-built `.vsix` release:
 
 ```bash
-code --install-extension commitflow-0.4.6.vsix
+code --install-extension commitflow-0.4.7.vsix
 ```
 
 ---
@@ -498,7 +494,7 @@ To connect external tools such as Claude Desktop, add CommitFlow to your client 
     "commitflow": {
       "command": "node",
       "args": [
-        "C:/Users/<Username>/.vscode/extensions/ignaciobrenas.commitflow-0.4.6/dist/mcp.js",
+        "C:/Users/<Username>/.vscode/extensions/ignaciobrenas.commitflow-0.4.7/dist/mcp.js",
         "--repo",
         "C:/Path/To/Your/Repository"
       ]
