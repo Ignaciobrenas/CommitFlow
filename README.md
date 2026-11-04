@@ -1,65 +1,66 @@
 <p align="center">
-  <img src="resources/commitflow-logo-color.png" alt="CommitFlow Logo" width="180" height="180" />
+ <img src="resources/commitflow-logo-color.png" alt="CommitFlow Logo" width="180" height="180" />
 </p>
 
 <h1 align="center">CommitFlow</h1>
 
 <p align="center">
-  <strong>Enterprise Git Graph Visualization, Direct Filesystem Engine, Multi-Provider Hub & Model Context Protocol (MCP) Server for Visual Studio Code</strong>
+ <strong>Enterprise Git Graph Visualization, Direct Filesystem Engine, Multi-Provider Hub & Model Context Protocol (MCP) Server for Visual Studio Code</strong>
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.4.7-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
-  <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/CI_Gate-Passing-10b981?style=flat-square&logo=githubactions&logoColor=white" alt="CI Status" /></a>
-  <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/pr-approval-gate.yml"><img src="https://img.shields.io/badge/PR_Gate-Owner_Protected-6366f1?style=flat-square&logo=github&logoColor=white" alt="PR Approval Gate" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square" alt="License" /></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.6_Strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
-  <a href="PRIVACY.md"><img src="https://img.shields.io/badge/Telemetry-Zero_Private-14b8a6?style=flat-square" alt="Privacy" /></a>
-  <a href="#model-context-protocol-mcp-server"><img src="https://img.shields.io/badge/MCP-Protocol_2.0-8b5cf6?style=flat-square&logo=anthropic&logoColor=white" alt="Model Context Protocol" /></a>
+ <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.4.8-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
+ <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/CI_Gate-Passing-10b981?style=flat-square&logo=githubactions&logoColor=white" alt="CI Status" /></a>
+ <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/pr-approval-gate.yml"><img src="https://img.shields.io/badge/PR_Gate-Owner_Protected-6366f1?style=flat-square&logo=github&logoColor=white" alt="PR Approval Gate" /></a>
+ <a href="test/runTests.ts"><img src="https://img.shields.io/badge/Tests-42_Suites_Passing-10b981?style=flat-square&logo=jest&logoColor=white" alt="Tests Status" /></a>
+ <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square" alt="License" /></a>
+ <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.6_Strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
+ <a href="PRIVACY.md"><img src="https://img.shields.io/badge/Telemetry-Zero_Private-14b8a6?style=flat-square" alt="Privacy" /></a>
+ <a href="#model-context-protocol-mcp-server"><img src="https://img.shields.io/badge/MCP-Protocol_2.0-8b5cf6?style=flat-square&logo=anthropic&logoColor=white" alt="Model Context Protocol" /></a>
 </p>
 
 <p align="center">
-  <a href="#installation-and-prerequisites">🚀 Installation</a> •
-  <a href="#core-features">✨ Features</a> •
-  <a href="#architectural-overview">🏛 Architecture</a> •
-  <a href="#configuration-reference">⚙️ Configuration</a> •
-  <a href="#model-context-protocol-mcp-setup">🤖 AI & MCP</a> •
-  <a href="https://github.com/Ignaciobrenas/CommitFlow/issues">🐛 Issues</a>
+ <a href="#installation-and-prerequisites"> Installation</a> •
+ <a href="#core-features"> Features</a> •
+ <a href="#architectural-overview"> Architecture</a> •
+ <a href="#configuration-reference">️ Configuration</a> •
+ <a href="#model-context-protocol-mcp-setup"> AI & MCP</a> •
+ <a href="https://github.com/Ignaciobrenas/CommitFlow/issues"> Issues</a>
 </p>
 
 ---
 
 <table width="100%">
-  <tr>
-    <td width="50%" valign="top">
-      <h3>⚡ Direct Filesystem Engine</h3>
-      <p>Reads <code>.git</code> metadata directly from disk with <b>zero child processes</b>. Instantaneous startup, offline readiness, and uninterrupted operation even if Git CLI is missing.</p>
-    </td>
-    <td width="50%" valign="top">
-      <h3>🎨 Topological Spline DAG</h3>
-      <p>Continuous cubic Bézier lanes with zero line crossings, integrated stashes, lightweight/annotated tags, commit signatures, and adaptive multi-dock placement.</p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h3>🌐 Unified Remote Provider Hub</h3>
-      <p>Deep native integration for <b>Forgejo</b>, <b>Gitea</b>, <b>GitHub</b>, and <b>GitLab</b>. Read/write issues, pull request triage, and automatic <code>~/.ssh/config</code> alias parsing.</p>
-    </td>
-    <td width="50%" valign="top">
-      <h3>🤖 Built-in MCP Server</h3>
-      <p>Native JSON-RPC 2.0 Model Context Protocol stdio server empowering AI agents (Cursor, Claude, Antigravity) with structured Git tools and real-time repo resources.</p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h3>⏳ Reflog Time Machine & Bisect</h3>
-      <p>Recover lost or orphaned commits in one click from <code>.git/logs/HEAD</code>. Interactive visual <code>git bisect</code> assistant with good/bad DAG coloring.</p>
-    </td>
-    <td width="50%" valign="top">
-      <h3>🔒 Cryptographic Security</h3>
-      <p>Dual OpenPGP/GPG and OpenSSH signature verification. Pre-flight <code>merge-tree</code> conflict forecaster to prevent merge collisions before staging.</p>
-    </td>
-  </tr>
+ <tr>
+ <td width="50%" valign="top">
+ <h3> Direct Filesystem Engine</h3>
+ <p>Reads <code>.git</code> metadata directly from disk with <b>zero child processes</b>. Instantaneous startup, offline readiness, and uninterrupted operation even if Git CLI is missing.</p>
+ </td>
+ <td width="50%" valign="top">
+ <h3> Topological Spline DAG</h3>
+ <p>Continuous cubic Bézier lanes with zero line crossings, integrated stashes, lightweight/annotated tags, commit signatures, and adaptive multi-dock placement.</p>
+ </td>
+ </tr>
+ <tr>
+ <td width="50%" valign="top">
+ <h3> Unified Remote Provider Hub</h3>
+ <p>Deep native integration for <b>Forgejo</b>, <b>Gitea</b>, <b>GitHub</b>, and <b>GitLab</b>. Read/write issues, pull request triage, and automatic <code>~/.ssh/config</code> alias parsing.</p>
+ </td>
+ <td width="50%" valign="top">
+ <h3> Built-in MCP Server</h3>
+ <p>Native JSON-RPC 2.0 Model Context Protocol stdio server empowering AI agents (Cursor, Claude, Antigravity) with structured Git tools and real-time repo resources.</p>
+ </td>
+ </tr>
+ <tr>
+ <td width="50%" valign="top">
+ <h3>⏳ Reflog Time Machine & Bisect</h3>
+ <p>Recover lost or orphaned commits in one click from <code>.git/logs/HEAD</code>. Interactive visual <code>git bisect</code> assistant with good/bad DAG coloring.</p>
+ </td>
+ <td width="50%" valign="top">
+ <h3> Cryptographic Security</h3>
+ <p>Dual OpenPGP/GPG and OpenSSH signature verification. Pre-flight <code>merge-tree</code> conflict forecaster to prevent merge collisions before staging.</p>
+ </td>
+ </tr>
 </table>
 
 ---
@@ -68,25 +69,28 @@
 
 - [Architectural Overview](#architectural-overview)
 - [Core Features](#core-features)
-  - [Topological Commit Graph](#topological-commit-graph)
-  - [Direct Filesystem Offline Engine](#direct-filesystem-offline-engine)
-  - [Unified Remote Providers: Forgejo, Gitea, GitHub, GitLab](#unified-remote-providers-forgejo-gitea-github-gitlab)
-  - [Universal SSH and OpenSSH Parser](#universal-ssh-and-openssh-parser)
-  - [Fork Desktop Client Interoperability](#fork-desktop-client-interoperability)
-  - [Issue Tracker Hub and Issue-to-Code Workflow](#issue-tracker-hub-and-issue-to-code-workflow)
-  - [Pull Request and Merge Request Triage](#pull-request-and-merge-request-triage)
-  - [Git Worktree Management and Multi-WIP Tracking](#git-worktree-management-and-multi-wip-tracking)
-  - [Visual File Evolution and Line Delta Tracking](#visual-file-evolution-and-line-delta-tracking)
-  - [Cloud Patches (Zero-Push Collaboration)](#cloud-patches-zero-push-collaboration)
-  - [Inline Blame and Author Contributions](#inline-blame-and-author-contributions)
-  - [GPG and OpenSSH Cryptographic Signature Verification](#gpg-and-openssh-cryptographic-signature-verification)
-  - [Visual Git Reflog Time Machine and Lost-Commit Recovery](#visual-git-reflog-time-machine-and-lost-commit-recovery)
-  - [Multi-Commit Diff Comparison Engine](#multi-commit-diff-comparison-engine)
-  - [Repository Health and Garbage Collection Diagnostics](#repository-health-and-garbage-collection-diagnostics)
-  - [Visual Git Bisect Assistant and Regression Hunter](#visual-git-bisect-assistant-and-regression-hunter)
-  - [Pre-Flight Cherry-Pick Conflict Forecaster](#pre-flight-cherry-pick-conflict-forecaster)
-  - [Adaptive Universal Responsive Layout Engine](#adaptive-universal-responsive-layout-engine)
-  - [Model Context Protocol (MCP) Server](#model-context-protocol-mcp-server)
+ - [Topological Commit Graph](#topological-commit-graph)
+ - [Direct Filesystem Offline Engine](#direct-filesystem-offline-engine)
+ - [Unified Remote Providers: Forgejo, Gitea, GitHub, GitLab](#unified-remote-providers-forgejo-gitea-github-gitlab)
+ - [Universal SSH and OpenSSH Parser](#universal-ssh-and-openssh-parser)
+ - [Fork Desktop Client Interoperability](#fork-desktop-client-interoperability)
+ - [Issue Tracker Hub and Issue-to-Code Workflow](#issue-tracker-hub-and-issue-to-code-workflow)
+ - [Pull Request and Merge Request Triage](#pull-request-and-merge-request-triage)
+ - [Git Worktree Management and Multi-WIP Tracking](#git-worktree-management-and-multi-wip-tracking)
+ - [Visual File Evolution and Line Delta Tracking](#visual-file-evolution-and-line-delta-tracking)
+ - [Cloud Patches (Zero-Push Collaboration)](#cloud-patches-zero-push-collaboration)
+ - [Inline Blame and Author Contributions](#inline-blame-and-author-contributions)
+ - [GPG and OpenSSH Cryptographic Signature Verification](#gpg-and-openssh-cryptographic-signature-verification)
+ - [Visual Git Reflog Time Machine and Lost-Commit Recovery](#visual-git-reflog-time-machine-and-lost-commit-recovery)
+ - [Multi-Commit Diff Comparison Engine](#multi-commit-diff-comparison-engine)
+ - [Repository Health and Garbage Collection Diagnostics](#repository-health-and-garbage-collection-diagnostics)
+ - [Visual Git Bisect Assistant and Regression Hunter](#visual-git-bisect-assistant-and-regression-hunter)
+ - [Pre-Flight Cherry-Pick Conflict Forecaster](#pre-flight-cherry-pick-conflict-forecaster)
+ - [Adaptive Universal Responsive Layout Engine](#adaptive-universal-responsive-layout-engine)
+ - [Connect with your AI Studio & Secure API Key Management](#connect-with-your-ai-studio--secure-api-key-management)
+ - [Interactive Git Rebase Studio](#interactive-git-rebase-studio)
+ - [Virtual Scrolling DAG Engine](#virtual-scrolling-dag-engine)
+ - [Model Context Protocol (MCP) Server](#model-context-protocol-mcp-server)
 - [Installation and Prerequisites](#installation-and-prerequisites)
 - [Getting Started](#getting-started)
 - [Configuration Reference](#configuration-reference)
@@ -111,43 +115,43 @@ Unlike traditional Git graph extensions that depend exclusively on synchronous c
 
 ```text
 +---------------------------------------------------------------------------------------+
-|                                VISUAL STUDIO CODE HOST                                |
-|                                                                                       |
-|  +--------------------+   +-----------------------+   +----------------------------+  |
-|  |  Primary Activity  |   |     Bottom Panel      |   |    Secondary Sidebar       |  |
-|  |   Bar Container    |   |     Terminal Dock     |   |     (Mirrored Drawers)     |  |
-|  +---------+----------+   +-----------+-----------+   +--------------+-------------+  |
-|            |                          |                              |                |
-|            +--------------------------+------------------------------+                |
-|                                       |                                               |
-|                                       v                                               |
-|                    +------------------------------------+                             |
-|                    |   GraphWebviewProvider (CSP Safe)  |                             |
-|                    +------------------+-----------------+                             |
-|                                       |                                               |
+| VISUAL STUDIO CODE HOST |
+| |
+| +--------------------+ +-----------------------+ +----------------------------+ |
+| | Primary Activity | | Bottom Panel | | Secondary Sidebar | |
+| | Bar Container | | Terminal Dock | | (Mirrored Drawers) | |
+| +---------+----------+ +-----------+-----------+ +--------------+-------------+ |
+| | | | |
+| +--------------------------+------------------------------+ |
+| | |
+| v |
+| +------------------------------------+ |
+| | GraphWebviewProvider (CSP Safe) | |
+| +------------------+-----------------+ |
+| | |
 +---------------------------------------|-----------------------------------------------+
-                                        | IPC Messages / RPC
+ | IPC Messages / RPC
 +---------------------------------------v-----------------------------------------------+
-|                                COMMITFLOW CORE ENGINE                                 |
-|                                                                                       |
-|  +----------------------+  +---------------------+  +------------------------------+  |
-|  |    RemoteManager     |  |   IssueService &    |  |       GitFsReader            |  |
-|  | (Forgejo/Gitea/GH/GL)|  |  BranchLinker Engine|  | (Direct Disk .git Parser)    |  |
-|  +----------+-----------+  +----------+----------+  +--------------+---------------+  |
-|             |                         |                            |                  |
-|  +----------v-----------+  +----------v----------+  +--------------v---------------+  |
-|  |   SshConfigParser    |  | Fork Client Bridge  |  |       GitClient              |  |
-|  |  (~/.ssh/config)     |  |  (State Sync/CLI)   |  | (Non-blocking Batch Exec)   |  |
-|  +----------+-----------+  +----------+----------+  +--------------+---------------+  |
-|             |                         |                            |                  |
-|  +----------v-------------------------v----------------------------v---------------+  |
-|  |               PersistenceManager (SecretStorage / VS Code Settings)             |  |
-|  +------------------------------------+--------------------------------------------+  |
-|                                       |                                               |
-|  +------------------------------------v--------------------------------------------+  |
-|  |          Model Context Protocol Server (JSON-RPC 2.0 via Stdio)                 |  |
-|  |           Exposes Tools, Resources, and Prompts to External AI Agents            |  |
-|  +---------------------------------------------------------------------------------+  |
+| COMMITFLOW CORE ENGINE |
+| |
+| +----------------------+ +---------------------+ +------------------------------+ |
+| | RemoteManager | | IssueService & | | GitFsReader | |
+| | (Forgejo/Gitea/GH/GL)| | BranchLinker Engine| | (Direct Disk .git Parser) | |
+| +----------+-----------+ +----------+----------+ +--------------+---------------+ |
+| | | | |
+| +----------v-----------+ +----------v----------+ +--------------v---------------+ |
+| | SshConfigParser | | Fork Client Bridge | | GitClient | |
+| | (~/.ssh/config) | | (State Sync/CLI) | | (Non-blocking Batch Exec) | |
+| +----------+-----------+ +----------+----------+ +--------------+---------------+ |
+| | | | |
+| +----------v-------------------------v----------------------------v---------------+ |
+| | PersistenceManager (SecretStorage / VS Code Settings) | |
+| +------------------------------------+--------------------------------------------+ |
+| | |
+| +------------------------------------v--------------------------------------------+ |
+| | Model Context Protocol Server (JSON-RPC 2.0 via Stdio) | |
+| | Exposes Tools, Resources, and Prompts to External AI Agents | |
+| +---------------------------------------------------------------------------------+ |
 +---------------------------------------------------------------------------------------+
 ```
 
@@ -160,10 +164,10 @@ Unlike traditional Git graph extensions that depend exclusively on synchronous c
 - **Topological Multi-Lane Layout:** Uses a continuous Directed Acyclic Graph (DAG) sorting algorithm to allocate lane indices without line crossings.
 - **Retina Bézier Spline Renderer:** Computes cubic Bézier paths for incoming forks, merges, and continuous branch trajectories.
 - **Adaptive Layout Modes:**
-  - **Bottom Panel (Wide Split):** Dual-column layout optimized for wide desktop screens and dock placement below the code editor.
-  - **Left Sidebar:** Classical single-column view with slide-out details.
-  - **Right Sidebar:** Mirrored drawer architecture that slides inwards to the left, preventing display cut-offs on narrow monitors.
-  - **Auto Responsive:** Automatically determines the layout mode based on the current container dimensions via `ResizeObserver`.
+ - **Bottom Panel (Wide Split):** Dual-column layout optimized for wide desktop screens and dock placement below the code editor.
+ - **Left Sidebar:** Classical single-column view with slide-out details.
+ - **Right Sidebar:** Mirrored drawer architecture that slides inwards to the left, preventing display cut-offs on narrow monitors.
+ - **Auto Responsive:** Automatically determines the layout mode based on the current container dimensions via `ResizeObserver`.
 - **Integrated Tags and Stashes:** Renders release tags, lightweight tags, and stash revisions inline within the DAG.
 - **Instant Search and Filtering:** Filter commits in real time by author name, email, commit message, branch name, or SHA-1 hash.
 
@@ -173,45 +177,45 @@ CommitFlow contains a built-in filesystem parser (`GitFsReader`) that reads the 
 
 - **Zero-Process Execution:** Reads repository state in sandboxed, restricted, or remote container environments where the `git` binary is missing or constrained.
 - **Data Extracted Offline:**
-  - Reference resolution via `.git/HEAD`, `.git/refs/heads/*`, `.git/refs/tags/*`, and `.git/refs/remotes/*`.
-  - Packed references resolution via `.git/packed-refs` including peeled annotated tag objects (`^{}`).
-  - Configuration inspection via `.git/config` (parsing remotes, push URLs, branch upstreams, and user credentials).
-  - Reflog commit extraction from `.git/logs/HEAD` providing chronological commit history without executing `git log`.
-  - In-flight operation detection: `.git/MERGE_HEAD` (merge in progress), `.git/CHERRY_PICK_HEAD` (cherry-pick), `.git/REVERT_HEAD` (revert), and `.git/rebase-merge/` or `.git/rebase-apply/` (interactive or standard rebase state, steps, and head names).
-  - Local stash log parsing via `.git/logs/refs/stash`.
-  - Linked worktrees discovery via `.git/worktrees/*`.
+ - Reference resolution via `.git/HEAD`, `.git/refs/heads/*`, `.git/refs/tags/*`, and `.git/refs/remotes/*`.
+ - Packed references resolution via `.git/packed-refs` including peeled annotated tag objects (`^{}`).
+ - Configuration inspection via `.git/config` (parsing remotes, push URLs, branch upstreams, and user credentials).
+ - Reflog commit extraction from `.git/logs/HEAD` providing chronological commit history without executing `git log`.
+ - In-flight operation detection: `.git/MERGE_HEAD` (merge in progress), `.git/CHERRY_PICK_HEAD` (cherry-pick), `.git/REVERT_HEAD` (revert), and `.git/rebase-merge/` or `.git/rebase-apply/` (interactive or standard rebase state, steps, and head names).
+ - Local stash log parsing via `.git/logs/refs/stash`.
+ - Linked worktrees discovery via `.git/worktrees/*`.
 
 ### Unified Remote Providers: Forgejo, Gitea, GitHub, GitLab
 
 CommitFlow features a polymorphic provider architecture (`RemoteProvider`) capable of interfacing with public platforms, self-hosted instances, and air-gapped enterprise servers.
 
 - **Deep Forgejo and Gitea Support:**
-  - Fully compatible with the Forgejo / Gitea API v1 specification (`/api/v1`).
-  - Automatic instance detection via hostname heuristics and silent `/api/v1/version` validation.
-  - Secure credential storage in VS Code `SecretStorage` keyed by host name (`commitflow.token.forgejo.<host>`).
-  - Read and write support for issues, comments, issue state toggles (open/closed), milestones, labels, and pull requests.
-  - Commit CI status inspection via `/api/v1/repos/{owner}/{repo}/statuses/{sha}`.
-  - Local LRU caching layer ensuring issues and pull requests remain accessible even when the network is interrupted.
+ - Fully compatible with the Forgejo / Gitea API v1 specification (`/api/v1`).
+ - Automatic instance detection via hostname heuristics and silent `/api/v1/version` validation.
+ - Secure credential storage in VS Code `SecretStorage` keyed by host name (`commitflow.token.forgejo.<host>`).
+ - Read and write support for issues, comments, issue state toggles (open/closed), milestones, labels, and pull requests.
+ - Commit CI status inspection via `/api/v1/repos/{owner}/{repo}/statuses/{sha}`.
+ - Local LRU caching layer ensuring issues and pull requests remain accessible even when the network is interrupted.
 - **GitHub and GitLab Integration:**
-  - Native VS Code authentication session integration (`repo` scope).
-  - Private repository detection with dedicated status badges (`GitHub Private`, `GitLab Private`, `Forgejo Private`).
+ - Native VS Code authentication session integration (`repo` scope).
+ - Private repository detection with dedicated status badges (`GitHub Private`, `GitLab Private`, `Forgejo Private`).
 
 ### Universal SSH and OpenSSH Parser
 
 Resolves Git remote configurations across standard, customized, and complex SSH network topologies:
 
 - **Supported URL Schemes:**
-  - Standard SCP syntax: `git@forgejo.example.com:organization/repository.git`
-  - Explicit SSH with custom port: `ssh://git@forgejo.example.com:2222/organization/repository.git`
-  - HTTPS / HTTP: `https://forgejo.example.com/organization/repository.git`
-  - Local filesystem paths: `/var/git/repository.git`
+ - Standard SCP syntax: `git@forgejo.example.com:organization/repository.git`
+ - Explicit SSH with custom port: `ssh://git@forgejo.example.com:2222/organization/repository.git`
+ - HTTPS / HTTP: `https://forgejo.example.com/organization/repository.git`
+ - Local filesystem paths: `/var/git/repository.git`
 - **OpenSSH Configuration Resolver:**
-  - Parses `~/.ssh/config` (or a custom path configured in settings).
-  - Resolves host aliases (for example, `Host forgejo-box` mapped to `HostName 192.168.1.100`, `Port 2222`, `User git`, `IdentityFile ~/.ssh/id_ed25519`).
+ - Parses `~/.ssh/config` (or a custom path configured in settings).
+ - Resolves host aliases (for example, `Host forgejo-box` mapped to `HostName 192.168.1.100`, `Port 2222`, `User git`, `IdentityFile ~/.ssh/id_ed25519`).
 - **Non-Blocking SSH Execution:**
-  - Injects `GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"` into child processes.
-  - Prevents background fetchers (`autoFetch`) from hanging when an SSH prompt or unknown host fingerprint is encountered.
-  - Automatically preserves and forwards system SSH agent sockets (`SSH_AUTH_SOCK`).
+ - Injects `GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"` into child processes.
+ - Prevents background fetchers (`autoFetch`) from hanging when an SSH prompt or unknown host fingerprint is encountered.
+ - Automatically preserves and forwards system SSH agent sockets (`SSH_AUTH_SOCK`).
 
 ### Fork Desktop Client Interoperability
 
@@ -226,22 +230,22 @@ A dedicated navigation hub (`Issues`) integrated directly into the extension vie
 
 - **Assigned to Me:** Fetches open issues assigned to the authenticated developer from Forgejo, GitHub, or GitLab.
 - **Branch and Commit Association:**
-  - Automatically identifies issues associated with the active branch by analyzing branch patterns (such as `feat/issue-42-login` or `fix/#108-auth`).
-  - Scans unpushed local commit messages for references like `Closes #42` or `Refs #108`.
-  - Displays the linked issue in a prominent banner above the issue list.
+ - Automatically identifies issues associated with the active branch by analyzing branch patterns (such as `feat/issue-42-login` or `fix/#108-auth`).
+ - Scans unpushed local commit messages for references like `Closes #42` or `Refs #108`.
+ - Displays the linked issue in a prominent banner above the issue list.
 - **Issue-to-Code Actions:**
-  - **Create Branch / Worktree:** One-click branch creation using customizable templates (default: `feat/{id}-{slug}`) or provisioning of a parallel Git worktree.
-  - **Insert Reference:** Injects `Closes #<id>` into the commit preparation buffer or clipboard.
-  - **Lateral Inspector Drawer:** View markdown-rendered descriptions, comment feeds, label chips, and milestone deadlines. Post comments or change status directly from VS Code.
-  - **Interactive Hover Cards:** Hovering over `#<id>` in commit messages or file blame annotations displays a hover card with title, author, labels, and state.
+ - **Create Branch / Worktree:** One-click branch creation using customizable templates (default: `feat/{id}-{slug}`) or provisioning of a parallel Git worktree.
+ - **Insert Reference:** Injects `Closes #<id>` into the commit preparation buffer or clipboard.
+ - **Lateral Inspector Drawer:** View markdown-rendered descriptions, comment feeds, label chips, and milestone deadlines. Post comments or change status directly from VS Code.
+ - **Interactive Hover Cards:** Hovering over `#<id>` in commit messages or file blame annotations displays a hover card with title, author, labels, and state.
 
 ### Pull Request and Merge Request Triage
 
 - **Triage Columns:** Classifies active pull requests into four distinct status groups:
-  - **Blocked:** Failing continuous integration pipelines or changes requested by reviewers.
-  - **Ready:** Approved by reviewers with green CI/CD status.
-  - **Pending:** Awaiting initial or peer reviews.
-  - **Mine:** Authored by the current authenticated user.
+ - **Blocked:** Failing continuous integration pipelines or changes requested by reviewers.
+ - **Ready:** Approved by reviewers with green CI/CD status.
+ - **Pending:** Awaiting initial or peer reviews.
+ - **Mine:** Authored by the current authenticated user.
 - **Quick Actions:** One-click checkout of remote head branches, direct browser links, and clipboard URL copying.
 
 ### Git Worktree Management and Multi-WIP Tracking
@@ -313,6 +317,28 @@ A dedicated navigation hub (`Issues`) integrated directly into the extension vie
 - **Collapsing Navigation Tab Bar:** On narrow sidebars, tab titles collapse smoothly into icon-only pills with native hover tooltips, allowing all primary navigation views to fit without horizontal wrapping.
 - **Dual-Pane Bottom Dock Split:** In bottom panel placement, graph visualization and inspector drawers run side-by-side in dual-column split mode, avoiding intrusive overlay obstructions.
 - **Clamped Floating Overlays:** Popovers, tooltips, and inspector drawers dynamically calculate boundary clamping against window edges, preventing off-screen clipping on compact sidebars.
+- **High-DPI Retina Canvas Rendering:** Symmetrical cubic Bézier splines with dynamic lane color palettes for passing and merge lanes.
+
+### Connect with your AI Studio & Secure API Key Management
+
+- **Universal AI Studio Connection:** Effortlessly bridge CommitFlow with Google Antigravity, Claude Code, Cursor IDE, Open-WebUI, or custom autonomous AI agents.
+- **Secure Cryptographic Key Vault:** Generate scoped API keys (`read-only` or `read/write`) stored using SHA-256 salted hashes inside VS Code's `SecretStorage`. Keys can be restricted to specific workspaces/repositories and set with auto-expiration.
+- **Dual-Transport Model Context Protocol (MCP):**
+  - **Stdio Transport:** Embedded executable (`bin/commitflow-mcp.js`) running frictionless for desktop AI agents.
+  - **Authenticated HTTP/SSE Daemon:** Streamable real-time events over local loopback (`127.0.0.1`) protected with bearer tokens and origin verification.
+
+### Interactive Git Rebase Studio
+
+- **Visual Commit Reordering:** Drag-and-drop or use quick action menus to reorganize commits before rebasing onto base branches.
+- **Action Selection Matrix:** Seamlessly switch actions per commit: `pick`, `reword`, `edit`, `squash`, `fixup`, `drop`.
+- **Pre-Flight Conflict Simulation:** In-memory simulation calculates potential patch collisions before touching the git working copy.
+- **Resolution Assistant:** Step-by-step guidance to `Continue`, `Skip`, or `Abort` during conflict resolution.
+
+### Virtual Scrolling DAG Engine
+
+- **Constant DOM Footprint:** Maintains fewer than 150 active DOM nodes regardless of whether a repository has 500 or 100,000+ commits.
+- **Buttery 60fps Experience:** High-speed virtual windowing and hardware-accelerated canvas tracks ensure zero lag or frame drops while navigating massive monorepositories.
+- **WCAG 2.1 AA Keyboard Accessibility:** Roving tabindex keyboard navigation (Arrow keys, PageUp/PageDown, Home/End, Enter) and full ARIA treegrid semantics.
 
 ### Model Context Protocol (MCP) Server
 
@@ -332,9 +358,9 @@ CommitFlow includes a built-in Model Context Protocol server (`CommitFlowMcpServ
 
 1. Open Visual Studio Code.
 2. Press `Ctrl+P` (or `Cmd+P` on macOS) and run:
-   ```bash
-   ext install Ignaciobrenas.commitflow
-   ```
+ ```bash
+ ext install Ignaciobrenas.commitflow
+ ```
 3. Alternatively, search for **CommitFlow** in the Extensions view (`Ctrl+Shift+X`).
 
 ### Manual Installation from VSIX Package
@@ -342,7 +368,7 @@ CommitFlow includes a built-in Model Context Protocol server (`CommitFlowMcpServ
 To install a pre-built `.vsix` release:
 
 ```bash
-code --install-extension commitflow-0.4.7.vsix
+code --install-extension commitflow-0.4.8.vsix
 ```
 
 ---
@@ -351,13 +377,13 @@ code --install-extension commitflow-0.4.7.vsix
 
 1. Open any directory or workspace containing a Git repository in Visual Studio Code.
 2. Click on the **CommitFlow** icon in the Activity Bar or press `Ctrl+Shift+P` and execute:
-   ```text
-   CommitFlow: Open Graph View
-   ```
+ ```text
+ CommitFlow: Open Graph View
+ ```
 3. To open CommitFlow in the Bottom Panel (terminal dock), run:
-   ```text
-   CommitFlow: Open CommitFlow Hub in Bottom Panel
-   ```
+ ```text
+ CommitFlow: Open CommitFlow Hub in Bottom Panel
+ ```
 4. Click on any commit in the graph to inspect parent links, file changes, author metadata, and unified diffs.
 
 ---
@@ -395,23 +421,23 @@ CommitFlow provides native, deep integration with self-hosted **Forgejo** and **
 1. Log into your Forgejo/Gitea instance in a web browser.
 2. Navigate to **Settings** -> **Applications** -> **Manage Access Tokens**.
 3. Generate a new token with the following scopes:
-   - `issue` (Read and Write)
-   - `repository` (Read and Write)
+ - `issue` (Read and Write)
+ - `repository` (Read and Write)
 4. Copy the generated token string.
 
 ### 2. Storing the Token in CommitFlow
 
 1. In VS Code, open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`).
 2. Run:
-   ```text
-   CommitFlow: Configure Remote Access Token
-   ```
+ ```text
+ CommitFlow: Configure Remote Access Token
+ ```
 3. Enter the hostname of your Forgejo instance (for example, `forgejo.internal.corp` or `git.domain.com:2222`).
 4. Paste your Personal Access Token.
 5. The token is encrypted and securely stored in VS Code's `SecretStorage` under the key:
-   ```text
-   commitflow.token.forgejo.<hostname>
-   ```
+ ```text
+ commitflow.token.forgejo.<hostname>
+ ```
 
 ### 3. Configuring Custom Hostnames in Settings
 
@@ -419,11 +445,11 @@ If your Forgejo instance runs on a private domain, IP address, or custom port, a
 
 ```json
 {
-  "commitflow.remotes.forgejoInstances": [
-    "forgejo.internal.corp",
-    "git.domain.com:2222",
-    "http://192.168.1.50:3000"
-  ]
+ "commitflow.remotes.forgejoInstances": [
+ "forgejo.internal.corp",
+ "git.domain.com:2222",
+ "http://192.168.1.50:3000"
+ ]
 }
 ```
 
@@ -442,18 +468,18 @@ CommitFlow automatically resolves custom SSH configurations defined in your Open
 
 # Standard Forgejo server with custom SSH port
 Host my-forgejo
-  HostName git.company.internal
-  Port 2222
-  User git
-  IdentityFile ~/.ssh/id_ed25519_forgejo
-  IdentitiesOnly yes
+ HostName git.company.internal
+ Port 2222
+ User git
+ IdentityFile ~/.ssh/id_ed25519_forgejo
+ IdentitiesOnly yes
 
 # Air-gapped development server
 Host lab-git
-  HostName 10.0.4.15
-  Port 22
-  User git
-  IdentityFile ~/.ssh/id_rsa_lab
+ HostName 10.0.4.15
+ Port 22
+ User git
+ IdentityFile ~/.ssh/id_rsa_lab
 ```
 
 ### Git Remote Configurations
@@ -462,8 +488,8 @@ When your repository's `.git/config` references an alias:
 
 ```ini
 [remote "origin"]
-  url = git@my-forgejo:organization/microservice.git
-  fetch = +refs/heads/*:refs/remotes/origin/*
+ url = git@my-forgejo:organization/microservice.git
+ fetch = +refs/heads/*:refs/remotes/origin/*
 ```
 
 CommitFlow performs the following resolution steps:
@@ -490,16 +516,16 @@ To connect external tools such as Claude Desktop, add CommitFlow to your client 
 
 ```json
 {
-  "mcpServers": {
-    "commitflow": {
-      "command": "node",
-      "args": [
-        "C:/Users/<Username>/.vscode/extensions/ignaciobrenas.commitflow-0.4.7/dist/mcp.js",
-        "--repo",
-        "C:/Path/To/Your/Repository"
-      ]
-    }
-  }
+ "mcpServers": {
+ "commitflow": {
+ "command": "node",
+ "args": [
+ "C:/Users/<Username>/.vscode/extensions/ignaciobrenas.commitflow-0.4.8/dist/mcp.js",
+ "--repo",
+ "C:/Path/To/Your/Repository"
+ ]
+ }
+ }
 }
 ```
 
@@ -572,22 +598,22 @@ CommitFlow is designed to operate seamlessly in air-gapped environments, on airp
 
 ```text
 .git/
-├── HEAD                  -> Resolved to determine symbolic branch or detached commit
-├── config                -> Parsed for remotes, branch upstreams, and user identity
-├── packed-refs           -> Parsed for packed branches, remote tracking refs, and tags
+├── HEAD -> Resolved to determine symbolic branch or detached commit
+├── config -> Parsed for remotes, branch upstreams, and user identity
+├── packed-refs -> Parsed for packed branches, remote tracking refs, and tags
 ├── refs/
-│   ├── heads/            -> Recursive filesystem traversal for local branch heads
-│   ├── tags/             -> Recursive traversal for loose tag pointers
-│   └── remotes/          -> Recursive traversal for remote tracking branches
+│ ├── heads/ -> Recursive filesystem traversal for local branch heads
+│ ├── tags/ -> Recursive traversal for loose tag pointers
+│ └── remotes/ -> Recursive traversal for remote tracking branches
 ├── logs/
-│   ├── HEAD              -> Parsed for chronological reflog history (SHAs, authors, dates)
-│   └── refs/stash        -> Parsed for complete stash stack history
-├── MERGE_HEAD            -> Detected to signal active merge conflict state
-├── CHERRY_PICK_HEAD      -> Detected to signal active cherry-pick operation
-├── REVERT_HEAD           -> Detected to signal active commit reversal
-├── rebase-merge/         -> Parsed for rebase head-name, onto SHA, step, and total steps
-├── worktrees/            -> Traversed to discover linked worktree paths and HEAD pointers
-└── COMMIT_EDITMSG        -> Read to retrieve the last or draft commit message
+│ ├── HEAD -> Parsed for chronological reflog history (SHAs, authors, dates)
+│ └── refs/stash -> Parsed for complete stash stack history
+├── MERGE_HEAD -> Detected to signal active merge conflict state
+├── CHERRY_PICK_HEAD -> Detected to signal active cherry-pick operation
+├── REVERT_HEAD -> Detected to signal active commit reversal
+├── rebase-merge/ -> Parsed for rebase head-name, onto SHA, step, and total steps
+├── worktrees/ -> Traversed to discover linked worktree paths and HEAD pointers
+└── COMMIT_EDITMSG -> Read to retrieve the last or draft commit message
 ```
 
 When offline:
@@ -645,30 +671,30 @@ If Fork is installed in a non-standard path, verify that the `fork://open` URI h
 ### Build Instructions
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/Ignaciobrenas/CommitFlow.git
-   cd CommitFlow
-   ```
+ ```bash
+ git clone https://github.com/Ignaciobrenas/CommitFlow.git
+ cd CommitFlow
+ ```
 2. Install project dependencies:
-   ```bash
-   npm install
-   ```
+ ```bash
+ npm install
+ ```
 3. Run TypeScript strict compilation:
-   ```bash
-   npm run compile
-   ```
-4. Run the automated test suite (36 test suites covering all core subsystems):
-   ```bash
-   npm test
-   ```
+ ```bash
+ npm run compile
+ ```
+4. Run the automated test suite (42 test suites covering all core subsystems):
+ ```bash
+ npm test
+ ```
 5. Build production bundles:
-   ```bash
-   npm run build
-   ```
+ ```bash
+ npm run build
+ ```
 6. Package the extension into a `.vsix` file:
-   ```bash
-   npx vsce package
-   ```
+ ```bash
+ npx vsce package
+ ```
 
 ---
 
@@ -682,5 +708,5 @@ If Fork is installed in a non-standard path, verify that the `fork://open` URI h
 
 ## License
 
-CommitFlow is open-source software licensed under the [MIT License](LICENSE).  
+CommitFlow is open-source software licensed under the [MIT License](LICENSE). 
 Copyright (c) 2026 Ignacio Breñas. All rights reserved.

@@ -92,19 +92,19 @@ export class RemoteManager {
       host !== 'github.com' && host !== 'gitlab.com' && host !== 'bitbucket.org';
 
     let badgeType: RemoteRepoInfo['badgeType'] = 'private';
-    let badgeLabel = '🔒 Repositorio Privado';
+    let badgeLabel = 'Repositorio Privado';
 
     if (providerType === 'forgejo') {
       badgeType = 'forgejo';
       badgeLabel = host.includes('forgejo')
-        ? '🔒 Forgejo Privado'
-        : '🔒 Forgejo Self-Hosted';
+        ? 'Forgejo Privado'
+        : 'Forgejo Self-Hosted';
     } else if (providerType === 'github') {
       badgeType = 'github';
-      badgeLabel = isPrivate ? '🔒 GitHub Privado' : 'GitHub';
+      badgeLabel = isPrivate ? 'GitHub Privado' : 'GitHub';
     } else if (providerType === 'gitlab') {
       badgeType = 'gitlab';
-      badgeLabel = isPrivate ? '🔒 GitLab Privado' : 'GitLab';
+      badgeLabel = isPrivate ? 'GitLab Privado' : 'GitLab';
     }
 
     return {

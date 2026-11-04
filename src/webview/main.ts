@@ -423,6 +423,14 @@ window.addEventListener('message', (event) => {
       handlePatchApplied(message.payload);
       break;
 
+    case 'aiKeysData':
+      handleAiKeysData(message.payload);
+      break;
+
+    case 'aiKeyGenerated':
+      handleAiKeyGenerated(message.payload);
+      break;
+
     case 'switchTab':
       if (message.payload) {
         switchTab(message.payload);
@@ -846,7 +854,415 @@ function clearBranchPathHighlight(): void {
   });
 }
 
+let virtualSpacer: HTMLElement | null = null;
+let virtualViewport: HTMLElement | null = null;
+let isScrollBound = false;
+
+function renderCommitRow(
+  node: GraphNode,
+  index: number,
+  isCompact: boolean,
+  canvasCssWidth: number,
+  rowHeight: number,
+  dpr: number
+): HTMLElement {
+  const row = document.createElement('div');
+  row.setAttribute('role', 'row');
+  row.setAttribute('aria-rowindex', (index + 1).toString());
+  row.setAttribute('data-hash', node.commit.hash);
+  const isSelected = selectedNode?.commit.hash === node.commit.hash;
+  const isBisectCurrent = Boolean(
+    bisectStatus?.isActive &&
+      (bisectStatus.currentCommit === node.commit.hash ||
+        bisectStatus.currentShortCommit === node.commit.shortHash)
+  );
+  const isBisectGood = Boolean(
+    bisectStatus?.isActive &&
+      bisectStatus.goodCommits.some((h: string) => h === node.commit.hash || node.commit.hash.startsWith(h))
+  );
+  const isBisectBad = Boolean(
+    bisectStatus?.isActive &&
+      bisectStatus.badCommit &&
+      (node.commit.hash === bisectStatus.badCommit ||
+        node.commit.hash.startsWith(bisectStatus.badCommit))
+  );
+  const bisectClass = isBisectCurrent ? 'row-bisect-current' : '';
+  row.style.height = `${rowHeight}px`;
+
+  // 1. Canvas Column with High-DPI support
+  const canvasCol = document.createElement('div');
+  canvasCol.className = 'graph-canvas-col';
+  canvasCol.setAttribute('role', 'gridcell');
+  canvasCol.setAttribute('aria-label', `Commit graph lane ${node.lane}`);
+  canvasCol.style.width = `${canvasCssWidth}px`;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(canvasCssWidth * dpr);
+  canvas.height = Math.round(rowHeight * dpr);
+  canvas.style.width = `${canvasCssWidth}px`;
+  canvas.style.height = `${rowHeight}px`;
+  drawCommitNode(canvas, node, index, dpr, isCompact);
+  canvasCol.appendChild(canvas);
+
+  if (isCompact) {
+    // Compact 2-line layout (Sidebar mode)
+    row.className = `commit-row compact-card ${isSelected ? 'selected' : ''} ${bisectClass}`;
+
+    const cardBody = document.createElement('div');
+    cardBody.className = 'commit-card-body';
+    cardBody.setAttribute('role', 'gridcell');
+
+    // Line 1: Refs + Subject
+    const cardTop = document.createElement('div');
+    cardTop.className = 'commit-card-top';
+
+    if (isBisectCurrent) {
+      const bBadge = document.createElement('span');
+      bBadge.className = 'bisect-badge-tag current';
+      bBadge.innerHTML = `<i class="codicon codicon-search"></i> PROBE`;
+      cardTop.appendChild(bBadge);
+    } else if (isBisectGood) {
+      const bBadge = document.createElement('span');
+      bBadge.className = 'bisect-badge-tag good';
+      bBadge.innerHTML = `<i class="codicon codicon-check"></i> GOOD`;
+      cardTop.appendChild(bBadge);
+    } else if (isBisectBad) {
+      const bBadge = document.createElement('span');
+      bBadge.className = 'bisect-badge-tag bad';
+      bBadge.innerHTML = `<i class="codicon codicon-close"></i> BAD`;
+      cardTop.appendChild(bBadge);
+    }
+
+    node.commit.refs.forEach((ref) => {
+      const pill = document.createElement('span');
+      pill.className = `ref-pill ${
+        ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
+      }`;
+      const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
+      pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
+        ref.isHead ? `HEAD -> ${ref.name}` : ref.name
+      }`;
+      pill.title = ref.name;
+      pill.addEventListener('mouseenter', (e) => {
+        e.stopPropagation();
+        highlightBranchPath(node.commit.hash);
+      });
+      pill.addEventListener('mouseleave', () => {
+        clearBranchPathHighlight();
+      });
+      cardTop.appendChild(pill);
+    });
+
+    const subjectSpan = document.createElement('span');
+    subjectSpan.className = 'commit-subject';
+    subjectSpan.innerHTML = formatCommitSubjectWithIssues(node.commit.subject);
+    subjectSpan.title = node.commit.subject;
+    cardTop.appendChild(subjectSpan);
+
+    if (node.commit.signatureStatus === 'valid') {
+      const sigBadge = document.createElement('span');
+      sigBadge.className = 'commit-sig-badge valid';
+      sigBadge.title = `Firma digital verificada (GPG/SSH)\nFirmante: ${node.commit.signer || 'Desconocido'}\nKey ID: ${node.commit.keyId || 'N/A'}`;
+      sigBadge.innerHTML = `<i class="codicon codicon-verified" style="font-size:11px;"></i>`;
+      cardTop.appendChild(sigBadge);
+    }
+
+    // Line 2: Avatar + Author + Relative Time + Hash
+    const cardBottom = document.createElement('div');
+    cardBottom.className = 'commit-card-bottom';
+
+    const avatarImg = document.createElement('img');
+    avatarImg.className = 'card-author-avatar';
+    avatarImg.src = node.commit.author.avatarUrl;
+    avatarImg.alt = node.commit.author.name;
+    avatarImg.loading = 'lazy';
+    avatarImg.onerror = () => {
+      avatarImg.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="7" fill="%2338bdf8"/><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="%23fff" font-size="7" font-family="sans-serif">?</text></svg>`;
+    };
+
+    const authorName = document.createElement('span');
+    authorName.className = 'card-author-name';
+    authorName.textContent = node.commit.author.name;
+    authorName.title = `${node.commit.author.name} <${node.commit.author.email}>`;
+
+    const dot1 = document.createElement('span');
+    dot1.className = 'card-meta-dot';
+    dot1.textContent = '•';
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'card-time';
+    timeSpan.textContent = node.commit.author.relativeTime;
+
+    const dot2 = document.createElement('span');
+    dot2.className = 'card-meta-dot';
+    dot2.textContent = '•';
+
+    const hashSpan = document.createElement('span');
+    hashSpan.className = 'card-hash';
+    hashSpan.textContent = node.commit.shortHash;
+    hashSpan.title = `SHA: ${node.commit.hash}`;
+
+    cardBottom.appendChild(avatarImg);
+    cardBottom.appendChild(authorName);
+    cardBottom.appendChild(dot1);
+    cardBottom.appendChild(timeSpan);
+    cardBottom.appendChild(dot2);
+    cardBottom.appendChild(hashSpan);
+
+    cardBody.appendChild(cardTop);
+    cardBody.appendChild(cardBottom);
+
+    row.appendChild(canvasCol);
+    row.appendChild(cardBody);
+  } else {
+    // Standard multi-column layout (Wide mode)
+    row.className = `commit-row ${isSelected ? 'selected' : ''} ${bisectClass}`;
+
+    // 2. Info Column (Refs + Subject)
+    const infoCol = document.createElement('div');
+    infoCol.className = 'commit-info-col';
+    infoCol.setAttribute('role', 'gridcell');
+
+    if (isBisectCurrent) {
+      const bBadge = document.createElement('span');
+      bBadge.className = 'bisect-badge-tag current';
+      bBadge.innerHTML = `<i class="codicon codicon-search"></i> PROBE`;
+      infoCol.appendChild(bBadge);
+    } else if (isBisectGood) {
+      const bBadge = document.createElement('span');
+      bBadge.className = 'bisect-badge-tag good';
+      bBadge.innerHTML = `<i class="codicon codicon-check"></i> GOOD`;
+      infoCol.appendChild(bBadge);
+    } else if (isBisectBad) {
+      const bBadge = document.createElement('span');
+      bBadge.className = 'bisect-badge-tag bad';
+      bBadge.innerHTML = `<i class="codicon codicon-close"></i> BAD`;
+      infoCol.appendChild(bBadge);
+    }
+
+    node.commit.refs.forEach((ref) => {
+      const pill = document.createElement('span');
+      pill.className = `ref-pill ${
+        ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
+      }`;
+      const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
+      pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
+        ref.isHead ? `HEAD -> ${ref.name}` : ref.name
+      }`;
+      pill.title = ref.name;
+      pill.addEventListener('mouseenter', (e) => {
+        e.stopPropagation();
+        highlightBranchPath(node.commit.hash);
+      });
+      pill.addEventListener('mouseleave', () => {
+        clearBranchPathHighlight();
+      });
+      infoCol.appendChild(pill);
+    });
+
+    const subjectSpan = document.createElement('span');
+    subjectSpan.className = 'commit-subject';
+    subjectSpan.innerHTML = formatCommitSubjectWithIssues(node.commit.subject);
+    subjectSpan.title = node.commit.subject;
+    infoCol.appendChild(subjectSpan);
+
+    if (node.commit.signatureStatus === 'valid') {
+      const sigBadge = document.createElement('span');
+      sigBadge.className = 'commit-sig-badge valid';
+      sigBadge.title = `Firma digital verificada (GPG/SSH)\nFirmante: ${node.commit.signer || 'Desconocido'}\nKey ID: ${node.commit.keyId || 'N/A'}`;
+      sigBadge.innerHTML = `<i class="codicon codicon-verified" style="font-size:11px;"></i>`;
+      infoCol.appendChild(sigBadge);
+    }
+
+    // 3. Author Column
+    const authorCol = document.createElement('div');
+    authorCol.className = 'commit-author-col';
+    authorCol.setAttribute('role', 'gridcell');
+    authorCol.title = `${node.commit.author.name} <${node.commit.author.email}>`;
+
+    const avatarImg = document.createElement('img');
+    avatarImg.className = 'author-avatar';
+    avatarImg.src = node.commit.author.avatarUrl;
+    avatarImg.alt = node.commit.author.name;
+    avatarImg.loading = 'lazy';
+    avatarImg.onerror = () => {
+      avatarImg.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="10" fill="%2338bdf8"/><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="%23fff" font-size="9" font-family="sans-serif">?</text></svg>`;
+    };
+
+    const authorNameSpan = document.createElement('span');
+    authorNameSpan.className = 'author-name';
+    authorNameSpan.textContent = node.commit.author.name;
+
+    authorCol.appendChild(avatarImg);
+    authorCol.appendChild(authorNameSpan);
+
+    // 4. Meta Column (Time & Hash)
+    const metaCol = document.createElement('div');
+    metaCol.className = 'commit-meta-col';
+    metaCol.setAttribute('role', 'gridcell');
+
+    const timeSpan = document.createElement('span');
+    timeSpan.textContent = node.commit.author.relativeTime;
+
+    const hashBadge = document.createElement('span');
+    hashBadge.className = 'commit-hash-badge';
+    hashBadge.textContent = node.commit.shortHash;
+
+    metaCol.appendChild(timeSpan);
+    metaCol.appendChild(hashBadge);
+
+    // 5. Row Quick Actions Bar on Hover (GitLens signature)
+    const rowActions = document.createElement('div');
+    rowActions.className = 'row-actions-bar';
+    rowActions.setAttribute('role', 'gridcell');
+
+    const btnCopySha = document.createElement('button');
+    btnCopySha.className = 'btn-row-action';
+    btnCopySha.title = tr('action.copySha');
+    btnCopySha.innerHTML = `<i class="codicon codicon-copy"></i>`;
+    btnCopySha.addEventListener('click', (e) => {
+      e.stopPropagation();
+      vscode.postMessage({ command: 'copyToClipboard', payload: node.commit.hash });
+    });
+
+    const btnCopyMsg = document.createElement('button');
+    btnCopyMsg.className = 'btn-row-action';
+    btnCopyMsg.title = tr('action.copyMsg');
+    btnCopyMsg.innerHTML = `<i class="codicon codicon-comment"></i>`;
+    btnCopyMsg.addEventListener('click', (e) => {
+      e.stopPropagation();
+      vscode.postMessage({ command: 'copyToClipboard', payload: node.commit.subject });
+    });
+
+    const btnCheckoutRow = document.createElement('button');
+    btnCheckoutRow.className = 'btn-row-action';
+    btnCheckoutRow.title = tr('action.checkout');
+    btnCheckoutRow.innerHTML = `<i class="codicon codicon-arrow-swap"></i>`;
+    btnCheckoutRow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      vscode.postMessage({ command: 'checkoutCommit', payload: node.commit.hash });
+    });
+
+    const btnInspect = document.createElement('button');
+    btnInspect.className = 'btn-row-action';
+    btnInspect.title = tr('action.inspect');
+    btnInspect.innerHTML = `<i class="codicon codicon-eye"></i>`;
+    btnInspect.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectCommit(node);
+    });
+
+    const btnCherryPick = document.createElement('button');
+    btnCherryPick.className = 'btn-row-action';
+    btnCherryPick.title = tr('drawer.cherryPick');
+    btnCherryPick.innerHTML = `<i class="codicon codicon-git-pull-request-go-to-changes"></i>`;
+    btnCherryPick.addEventListener('click', (e) => {
+      e.stopPropagation();
+      initiateCherryPick(node.commit.hash, node.commit.shortHash);
+    });
+
+    const btnCreateTag = document.createElement('button');
+    btnCreateTag.className = 'btn-row-action';
+    btnCreateTag.title = tr('drawer.createTag');
+    btnCreateTag.innerHTML = `<i class="codicon codicon-tag"></i>`;
+    btnCreateTag.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTagModal(node.commit.hash);
+    });
+
+    rowActions.appendChild(btnCopySha);
+    rowActions.appendChild(btnCopyMsg);
+    rowActions.appendChild(btnCheckoutRow);
+    rowActions.appendChild(btnCherryPick);
+    rowActions.appendChild(btnCreateTag);
+    rowActions.appendChild(btnInspect);
+
+    row.appendChild(canvasCol);
+    row.appendChild(infoCol);
+    row.appendChild(authorCol);
+    row.appendChild(metaCol);
+    row.appendChild(rowActions);
+  }
+
+  // Row Click & Hover handlers
+  row.addEventListener('click', () => selectCommit(node));
+  row.addEventListener('mouseenter', (e) => {
+    showHoverPopover(e, node);
+    highlightBranchPath(node.commit.hash);
+  });
+  row.addEventListener('mouseleave', () => {
+    hideHoverPopover();
+    clearBranchPathHighlight();
+  });
+
+  return row;
+}
+
+function updateVirtualWindow(): void {
+  if (!virtualSpacer || !virtualViewport || filteredNodes.length === 0) return;
+
+  const rowHeight = getRowHeight();
+  const totalHeight = filteredNodes.length * rowHeight;
+  virtualSpacer.style.height = `${totalHeight}px`;
+
+  const scrollTop = tableContainer.scrollTop;
+  const clientHeight = tableContainer.clientHeight || 600;
+  const buffer = 10;
+  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - buffer);
+  const endIndex = Math.min(filteredNodes.length, Math.ceil((scrollTop + clientHeight) / rowHeight) + buffer);
+  const offsetY = startIndex * rowHeight;
+
+  virtualViewport.style.transform = `translateY(${offsetY}px)`;
+  virtualViewport.innerHTML = '';
+
+  const fragment = document.createDocumentFragment();
+  const isCompact = isCompactLayout;
+  const laneWidth = getLaneWidth();
+  const laneOffset = getLaneOffset();
+
+  let maxLane = currentMaxLane;
+  for (let i = startIndex; i < endIndex; i++) {
+    const n = filteredNodes[i];
+    if (n.lane > maxLane) maxLane = n.lane;
+    n.passingLanes?.forEach((p) => {
+      if (p.lane > maxLane) maxLane = p.lane;
+    });
+    n.lines.forEach((l) => {
+      if (l.toLane > maxLane) maxLane = l.toLane;
+    });
+  }
+
+  const canvasCssWidth = isCompact
+    ? Math.max(22, (maxLane + 1) * laneWidth + laneOffset * 2)
+    : Math.max(48, (maxLane + 1) * laneWidth + laneOffset * 2);
+  const dpr = window.devicePixelRatio || 1;
+
+  for (let i = startIndex; i < endIndex; i++) {
+    const node = filteredNodes[i];
+    const row = renderCommitRow(node, i, isCompact, canvasCssWidth, rowHeight, dpr);
+    fragment.appendChild(row);
+  }
+
+  virtualViewport.appendChild(fragment);
+}
+
+function jumpToCommitIndex(index: number): void {
+  if (filteredNodes.length === 0) return;
+  const clamped = Math.max(0, Math.min(filteredNodes.length - 1, index));
+  const rowHeight = getRowHeight();
+  const targetNode = filteredNodes[clamped];
+  if (targetNode) {
+    selectCommit(targetNode);
+  }
+  const targetScroll = Math.max(0, clamped * rowHeight - Math.floor(tableContainer.clientHeight / 2));
+  tableContainer.scrollTop = targetScroll;
+  updateVirtualWindow();
+}
+
 function renderGraph(): void {
+  tableContainer.setAttribute('role', 'treegrid');
+  tableContainer.setAttribute('aria-label', 'CommitFlow Interactive Git Graph');
+
   if (allNodes.length === 0) {
     tableContainer.innerHTML = `
       <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; padding:20px; text-align:center;">
@@ -870,352 +1286,25 @@ function renderGraph(): void {
   }
 
   tableContainer.innerHTML = '';
-  const fragment = document.createDocumentFragment();
-  const isCompact = isCompactLayout;
-  const rowHeight = getRowHeight();
-  const laneWidth = getLaneWidth();
-  const laneOffset = getLaneOffset();
+  tableContainer.style.position = 'relative';
 
-  // Compute dynamic max lane to fit all branches without clipping
-  let maxLane = currentMaxLane;
-  filteredNodes.forEach((n) => {
-    if (n.lane > maxLane) maxLane = n.lane;
-    n.passingLanes?.forEach((p) => {
-      if (p.lane > maxLane) maxLane = p.lane;
+  virtualSpacer = document.createElement('div');
+  virtualSpacer.className = 'virtual-scroll-spacer';
+
+  virtualViewport = document.createElement('div');
+  virtualViewport.className = 'virtual-scroll-viewport';
+
+  tableContainer.appendChild(virtualSpacer);
+  tableContainer.appendChild(virtualViewport);
+
+  if (!isScrollBound) {
+    tableContainer.addEventListener('scroll', () => {
+      updateVirtualWindow();
     });
-    n.lines.forEach((l) => {
-      if (l.toLane > maxLane) maxLane = l.toLane;
-    });
-  });
+    isScrollBound = true;
+  }
 
-  const canvasCssWidth = isCompact
-    ? Math.max(22, (maxLane + 1) * laneWidth + laneOffset * 2)
-    : Math.max(48, (maxLane + 1) * laneWidth + laneOffset * 2);
-  const dpr = window.devicePixelRatio || 1;
-
-  filteredNodes.forEach((node, index) => {
-    const row = document.createElement('div');
-    const isSelected = selectedNode?.commit.hash === node.commit.hash;
-    const isBisectCurrent = Boolean(
-      bisectStatus?.isActive &&
-        (bisectStatus.currentCommit === node.commit.hash ||
-          bisectStatus.currentShortCommit === node.commit.shortHash)
-    );
-    const isBisectGood = Boolean(
-      bisectStatus?.isActive &&
-        bisectStatus.goodCommits.some((h: string) => h === node.commit.hash || node.commit.hash.startsWith(h))
-    );
-    const isBisectBad = Boolean(
-      bisectStatus?.isActive &&
-        bisectStatus.badCommit &&
-        (node.commit.hash === bisectStatus.badCommit ||
-          node.commit.hash.startsWith(bisectStatus.badCommit))
-    );
-    const bisectClass = isBisectCurrent ? 'row-bisect-current' : '';
-    row.style.height = `${rowHeight}px`;
-
-    // 1. Canvas Column with High-DPI support
-    const canvasCol = document.createElement('div');
-    canvasCol.className = 'graph-canvas-col';
-    canvasCol.style.width = `${canvasCssWidth}px`;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(canvasCssWidth * dpr);
-    canvas.height = Math.round(rowHeight * dpr);
-    canvas.style.width = `${canvasCssWidth}px`;
-    canvas.style.height = `${rowHeight}px`;
-    drawCommitNode(canvas, node, index, dpr, isCompact);
-    canvasCol.appendChild(canvas);
-
-    if (isCompact) {
-      // Compact 2-line layout (Sidebar mode)
-      row.className = `commit-row compact-card ${isSelected ? 'selected' : ''} ${bisectClass}`;
-
-      const cardBody = document.createElement('div');
-      cardBody.className = 'commit-card-body';
-
-      // Line 1: Refs + Subject
-      const cardTop = document.createElement('div');
-      cardTop.className = 'commit-card-top';
-
-      if (isBisectCurrent) {
-        const bBadge = document.createElement('span');
-        bBadge.className = 'bisect-badge-tag current';
-        bBadge.innerHTML = `<i class="codicon codicon-search"></i> PROBE`;
-        cardTop.appendChild(bBadge);
-      } else if (isBisectGood) {
-        const bBadge = document.createElement('span');
-        bBadge.className = 'bisect-badge-tag good';
-        bBadge.innerHTML = `<i class="codicon codicon-check"></i> GOOD`;
-        cardTop.appendChild(bBadge);
-      } else if (isBisectBad) {
-        const bBadge = document.createElement('span');
-        bBadge.className = 'bisect-badge-tag bad';
-        bBadge.innerHTML = `<i class="codicon codicon-close"></i> BAD`;
-        cardTop.appendChild(bBadge);
-      }
-
-      node.commit.refs.forEach((ref) => {
-        const pill = document.createElement('span');
-        pill.className = `ref-pill ${
-          ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
-        }`;
-        const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
-        pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
-          ref.isHead ? `HEAD -> ${ref.name}` : ref.name
-        }`;
-        pill.title = ref.name;
-        pill.addEventListener('mouseenter', (e) => {
-          e.stopPropagation();
-          highlightBranchPath(node.commit.hash);
-        });
-        pill.addEventListener('mouseleave', () => {
-          clearBranchPathHighlight();
-        });
-        cardTop.appendChild(pill);
-      });
-
-      const subjectSpan = document.createElement('span');
-      subjectSpan.className = 'commit-subject';
-      subjectSpan.innerHTML = formatCommitSubjectWithIssues(node.commit.subject);
-      subjectSpan.title = node.commit.subject;
-      cardTop.appendChild(subjectSpan);
-
-      if (node.commit.signatureStatus === 'valid') {
-        const sigBadge = document.createElement('span');
-        sigBadge.className = 'commit-sig-badge valid';
-        sigBadge.title = `Firma digital verificada (GPG/SSH)\nFirmante: ${node.commit.signer || 'Desconocido'}\nKey ID: ${node.commit.keyId || 'N/A'}`;
-        sigBadge.innerHTML = `<i class="codicon codicon-verified" style="font-size:11px;"></i>`;
-        cardTop.appendChild(sigBadge);
-      }
-
-      // Line 2: Avatar + Author + Relative Time + Hash
-      const cardBottom = document.createElement('div');
-      cardBottom.className = 'commit-card-bottom';
-
-      const avatarImg = document.createElement('img');
-      avatarImg.className = 'card-author-avatar';
-      avatarImg.src = node.commit.author.avatarUrl;
-      avatarImg.alt = node.commit.author.name;
-      avatarImg.loading = 'lazy';
-      avatarImg.onerror = () => {
-        avatarImg.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="7" fill="%2338bdf8"/><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="%23fff" font-size="7" font-family="sans-serif">?</text></svg>`;
-      };
-
-      const authorName = document.createElement('span');
-      authorName.className = 'card-author-name';
-      authorName.textContent = node.commit.author.name;
-      authorName.title = `${node.commit.author.name} <${node.commit.author.email}>`;
-
-      const dot1 = document.createElement('span');
-      dot1.className = 'card-meta-dot';
-      dot1.textContent = '•';
-
-      const timeSpan = document.createElement('span');
-      timeSpan.className = 'card-time';
-      timeSpan.textContent = node.commit.author.relativeTime;
-
-      const dot2 = document.createElement('span');
-      dot2.className = 'card-meta-dot';
-      dot2.textContent = '•';
-
-      const hashSpan = document.createElement('span');
-      hashSpan.className = 'card-hash';
-      hashSpan.textContent = node.commit.shortHash;
-      hashSpan.title = `SHA: ${node.commit.hash}`;
-
-      cardBottom.appendChild(avatarImg);
-      cardBottom.appendChild(authorName);
-      cardBottom.appendChild(dot1);
-      cardBottom.appendChild(timeSpan);
-      cardBottom.appendChild(dot2);
-      cardBottom.appendChild(hashSpan);
-
-      cardBody.appendChild(cardTop);
-      cardBody.appendChild(cardBottom);
-
-      row.appendChild(canvasCol);
-      row.appendChild(cardBody);
-    } else {
-      // Standard multi-column layout (Wide mode)
-      row.className = `commit-row ${isSelected ? 'selected' : ''} ${bisectClass}`;
-
-      // 2. Info Column (Refs + Subject)
-      const infoCol = document.createElement('div');
-      infoCol.className = 'commit-info-col';
-
-      if (isBisectCurrent) {
-        const bBadge = document.createElement('span');
-        bBadge.className = 'bisect-badge-tag current';
-        bBadge.innerHTML = `<i class="codicon codicon-search"></i> PROBE`;
-        infoCol.appendChild(bBadge);
-      } else if (isBisectGood) {
-        const bBadge = document.createElement('span');
-        bBadge.className = 'bisect-badge-tag good';
-        bBadge.innerHTML = `<i class="codicon codicon-check"></i> GOOD`;
-        infoCol.appendChild(bBadge);
-      } else if (isBisectBad) {
-        const bBadge = document.createElement('span');
-        bBadge.className = 'bisect-badge-tag bad';
-        bBadge.innerHTML = `<i class="codicon codicon-close"></i> BAD`;
-        infoCol.appendChild(bBadge);
-      }
-
-      node.commit.refs.forEach((ref) => {
-        const pill = document.createElement('span');
-        pill.className = `ref-pill ${
-          ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
-        }`;
-        const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
-        pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
-          ref.isHead ? `HEAD -> ${ref.name}` : ref.name
-        }`;
-        pill.addEventListener('mouseenter', (e) => {
-          e.stopPropagation();
-          highlightBranchPath(node.commit.hash);
-        });
-        pill.addEventListener('mouseleave', () => {
-          clearBranchPathHighlight();
-        });
-        infoCol.appendChild(pill);
-      });
-
-      const subjectSpan = document.createElement('span');
-      subjectSpan.className = 'commit-subject';
-      subjectSpan.innerHTML = formatCommitSubjectWithIssues(node.commit.subject);
-      subjectSpan.title = node.commit.subject;
-      infoCol.appendChild(subjectSpan);
-
-      if (node.commit.signatureStatus === 'valid') {
-        const sigBadge = document.createElement('span');
-        sigBadge.className = 'commit-sig-badge valid';
-        sigBadge.title = `Firma digital verificada (GPG/SSH)\nFirmante: ${node.commit.signer || 'Desconocido'}\nKey ID: ${node.commit.keyId || 'N/A'}`;
-        sigBadge.innerHTML = `<i class="codicon codicon-verified" style="font-size:11px;"></i>`;
-        infoCol.appendChild(sigBadge);
-      }
-
-      // 3. Author Column
-      const authorCol = document.createElement('div');
-      authorCol.className = 'commit-author-col';
-      authorCol.title = `${node.commit.author.name} <${node.commit.author.email}>`;
-
-      const avatarImg = document.createElement('img');
-      avatarImg.className = 'author-avatar';
-      avatarImg.src = node.commit.author.avatarUrl;
-      avatarImg.alt = node.commit.author.name;
-      avatarImg.loading = 'lazy';
-      avatarImg.onerror = () => {
-        avatarImg.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="10" fill="%2338bdf8"/><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="%23fff" font-size="9" font-family="sans-serif">?</text></svg>`;
-      };
-
-      const authorNameSpan = document.createElement('span');
-      authorNameSpan.className = 'author-name';
-      authorNameSpan.textContent = node.commit.author.name;
-
-      authorCol.appendChild(avatarImg);
-      authorCol.appendChild(authorNameSpan);
-
-      // 4. Meta Column (Time & Hash)
-      const metaCol = document.createElement('div');
-      metaCol.className = 'commit-meta-col';
-
-      const timeSpan = document.createElement('span');
-      timeSpan.textContent = node.commit.author.relativeTime;
-
-      const hashBadge = document.createElement('span');
-      hashBadge.className = 'commit-hash-badge';
-      hashBadge.textContent = node.commit.shortHash;
-
-      metaCol.appendChild(timeSpan);
-      metaCol.appendChild(hashBadge);
-
-      // 5. Row Quick Actions Bar on Hover (GitLens signature)
-      const rowActions = document.createElement('div');
-      rowActions.className = 'row-actions-bar';
-
-      const btnCopySha = document.createElement('button');
-      btnCopySha.className = 'btn-row-action';
-      btnCopySha.title = tr('action.copySha');
-      btnCopySha.innerHTML = `<i class="codicon codicon-copy"></i>`;
-      btnCopySha.addEventListener('click', (e) => {
-        e.stopPropagation();
-        vscode.postMessage({ command: 'copyToClipboard', payload: node.commit.hash });
-      });
-
-      const btnCopyMsg = document.createElement('button');
-      btnCopyMsg.className = 'btn-row-action';
-      btnCopyMsg.title = tr('action.copyMsg');
-      btnCopyMsg.innerHTML = `<i class="codicon codicon-comment"></i>`;
-      btnCopyMsg.addEventListener('click', (e) => {
-        e.stopPropagation();
-        vscode.postMessage({ command: 'copyToClipboard', payload: node.commit.subject });
-      });
-
-      const btnCheckoutRow = document.createElement('button');
-      btnCheckoutRow.className = 'btn-row-action';
-      btnCheckoutRow.title = tr('action.checkout');
-      btnCheckoutRow.innerHTML = `<i class="codicon codicon-arrow-swap"></i>`;
-      btnCheckoutRow.addEventListener('click', (e) => {
-        e.stopPropagation();
-        vscode.postMessage({ command: 'checkoutCommit', payload: node.commit.hash });
-      });
-
-      const btnInspect = document.createElement('button');
-      btnInspect.className = 'btn-row-action';
-      btnInspect.title = tr('action.inspect');
-      btnInspect.innerHTML = `<i class="codicon codicon-eye"></i>`;
-      btnInspect.addEventListener('click', (e) => {
-        e.stopPropagation();
-        selectCommit(node);
-      });
-
-      const btnCherryPick = document.createElement('button');
-      btnCherryPick.className = 'btn-row-action';
-      btnCherryPick.title = tr('drawer.cherryPick');
-      btnCherryPick.innerHTML = `<i class="codicon codicon-git-pull-request-go-to-changes"></i>`;
-      btnCherryPick.addEventListener('click', (e) => {
-        e.stopPropagation();
-        initiateCherryPick(node.commit.hash, node.commit.shortHash);
-      });
-
-      const btnCreateTag = document.createElement('button');
-      btnCreateTag.className = 'btn-row-action';
-      btnCreateTag.title = tr('drawer.createTag');
-      btnCreateTag.innerHTML = `<i class="codicon codicon-tag"></i>`;
-      btnCreateTag.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openTagModal(node.commit.hash);
-      });
-
-      rowActions.appendChild(btnCopySha);
-      rowActions.appendChild(btnCopyMsg);
-      rowActions.appendChild(btnCheckoutRow);
-      rowActions.appendChild(btnCherryPick);
-      rowActions.appendChild(btnCreateTag);
-      rowActions.appendChild(btnInspect);
-
-      row.appendChild(canvasCol);
-      row.appendChild(infoCol);
-      row.appendChild(authorCol);
-      row.appendChild(metaCol);
-      row.appendChild(rowActions);
-    }
-
-    // Row Click & Hover handlers
-    row.addEventListener('click', () => selectCommit(node));
-    row.addEventListener('mouseenter', (e) => {
-      showHoverPopover(e, node);
-      highlightBranchPath(node.commit.hash);
-    });
-    row.addEventListener('mouseleave', () => {
-      hideHoverPopover();
-      clearBranchPathHighlight();
-    });
-
-    fragment.appendChild(row);
-  });
-
-  tableContainer.appendChild(fragment);
+  updateVirtualWindow();
 }
 
 function drawCommitNode(
@@ -1847,6 +1936,7 @@ function openSettingsModal(): void {
   });
 
   settingsModal.classList.add('open');
+    trapModalFocus(settingsModal);
 }
 
 function closeSettingsModal(): void {
@@ -1860,6 +1950,7 @@ function openPersonalModal(): void {
   if (!personalStats) {
     personalModalBody.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted);">${tr('personal.noContributions')}</div>`;
     personalModal.classList.add('open');
+    trapModalFocus(personalModal);
     return;
   }
 
@@ -1946,6 +2037,7 @@ function openPersonalModal(): void {
   });
 
   personalModal.classList.add('open');
+    trapModalFocus(personalModal);
 }
 
 function closePersonalModal(): void {
@@ -1956,6 +2048,7 @@ function closePersonalModal(): void {
 function openStashModal(): void {
   renderStashModalBody();
   stashModal?.classList.add('open');
+  if (stashModal) trapModalFocus(stashModal);
 }
 
 function closeStashModal(): void {
@@ -2056,6 +2149,7 @@ function renderReflogModal(entries: GitReflogEntry[]): void {
   if (!entries || entries.length === 0) {
     reflogModalBody.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted);">No hay entradas de reflog disponibles.</div>`;
     reflogModal.classList.add('open');
+  trapModalFocus(reflogModal);
     return;
   }
 
@@ -2111,6 +2205,7 @@ function renderReflogModal(entries: GitReflogEntry[]): void {
   });
 
   reflogModal.classList.add('open');
+  trapModalFocus(reflogModal);
 }
 
 // Repository Health & Storage Diagnostics Modal
@@ -2174,6 +2269,7 @@ function renderRepoHealthModal(health: RepoHealthMetrics): void {
   });
 
   repoHealthModal.classList.add('open');
+  trapModalFocus(repoHealthModal);
 }
 
 // Multi-Commit Diff Comparison Modal
@@ -2269,6 +2365,7 @@ function renderComparisonModal(comparison: CommitComparisonResult): void {
   });
 
   comparisonModal.classList.add('open');
+  trapModalFocus(comparisonModal);
 }
 
 // Git Bisect Assistant
@@ -2296,6 +2393,7 @@ function openBisectModal(defaultBad = 'HEAD'): void {
   if (bisectBadInput) bisectBadInput.value = defaultBad;
   if (bisectGoodInput) bisectGoodInput.value = '';
   bisectModal?.classList.add('open');
+  if (bisectModal) trapModalFocus(bisectModal);
 }
 
 function closeBisectModal(): void {
@@ -2361,6 +2459,7 @@ function renderCherryPickForecastModal(preview: CherryPickPreviewResult): void {
     </div>
   `;
   cherryPickForecastModal.classList.add('open');
+  trapModalFocus(cherryPickForecastModal);
   document.getElementById('btn-cancel-cherry-pick')?.addEventListener('click', () => {
     cherryPickForecastModal.classList.remove('open');
   });
@@ -2500,6 +2599,8 @@ function switchTab(tabId: string): void {
     renderWorktrees();
   } else if (tabId === 'tab-cloud-patches') {
     renderCloudPatches();
+  } else if (tabId === 'tab-ai') {
+    initAiStudio();
   }
 }
 
@@ -2832,6 +2933,7 @@ function openPatchCreateModal(): void {
   if (patchTitleInput) patchTitleInput.value = '';
   if (patchDescInput) patchDescInput.value = '';
   patchCreateModal?.classList.add('open');
+  if (patchCreateModal) trapModalFocus(patchCreateModal);
 }
 
 function closePatchCreateModal(): void {
@@ -2841,6 +2943,7 @@ function closePatchCreateModal(): void {
 function openPatchApplyModal(): void {
   if (patchApplyContent) patchApplyContent.value = '';
   patchApplyModal?.classList.add('open');
+  if (patchApplyModal) trapModalFocus(patchApplyModal);
 }
 
 function closePatchApplyModal(): void {
@@ -2851,6 +2954,7 @@ function openWorktreeModal(): void {
   if (wtBranchInput) wtBranchInput.value = '';
   if (wtPathInput) wtPathInput.value = '';
   worktreeCreateModal?.classList.add('open');
+  if (worktreeCreateModal) trapModalFocus(worktreeCreateModal);
 }
 
 function closeWorktreeModal(): void {
@@ -2868,6 +2972,7 @@ function openTagModal(commitHash?: string): void {
     tagMessageInput.placeholder = tr('tag.messagePlaceholder');
   }
   tagCreateModal?.classList.add('open');
+  if (tagCreateModal) trapModalFocus(tagCreateModal);
   setTimeout(() => tagNameInput?.focus(), 50);
 }
 
@@ -2987,9 +3092,7 @@ window.addEventListener('keydown', (e) => {
       const nextIdx = Math.min(filteredNodes.length - 1, currentIdx + 1);
       const targetNode = filteredNodes[nextIdx];
       if (targetNode) {
-        selectCommit(targetNode);
-        const rows = tableContainer.querySelectorAll('.commit-row');
-        rows[nextIdx]?.scrollIntoView({ block: 'nearest' });
+        jumpToCommitIndex(nextIdx);
       }
     } else if (e.key === 'ArrowUp' || e.key === 'k') {
       e.preventDefault();
@@ -2997,9 +3100,7 @@ window.addEventListener('keydown', (e) => {
       const prevIdx = Math.max(0, currentIdx - 1);
       const targetNode = filteredNodes[prevIdx];
       if (targetNode) {
-        selectCommit(targetNode);
-        const rows = tableContainer.querySelectorAll('.commit-row');
-        rows[prevIdx]?.scrollIntoView({ block: 'nearest' });
+        jumpToCommitIndex(prevIdx);
       }
     } else if (e.key === 'Enter') {
       if (selectedNode) {
@@ -3704,3 +3805,270 @@ function handleIssueCommentAdded(payload: { issueNumber: number; comment: any })
 
 // Initial handshake
 vscode.postMessage({ command: 'ready' });
+
+// ==========================================================================
+// Accessibility: Focus Trap for Modals
+// ==========================================================================
+let activeFocusTrapCleanup: (() => void) | null = null;
+
+function trapModalFocus(modalEl: HTMLElement): () => void {
+  if (activeFocusTrapCleanup) {
+    activeFocusTrapCleanup();
+    activeFocusTrapCleanup = null;
+  }
+
+  const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const focusables = Array.from(modalEl.querySelectorAll<HTMLElement>(focusableSelectors)).filter(
+    (el) => !el.hasAttribute('disabled') && el.offsetParent !== null
+  );
+
+  if (focusables.length > 0) {
+    focusables[0].focus();
+  }
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      modalEl.classList.remove('open');
+      if (activeFocusTrapCleanup) {
+        activeFocusTrapCleanup();
+        activeFocusTrapCleanup = null;
+      }
+      return;
+    }
+    if (e.key !== 'Tab') return;
+
+    const currentFocusables = Array.from(modalEl.querySelectorAll<HTMLElement>(focusableSelectors)).filter(
+      (el) => !el.hasAttribute('disabled') && el.offsetParent !== null
+    );
+    if (currentFocusables.length === 0) return;
+
+    const first = currentFocusables[0];
+    const last = currentFocusables[currentFocusables.length - 1];
+
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        last.focus();
+        e.preventDefault();
+      }
+    } else {
+      if (document.activeElement === last) {
+        first.focus();
+        e.preventDefault();
+      }
+    }
+  };
+
+  modalEl.addEventListener('keydown', handleKeyDown);
+  const cleanup = () => {
+    modalEl.removeEventListener('keydown', handleKeyDown);
+  };
+  activeFocusTrapCleanup = cleanup;
+  return cleanup;
+}
+
+// ==========================================================================
+// AI Studio Key Management & Multi-Client Snippets
+// ==========================================================================
+let aiStudioInitialized = false;
+
+function initAiStudio(): void {
+  vscode.postMessage({ command: 'requestAiKeys' });
+
+  if (aiStudioInitialized) return;
+  aiStudioInitialized = true;
+
+  const btnGenerate = document.getElementById('btn-generate-ai-key') as HTMLButtonElement | null;
+  const inputKeyName = document.getElementById('ai-key-name') as HTMLInputElement | null;
+  const selectExpiry = document.getElementById('ai-key-expiry') as HTMLSelectElement | null;
+  const btnCopyKey = document.getElementById('btn-copy-revealed-key') as HTMLButtonElement | null;
+  const revealedInput = document.getElementById('ai-revealed-key-value') as HTMLInputElement | null;
+
+  btnGenerate?.addEventListener('click', () => {
+    const name = inputKeyName?.value.trim() || 'AI Assistant';
+    const permRadios = document.getElementsByName('ai-key-perm') as NodeListOf<HTMLInputElement>;
+    let permissions = 'read';
+    for (const r of Array.from(permRadios)) {
+      if (r.checked) {
+        permissions = r.value;
+        break;
+      }
+    }
+    const expiresInDays = selectExpiry ? parseInt(selectExpiry.value, 10) : 0;
+
+    vscode.postMessage({
+      command: 'generateAiKey',
+      payload: {
+        name,
+        permissions,
+        expiresInDays,
+      },
+    });
+
+    if (inputKeyName) inputKeyName.value = '';
+  });
+
+  btnCopyKey?.addEventListener('click', () => {
+    if (revealedInput && revealedInput.value) {
+      vscode.postMessage({ command: 'copyToClipboard', payload: revealedInput.value });
+      const origHtml = btnCopyKey.innerHTML;
+      btnCopyKey.innerHTML = `<i class="codicon codicon-check"></i> ${tr('general.copied') || 'Copiado'}`;
+      setTimeout(() => {
+        btnCopyKey.innerHTML = origHtml;
+      }, 2000);
+    }
+  });
+
+  // Client Snippet Subtabs switching
+  const subtabBtns = document.querySelectorAll('.snippet-subtab-btn');
+  subtabBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetSnippet = btn.getAttribute('data-snippet');
+      subtabBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      document.querySelectorAll('.snippet-pane').forEach((pane) => {
+        if (pane.id === `snippet-pane-${targetSnippet}`) {
+          pane.classList.add('active');
+        } else {
+          pane.classList.remove('active');
+        }
+      });
+    });
+  });
+
+  // Snippet Copy Buttons
+  const copySnippetBtns = document.querySelectorAll('.btn-copy-snippet');
+  copySnippetBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-target');
+      if (!targetId) return;
+      const codeEl = document.getElementById(targetId);
+      if (codeEl && codeEl.textContent) {
+        vscode.postMessage({ command: 'copyToClipboard', payload: codeEl.textContent });
+        const icon = btn.querySelector('i');
+        if (icon) {
+          icon.className = 'codicon codicon-check';
+          setTimeout(() => {
+            icon.className = 'codicon codicon-copy';
+          }, 1800);
+        }
+      }
+    });
+  });
+}
+
+function handleAiKeyGenerated(payload: { plaintextKey: string; metadata: any; keys?: any[] }): void {
+  const banner = document.getElementById('ai-key-reveal-banner');
+  const revealedInput = document.getElementById('ai-revealed-key-value') as HTMLInputElement | null;
+  if (banner && revealedInput) {
+    revealedInput.value = payload.plaintextKey;
+    banner.style.display = 'block';
+  }
+
+  // Update snippet placeholders with the generated key
+  const claudeCode = document.getElementById('snippet-code-claude');
+  if (claudeCode) {
+    claudeCode.textContent = `claude mcp add --transport sse commitflow http://127.0.0.1:47291/sse?token=${payload.plaintextKey}`;
+  }
+  const antigravityCode = document.getElementById('snippet-code-antigravity');
+  if (antigravityCode) {
+    antigravityCode.textContent = JSON.stringify(
+      {
+        mcpServers: {
+          commitflow: {
+            url: `http://127.0.0.1:47291/mcp?token=${payload.plaintextKey}`,
+          },
+        },
+      },
+      null,
+      2
+    );
+  }
+  const genericCode = document.getElementById('snippet-code-generic');
+  if (genericCode) {
+    genericCode.textContent = JSON.stringify(
+      {
+        mcpServers: {
+          commitflow: {
+            url: `http://127.0.0.1:47291/sse?token=${payload.plaintextKey}`,
+          },
+        },
+      },
+      null,
+      2
+    );
+  }
+
+  if (payload.keys) {
+    handleAiKeysData({ keys: payload.keys });
+  }
+}
+
+function handleAiKeysData(payload: { keys: any[] }): void {
+  const tbody = document.getElementById('ai-keys-tbody');
+  if (!tbody) return;
+
+  const keys = payload.keys || [];
+  if (keys.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-table-cell">${tr('ai.noKeys')}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = '';
+  keys.forEach((key: any) => {
+    const trEl = document.createElement('tr');
+    if (key.revoked) trEl.classList.add('key-revoked-row');
+
+    const createdDate = new Date(key.createdAt).toLocaleDateString();
+    const lastUsed = key.lastUsed ? new Date(key.lastUsed).toLocaleDateString() : (tr('ai.neverUsed') || 'Nunca');
+    const statusHtml = key.revoked
+      ? `<span class="badge-status-revoked"><i class="codicon codicon-error"></i> ${tr('ai.statusRevoked')}</span>`
+      : `<span class="badge-status-active"><i class="codicon codicon-check"></i> ${tr('ai.statusActive')}</span>`;
+
+    const actionsHtml = key.revoked
+      ? `<span class="text-muted" style="font-size:11px;">-</span>`
+      : `<button class="btn btn-sm btn-danger btn-revoke-key" data-id="${key.id}" title="${tr('ai.revokeKeyTitle')}">
+          <i class="codicon codicon-trash"></i> ${tr('ai.btnRevoke')}
+        </button>`;
+
+    trEl.innerHTML = `
+      <td class="font-semibold">${key.name}</td>
+      <td><code>${key.keyPrefix}...</code></td>
+      <td><span class="badge-perm">${key.permissions}</span></td>
+      <td>${createdDate}</td>
+      <td>${lastUsed}</td>
+      <td>${statusHtml}</td>
+      <td>${actionsHtml}</td>
+    `;
+
+    const revokeBtn = trEl.querySelector('.btn-revoke-key');
+    revokeBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+      if (id) {
+        vscode.postMessage({ command: 'revokeAiKey', payload: { id } });
+      }
+    });
+
+    tbody.appendChild(trEl);
+  });
+}
+
+// Rebase Resolution Banner & Rebase Studio Modal Hooks
+document.getElementById('btn-rebase-continue')?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'continueRebase' });
+});
+document.getElementById('btn-rebase-skip')?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'skipRebase' });
+});
+document.getElementById('btn-rebase-abort')?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'abortRebase' });
+});
+
+const rebaseStudioModal = document.getElementById('rebase-studio-modal');
+document.getElementById('rebase-studio-modal-close')?.addEventListener('click', () => {
+  rebaseStudioModal?.classList.remove('open');
+});
+document.getElementById('btn-rebase-cancel')?.addEventListener('click', () => {
+  rebaseStudioModal?.classList.remove('open');
+});

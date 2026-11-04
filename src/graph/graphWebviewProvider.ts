@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { GitClient } from '../git/gitClient';
 import { GraphLayout } from './graphLayout';
 import { GitContentProvider } from '../git/gitContentProvider';
@@ -7,6 +8,7 @@ import { t } from '../i18n/locales';
 import { IssueService } from '../issues/issueService';
 import { ForkIntegration } from '../remotes/forkIntegration';
 import { PersistenceManager } from '../state/persistenceManager';
+import { ApiKeyManager } from '../mcp/apiKeyManager';
 import {
   CommitFlowSettings,
   ExtensionToWebviewMessage,
@@ -26,6 +28,14 @@ export class GraphWebviewProvider
   private readonly forkIntegration = ForkIntegration.getInstance();
   private readonly persistence = PersistenceManager.getInstance();
   private readonly disposables: vscode.Disposable[] = [];
+  private activeRepoPath: string | null = null;
+
+  public async getEffectiveRepoRoot(): Promise<string | null> {
+    if (this.activeRepoPath && fs.existsSync(this.activeRepoPath)) {
+      return this.activeRepoPath;
+    }
+    return await this.gitClient.getRepoRoot();
+  }
 
   constructor(private readonly extensionUri: vscode.Uri) {
     // 1. Watch for Git HEAD changes to auto-refresh when checking out branches
@@ -160,7 +170,7 @@ export class GraphWebviewProvider
     });
 
     try {
-      const root = await this.gitClient.getRepoRoot();
+      const root = await this.getEffectiveRepoRoot();
       if (!root) {
         activeWebviews.forEach((w) => {
           try {
@@ -189,6 +199,8 @@ export class GraphWebviewProvider
         worktrees,
         pullRequests,
         bisectStatus,
+        repositories,
+        submodules,
       ] = await Promise.all([
         this.gitClient.getCommits(root, limit),
         this.gitClient.getBranches(root),
@@ -201,6 +213,8 @@ export class GraphWebviewProvider
         this.gitClient.getWorktrees(root),
         this.gitClient.getPullRequests(root),
         this.gitClient.getBisectStatus(root),
+        this.gitClient.getWorkspaceRepositories(root),
+        this.gitClient.getSubmodules(root),
       ]);
 
       const themeConfig = config.get<any>('graph.theme', 'auto');
@@ -264,6 +278,9 @@ export class GraphWebviewProvider
         totalCommits: graphNodes.length,
         hasMore: false,
         bisectStatus,
+        repositories,
+        submodules,
+        activeRepo: root,
         forkInstalled: this.forkIntegration.findForkExecutable() !== null,
         forkEnabled: this.persistence.isForkIntegrationEnabled(),
       };
@@ -290,7 +307,7 @@ export class GraphWebviewProvider
 
   private setupMessageListener(webview: vscode.Webview): void {
     webview.onDidReceiveMessage(async (msg: WebviewToExtensionMessage) => {
-      const root = await this.gitClient.getRepoRoot();
+      const root = await this.getEffectiveRepoRoot();
 
       switch (msg.command) {
         case 'ready':
@@ -1102,6 +1119,140 @@ export class GraphWebviewProvider
             }
           }
           break;
+
+        case 'requestRepositories':
+          if (root) {
+            try {
+              const repos = await this.gitClient.getWorkspaceRepositories(root);
+              webview.postMessage({
+                command: 'repositoriesData',
+                payload: { repositories: repos, activeRepo: root },
+              } as ExtensionToWebviewMessage);
+            } catch {}
+          }
+          break;
+
+        case 'switchRepository':
+          if (msg.payload) {
+            this.activeRepoPath = msg.payload;
+            await this.refreshData();
+          }
+          break;
+
+        case 'requestRebaseCommits':
+          if (root && msg.payload?.baseHash) {
+            try {
+              const commits = await this.gitClient.getRebaseCommits(root, msg.payload.baseHash);
+              webview.postMessage({
+                command: 'rebaseCommitsData',
+                payload: { baseHash: msg.payload.baseHash, commits },
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to load rebase commits: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'simulateRebase':
+          if (root && msg.payload?.baseHash && msg.payload?.todoList) {
+            try {
+              const sim = await this.gitClient.simulateRebase(root, msg.payload.baseHash, msg.payload.todoList);
+              webview.postMessage({
+                command: 'rebaseSimulationData',
+                payload: sim,
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to simulate rebase: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'startInteractiveRebase':
+          if (root && msg.payload?.baseHash && msg.payload?.todoList) {
+            try {
+              const res = await this.gitClient.executeInteractiveRebase(root, msg.payload.baseHash, msg.payload.todoList);
+              if (res.conflict) {
+                vscode.window.showWarningMessage('Interactive rebase paused due to merge conflicts. Use the resolution assistant to Continue, Skip, or Abort.');
+              } else if (res.success) {
+                vscode.window.showInformationMessage('Interactive rebase completed successfully.');
+              } else {
+                vscode.window.showErrorMessage(`Rebase failed: ${res.error}`);
+              }
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Rebase execution failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'continueRebase':
+          if (root) {
+            try {
+              await this.gitClient.continueRebase(root);
+              vscode.window.showInformationMessage('Rebase step continued.');
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Rebase continue failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'skipRebase':
+          if (root) {
+            try {
+              await this.gitClient.skipRebase(root);
+              vscode.window.showInformationMessage('Rebase step skipped.');
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Rebase skip failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'requestAiKeys': {
+          try {
+            const keys = await ApiKeyManager.getInstance().listKeys();
+            webview.postMessage({
+              command: 'aiKeysData',
+              payload: { keys },
+            } as ExtensionToWebviewMessage);
+          } catch {}
+          break;
+        }
+
+        case 'generateAiKey': {
+          try {
+            const { name, permissions, allowedRepos, expiresInDays } = msg.payload || {};
+            const result = await ApiKeyManager.getInstance().generateKey(name, permissions, allowedRepos, expiresInDays);
+            const keys = await ApiKeyManager.getInstance().listKeys();
+            webview.postMessage({
+              command: 'aiKeyGenerated',
+              payload: {
+                plaintextKey: result.plaintextKey,
+                metadata: result.metadata,
+                keys,
+              },
+            } as ExtensionToWebviewMessage);
+          } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to generate AI key: ${err.message}`);
+          }
+          break;
+        }
+
+        case 'revokeAiKey': {
+          try {
+            const { id } = msg.payload || {};
+            if (id) {
+              await ApiKeyManager.getInstance().revokeKey(id);
+              const keys = await ApiKeyManager.getInstance().listKeys();
+              webview.postMessage({
+                command: 'aiKeysData',
+                payload: { keys },
+              } as ExtensionToWebviewMessage);
+            }
+          } catch {}
+          break;
+        }
       }
     });
   }
@@ -1320,10 +1471,17 @@ export class GraphWebviewProvider
         <i class="codicon codicon-cloud-upload"></i>
         <span id="nav-tab-text-patches">${tr('tabs.cloudPatches')}</span>
       </button>
+      <button class="nav-tab-btn" data-tab="tab-ai" title="${tr('tabs.aiTitle')}">
+        <i class="codicon codicon-sparkle"></i>
+        <span id="nav-tab-text-ai">${tr('tabs.ai')}</span>
+      </button>
     </div>
 
     <!-- Toolbar Controls (Search & Branch Filter) for Graph -->
     <div class="toolbar-controls" id="toolbar-controls">
+      <select id="repo-select" class="branch-select repo-select" title="Repositorio / Submódulo activo" style="display:none;">
+      </select>
+
       <div class="search-input-wrapper">
         <span class="search-icon"><i class="codicon codicon-search"></i></span>
         <input type="text" id="search-input" class="search-input" placeholder="${tr('toolbar.searchPlaceholder')}" />
@@ -1405,7 +1563,31 @@ export class GraphWebviewProvider
         </div>
       </div>
 
-      <div id="graph-table-container" class="graph-table-container">
+      <!-- Interactive Rebase Conflict Resolution Assistant Banner -->
+      <div id="rebase-resolution-banner" class="rebase-banner" style="display:none;">
+        <div class="rebase-banner-content">
+          <div class="rebase-status-pill">
+            <i class="codicon codicon-git-pull-request-go-to-changes"></i>
+            <span class="rebase-badge-text">Rebase Activo</span>
+          </div>
+          <div class="rebase-info" id="rebase-info-text">
+            Rebase en progreso: Paso <span id="rebase-step-current">1</span> de <span id="rebase-step-total">?</span>. Resuelve los conflictos y continúa.
+          </div>
+          <div class="rebase-actions">
+            <button id="btn-rebase-continue" class="btn-sm btn-rebase-continue" title="Continuar el rebase tras resolver conflictos">
+              <i class="codicon codicon-play"></i> Continuar (Continue)
+            </button>
+            <button id="btn-rebase-skip" class="btn-sm" title="Omitir el commit en conflicto">
+              <i class="codicon codicon-debug-step-over"></i> Omitir (Skip)
+            </button>
+            <button id="btn-rebase-abort" class="btn-sm btn-rebase-abort" title="Abortar rebase y volver al estado original">
+              <i class="codicon codicon-close"></i> Abortar (Abort)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="graph-table-container" class="graph-table-container" role="treegrid" aria-label="CommitFlow Git DAG Graph" tabindex="0">
         <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
           <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
           <div>${tr('graph.loading')}</div>
@@ -1440,9 +1622,9 @@ export class GraphWebviewProvider
       <div class="pr-launchpad-container">
         <div class="pr-filters-bar">
           <button class="pr-filter-pill active" data-filter="all">${tr('pr.filterAll')} (<span id="pr-filter-count-all">0</span>)</button>
-          <button class="pr-filter-pill" data-filter="blocked">🔴 ${tr('pr.filterBlocked')} (<span id="pr-filter-count-blocked">0</span>)</button>
-          <button class="pr-filter-pill" data-filter="ready">🟢 ${tr('pr.filterReady')} (<span id="pr-filter-count-ready">0</span>)</button>
-          <button class="pr-filter-pill" data-filter="pending">🟡 ${tr('pr.filterPending')} (<span id="pr-filter-count-pending">0</span>)</button>
+          <button class="pr-filter-pill" data-filter="blocked"><i class="codicon codicon-error" style="color:var(--vscode-errorForeground);"></i> ${tr('pr.filterBlocked')} (<span id="pr-filter-count-blocked">0</span>)</button>
+          <button class="pr-filter-pill" data-filter="ready"><i class="codicon codicon-pass" style="color:var(--vscode-testing-iconPassed);"></i> ${tr('pr.filterReady')} (<span id="pr-filter-count-ready">0</span>)</button>
+          <button class="pr-filter-pill" data-filter="pending"><i class="codicon codicon-history" style="color:var(--vscode-editorWarning-foreground);"></i> ${tr('pr.filterPending')} (<span id="pr-filter-count-pending">0</span>)</button>
         </div>
         <div id="pr-cards-list" class="pr-cards-list">
           <div class="empty-state">
@@ -1495,27 +1677,27 @@ export class GraphWebviewProvider
           <div class="issues-filter-pills">
             <button class="issue-filter-pill active" data-filter="assignedToMe">
               <i class="codicon codicon-account"></i>
-              <span>Mis Issues</span>
+              <span>${tr('issues.filterAssigned')}</span>
               <span class="pill-badge" id="issues-assigned-count">0</span>
             </button>
             <button class="issue-filter-pill" data-filter="linkedToBranch">
               <i class="codicon codicon-git-branch"></i>
-              <span>Asociados a Rama</span>
+              <span>${tr('issues.filterLinked')}</span>
               <span class="pill-badge" id="issues-linked-count">0</span>
             </button>
             <button class="issue-filter-pill" data-filter="allOpen">
               <i class="codicon codicon-issues"></i>
-              <span>Todos los Abiertos</span>
+              <span>${tr('issues.filterAllOpen')}</span>
               <span class="pill-badge" id="issues-all-count">0</span>
             </button>
             <button class="issue-filter-pill" data-filter="closed">
               <i class="codicon codicon-issue-closed"></i>
-              <span>Cerrados</span>
+              <span>${tr('issues.filterClosed')}</span>
             </button>
           </div>
           <div class="issues-search-wrapper">
             <i class="codicon codicon-search search-icon"></i>
-            <input type="text" id="issues-search-input" class="issues-search-input" placeholder="Buscar por título, #número o etiqueta..." />
+            <input type="text" id="issues-search-input" class="issues-search-input" placeholder="${tr('issues.searchPlaceholder')}" />
           </div>
         </div>
 
@@ -1526,10 +1708,189 @@ export class GraphWebviewProvider
         <div id="issues-cards-list" class="issues-cards-list">
           <div class="empty-state">
             <i class="codicon codicon-issues" style="font-size:32px; color:var(--accent-purple);"></i>
-            <div style="font-weight:600; margin-top:8px;">Hub de Issues</div>
+            <div style="font-weight:600; margin-top:8px;">${tr('issues.loadingTitle')}</div>
             <div style="font-size:var(--font-size-sm); color:var(--text-muted); text-align:center; margin-top:4px;">
-              Cargando tus tareas pendientes y asignadas...
+              ${tr('issues.loadingDesc')}
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 7: CONECTAR CON TU IA -->
+    <div id="tab-ai" class="tab-pane">
+      <div class="ai-studio-container">
+        <div class="ai-studio-header">
+          <div class="ai-header-info">
+            <div class="ai-header-title-row">
+              <i class="codicon codicon-sparkle ai-sparkle-icon"></i>
+              <h2>${tr('ai.title')}</h2>
+              <span class="mcp-status-pill active" id="mcp-status-badge">
+                <span class="status-indicator-dot"></span>
+                <span>${tr('ai.serverActive', { port: 47291 })}</span>
+              </span>
+            </div>
+            <p class="ai-header-subtitle">${tr('ai.subtitle')}</p>
+          </div>
+        </div>
+
+        <div class="ai-generator-card">
+          <div class="ai-card-title">
+            <i class="codicon codicon-key"></i>
+            <span>${tr('ai.generateKeyTitle')}</span>
+          </div>
+
+          <div class="ai-form-grid">
+            <div class="form-group">
+              <label for="ai-key-name">${tr('ai.keyName')}</label>
+              <input type="text" id="ai-key-name" class="ai-input" placeholder="${tr('ai.keyNamePlaceholder')}" />
+            </div>
+
+            <div class="form-group">
+              <label>${tr('ai.permissions')}</label>
+              <div class="ai-radio-group">
+                <label class="ai-radio-label">
+                  <input type="radio" name="ai-key-perm" value="read" checked />
+                  <span>${tr('ai.permRead')}</span>
+                </label>
+                <label class="ai-radio-label">
+                  <input type="radio" name="ai-key-perm" value="read-write" />
+                  <span>${tr('ai.permReadWrite')}</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="ai-key-expiry">${tr('ai.expiration')}</label>
+              <select id="ai-key-expiry" class="ai-select">
+                <option value="0">${tr('ai.expiryNever')}</option>
+                <option value="30">${tr('ai.expiry30')}</option>
+                <option value="90">${tr('ai.expiry90')}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="ai-form-actions">
+            <button id="btn-generate-ai-key" class="btn btn-primary">
+              <i class="codicon codicon-add"></i>
+              <span>${tr('ai.btnGenerate')}</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="ai-key-reveal-banner" class="ai-key-reveal-banner" style="display:none;">
+          <div class="reveal-header">
+            <i class="codicon codicon-warning"></i>
+            <span>${tr('ai.keyRevealNotice')}</span>
+          </div>
+          <div class="reveal-key-row">
+            <input type="text" id="ai-revealed-key-value" class="ai-revealed-key-input" readonly />
+            <button id="btn-copy-revealed-key" class="btn btn-secondary">
+              <i class="codicon codicon-copy"></i>
+              <span>${tr('ai.btnCopyKey')}</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="ai-client-snippets-section" class="ai-client-snippets-card">
+          <div class="snippets-header">
+            <i class="codicon codicon-terminal"></i>
+            <span>${tr('ai.connectInstructions')}</span>
+          </div>
+
+          <div class="snippet-subtabs">
+            <button class="snippet-subtab-btn active" data-snippet="claude">
+              <i class="codicon codicon-terminal-bash"></i> ${tr('ai.tabClaude')}
+            </button>
+            <button class="snippet-subtab-btn" data-snippet="antigravity">
+              <i class="codicon codicon-gear"></i> ${tr('ai.tabAntigravity')}
+            </button>
+            <button class="snippet-subtab-btn" data-snippet="generic">
+              <i class="codicon codicon-json"></i> ${tr('ai.tabGeneric')}
+            </button>
+            <button class="snippet-subtab-btn" data-snippet="prompt">
+              <i class="codicon codicon-comment-discussion"></i> ${tr('ai.tabPrompt')}
+            </button>
+          </div>
+
+          <div class="snippet-content-wrapper">
+            <div id="snippet-pane-claude" class="snippet-pane active">
+              <div class="snippet-code-box">
+                <pre><code id="snippet-code-claude">claude mcp add --transport sse commitflow http://127.0.0.1:47291/sse?token=YOUR_API_KEY</code></pre>
+                <button class="btn-copy-snippet" data-target="snippet-code-claude" title="${tr('ai.copySnippet')}">
+                  <i class="codicon codicon-copy"></i>
+                </button>
+              </div>
+            </div>
+
+            <div id="snippet-pane-antigravity" class="snippet-pane">
+              <div class="snippet-code-box">
+                <pre><code id="snippet-code-antigravity">{
+  "mcpServers": {
+    "commitflow": {
+      "url": "http://127.0.0.1:47291/mcp?token=YOUR_API_KEY"
+    }
+  }
+}</code></pre>
+                <button class="btn-copy-snippet" data-target="snippet-code-antigravity" title="${tr('ai.copySnippet')}">
+                  <i class="codicon codicon-copy"></i>
+                </button>
+              </div>
+            </div>
+
+            <div id="snippet-pane-generic" class="snippet-pane">
+              <div class="snippet-code-box">
+                <pre><code id="snippet-code-generic">{
+  "mcpServers": {
+    "commitflow": {
+      "url": "http://127.0.0.1:47291/sse?token=YOUR_API_KEY"
+    }
+  }
+}</code></pre>
+                <button class="btn-copy-snippet" data-target="snippet-code-generic" title="${tr('ai.copySnippet')}">
+                  <i class="codicon codicon-copy"></i>
+                </button>
+              </div>
+            </div>
+
+            <div id="snippet-pane-prompt" class="snippet-pane">
+              <div class="snippet-code-box">
+                <pre><code id="snippet-code-prompt">CommitFlow Context:
+You are an expert pair-programming AI connected to the local repository via CommitFlow MCP server.
+You have access to tools: get_repo_state, get_commit_history, get_diff, get_blame, get_branches, get_worktrees, get_pull_requests, get_cloud_patches, checkout_branch, create_commit, git_push.
+Always check repo state and active branch before making modifications.</code></pre>
+                <button class="btn-copy-snippet" data-target="snippet-code-prompt" title="${tr('ai.copySnippet')}">
+                  <i class="codicon codicon-copy"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ai-keys-table-card">
+          <div class="keys-table-header">
+            <i class="codicon codicon-list-selection"></i>
+            <span>${tr('ai.keysListTitle')}</span>
+          </div>
+          <div class="keys-table-responsive-wrapper">
+            <table class="ai-keys-table" id="ai-keys-table">
+              <thead>
+                <tr>
+                  <th>${tr('ai.colName')}</th>
+                  <th>${tr('ai.colPrefix')}</th>
+                  <th>${tr('ai.colPerms')}</th>
+                  <th>${tr('ai.colCreated')}</th>
+                  <th>${tr('ai.colLastUsed')}</th>
+                  <th>${tr('ai.colStatus')}</th>
+                  <th>${tr('ai.colActions')}</th>
+                </tr>
+              </thead>
+              <tbody id="ai-keys-tbody">
+                <tr>
+                  <td colspan="7" class="empty-table-cell">${tr('ai.noKeys')}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1906,6 +2267,38 @@ export class GraphWebviewProvider
           <button id="cherry-pick-forecast-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
         </div>
         <div id="cherry-pick-forecast-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Interactive Rebase Studio Modal -->
+    <div id="rebase-studio-modal" class="modal-overlay">
+      <div class="modal-card" style="width: min(850px, calc(100vw - 20px)); max-height: min(80vh, 750px); display: flex; flex-direction: column;">
+        <div class="modal-header">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <i class="codicon codicon-git-pull-request-go-to-changes" style="font-size:16px; color:var(--accent-purple);"></i>
+            <span style="font-weight:700; font-size:var(--font-size-base);">Interactive Rebase Studio</span>
+          </div>
+          <button id="rebase-studio-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:12px; padding:12px;">
+          <div style="font-size:var(--font-size-sm); color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+            <span>Reordena los commits arrastrando o usando los botones. Selecciona la acción para cada commit:</span>
+            <span id="rebase-commits-count" style="font-weight:600; color:var(--text-primary);">0 commits</span>
+          </div>
+          <div id="rebase-todo-container" class="rebase-todo-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+          <div id="rebase-simulation-feedback" style="display:none; padding:8px 12px; border-radius:4px; font-size:var(--font-size-sm);"></div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-top:1px solid var(--border-color); background:var(--bg-secondary);">
+          <button id="btn-rebase-dryrun" class="btn-sm" title="Simular rebase antes de ejecutarlo">
+            <i class="codicon codicon-eye"></i> Simular (Dry Run)
+          </button>
+          <div style="display:flex; gap:8px;">
+            <button id="btn-rebase-cancel" class="btn-sm">${tr('modal.close')}</button>
+            <button id="btn-rebase-execute" class="btn-sm btn-primary">
+              <i class="codicon codicon-check"></i> Iniciar Rebase
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 

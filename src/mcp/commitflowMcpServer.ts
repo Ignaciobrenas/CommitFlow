@@ -3,15 +3,22 @@ import * as path from 'path';
 import { GitClient } from '../git/gitClient';
 import { IssueService } from '../issues/issueService';
 import { RemoteManager } from '../remotes/remoteManager';
+import { ApiKeyMetadata } from './apiKeyManager';
+import { CloudPatch } from '../git/types';
 
 export class CommitFlowMcpServer {
   private readonly gitClient = GitClient.getInstance();
   private readonly issueService = IssueService.getInstance();
   private readonly remoteManager = RemoteManager.getInstance();
+  private readonly cloudPatches: CloudPatch[] = [];
   private repoRoot: string;
 
   constructor(targetDir?: string) {
     this.repoRoot = targetDir ? path.resolve(targetDir) : process.cwd();
+  }
+
+  public async processDirectRequest(req: any, clientKey?: ApiKeyMetadata): Promise<any> {
+    return this.handleJsonRpc(req, clientKey);
   }
 
   public async start(): Promise<void> {
@@ -53,10 +60,9 @@ export class CommitFlowMcpServer {
     process.stderr.write(`⚡ [CommitFlow MCP] Server listening on stdio (Repo: ${this.repoRoot})\n`);
   }
 
-  private async handleJsonRpc(req: any): Promise<any> {
+  private async handleJsonRpc(req: any, clientKey?: ApiKeyMetadata): Promise<any> {
     const { id, method, params } = req;
 
-    // Notifications (no id)
     if (id === undefined || id === null) {
       if (method === 'notifications/initialized') {
         return null;
@@ -73,7 +79,7 @@ export class CommitFlowMcpServer {
             protocolVersion: '2024-11-05',
             serverInfo: {
               name: 'commitflow-mcp',
-              version: '0.4.5',
+              version: '0.4.7',
             },
             capabilities: {
               tools: {},
@@ -89,6 +95,104 @@ export class CommitFlowMcpServer {
           id,
           result: {
             tools: [
+              {
+                name: 'get_repo_state',
+                description: 'Get comprehensive repository status: active branch, dirty worktree status, stashes, and commit summary.',
+                inputSchema: { type: 'object', properties: {} },
+              },
+              {
+                name: 'get_commit_history',
+                description: 'Get commit history with authors, dates, SHAs, and messages.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    limit: { type: 'number', description: 'Number of commits to return (default: 30)' },
+                    skip: { type: 'number', description: 'Offset/skip count' },
+                  },
+                },
+              },
+              {
+                name: 'get_diff',
+                description: 'Get diff between two commits, branches, or against the working tree.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    ref1: { type: 'string', description: 'Base commit SHA or branch' },
+                    ref2: { type: 'string', description: 'Target commit SHA or branch' },
+                    filePath: { type: 'string', description: 'Optional specific file path' },
+                  },
+                },
+              },
+              {
+                name: 'get_blame',
+                description: 'Get line-by-line or whole-file authorship blame.',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    filePath: { type: 'string', description: 'File path to inspect' },
+                    line: { type: 'number', description: 'Optional 1-based line number' },
+                  },
+                  required: ['filePath'],
+                },
+              },
+              {
+                name: 'get_branches',
+                description: 'List all local and remote branches in the repository.',
+                inputSchema: { type: 'object', properties: {} },
+              },
+              {
+                name: 'get_worktrees',
+                description: 'List all active linked worktrees and multi-WIP workspaces.',
+                inputSchema: { type: 'object', properties: {} },
+              },
+              {
+                name: 'get_pull_requests',
+                description: 'List pull requests and their current status.',
+                inputSchema: { type: 'object', properties: {} },
+              },
+              {
+                name: 'get_cloud_patches',
+                description: 'List all local cloud patches shared or saved.',
+                inputSchema: { type: 'object', properties: {} },
+              },
+              {
+                name: 'create_cloud_patch',
+                description: 'Create a new cloud patch from uncommitted changes (write operation).',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string', description: 'Patch title' },
+                  },
+                  required: ['title'],
+                },
+              },
+              {
+                name: 'checkout_branch',
+                description: 'Checkout a branch by name (write operation).',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    branch: { type: 'string', description: 'Branch name to switch to' },
+                  },
+                  required: ['branch'],
+                },
+              },
+              {
+                name: 'create_commit',
+                description: 'Stage all and create a new commit with the given message (write operation).',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    message: { type: 'string', description: 'Commit message' },
+                  },
+                  required: ['message'],
+                },
+              },
+              {
+                name: 'git_push',
+                description: 'Push current branch commits to remote upstream (write operation).',
+                inputSchema: { type: 'object', properties: {} },
+              },
               // 1. get_my_assigned_issues
               {
                 name: 'get_my_assigned_issues',
@@ -361,7 +465,7 @@ export class CommitFlowMcpServer {
         };
 
       case 'tools/call':
-        return await this.handleToolCall(id, params?.name, params?.arguments);
+        return await this.handleToolCall(id, params?.name, params?.arguments, clientKey);
 
       case 'resources/list':
         return {
@@ -476,12 +580,114 @@ export class CommitFlowMcpServer {
     }
   }
 
-  private async handleToolCall(id: any, name: string, args: any = {}): Promise<any> {
+  private async handleToolCall(id: any, name: string, args: any = {}, clientKey?: ApiKeyMetadata): Promise<any> {
     try {
+      const isWrite = ['create_commit', 'checkout_branch', 'git_push', 'create_cloud_patch'].includes(name);
+      if (isWrite && clientKey && clientKey.permissions === 'read') {
+        return {
+          jsonrpc: '2.0',
+          id,
+          error: {
+            code: -32003,
+            message: 'Write permission denied for read-only API key',
+          },
+        };
+      }
+
       let resultData: any;
 
       switch (name) {
-        // --- 1. get_my_assigned_issues ---
+        case 'get_repo_state': {
+          const branches = await this.gitClient.getBranches(this.repoRoot);
+          const current = branches.find((b) => b.isCurrent);
+          const stashes = await this.gitClient.getStashes(this.repoRoot);
+          const worktrees = await this.gitClient.getWorktrees(this.repoRoot);
+          resultData = {
+            repoRoot: this.repoRoot,
+            currentBranch: current ? current.name : 'HEAD',
+            branchCount: branches.length,
+            stashCount: stashes.length,
+            worktreeCount: worktrees.length,
+          };
+          break;
+        }
+
+        case 'get_commit_history': {
+          const limit = args?.limit || args?.maxCount || 30;
+          const skip = args?.skip || 0;
+          resultData = await this.gitClient.getCommits(this.repoRoot, limit, skip);
+          break;
+        }
+
+        case 'get_diff': {
+          const diffArgs = ['diff'];
+          if (args?.ref1) {
+            diffArgs.push(args.ref1);
+            if (args?.ref2) {
+              diffArgs.push(args.ref2);
+            }
+          }
+          if (args?.filePath) {
+            diffArgs.push('--', args.filePath);
+          }
+          resultData = await this.gitClient.execute(diffArgs, this.repoRoot);
+          break;
+        }
+
+        case 'get_blame': {
+          if (args?.line !== undefined) {
+            const absPath = path.isAbsolute(args.filePath)
+              ? args.filePath
+              : path.resolve(this.repoRoot, args.filePath);
+            resultData = await this.gitClient.getBlameForLine(absPath, Number(args.line));
+          } else {
+            resultData = await this.gitClient.execute(['blame', '--line-porcelain', args.filePath], this.repoRoot);
+          }
+          break;
+        }
+
+        case 'get_branches': {
+          resultData = await this.gitClient.getBranches(this.repoRoot);
+          break;
+        }
+
+        case 'get_worktrees': {
+          resultData = await this.gitClient.getWorktrees(this.repoRoot);
+          break;
+        }
+
+        case 'get_pull_requests': {
+          resultData = await this.gitClient.getPullRequests(this.repoRoot);
+          break;
+        }
+
+        case 'get_cloud_patches': {
+          resultData = this.cloudPatches;
+          break;
+        }
+
+        case 'create_cloud_patch': {
+          const patch = await this.gitClient.createCloudPatch(this.repoRoot, args?.title || 'Cloud Patch');
+          this.cloudPatches.push(patch);
+          resultData = patch;
+          break;
+        }
+
+        case 'checkout_branch': {
+          resultData = await this.gitClient.checkoutBranch(this.repoRoot, args?.branch);
+          break;
+        }
+
+        case 'create_commit': {
+          resultData = await this.gitClient.createCommit(this.repoRoot, args?.message);
+          break;
+        }
+
+        case 'git_push': {
+          resultData = await this.gitClient.pushCurrentBranch(this.repoRoot);
+          break;
+        }
+
         case 'get_my_assigned_issues':
         case 'commitflow_get_my_assigned_issues': {
           let issues = await this.issueService.getAssignedIssues(this.repoRoot);

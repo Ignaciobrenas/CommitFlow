@@ -11,5 +11,9 @@ out/**
 tsconfig.json
 esbuild.js
 *.vsix
+.env*
+*.map
+dist/*.map
 dist/test.js*
 dist/verifyLive.js*
+node_modules/**

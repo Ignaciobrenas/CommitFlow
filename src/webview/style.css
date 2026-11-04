@@ -3570,7 +3570,1183 @@ body.layout-height-nano .stats-bar {
   }
 }
 
+/* ==========================================================================
+   Virtual Scrolling Engine (Issue #1)
+   ========================================================================== */
+.graph-table-container {
+  position: relative;
+  overflow-y: auto;
+  overflow-x: auto;
+  flex: 1;
+  height: 100%;
+  outline: none;
+}
+
+.virtual-scroll-spacer {
+  width: 100%;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.virtual-scroll-viewport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  will-change: transform;
+}
+
+/* ==========================================================================
+   Accessibility & High-Contrast Mode (Issue #5)
+   ========================================================================== */
+.commit-row:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: -2px;
+  background: var(--bg-hover) !important;
+}
+
+body.vscode-high-contrast .commit-row.selected,
+body.vscode-high-contrast-light .commit-row.selected {
+  outline: 2px solid #ffffff;
+  outline-offset: -2px;
+}
+
+body.vscode-high-contrast .modal-card,
+body.vscode-high-contrast-light .modal-card {
+  border: 2px solid #ffffff !important;
+}
+
+body.vscode-high-contrast .rebase-todo-item,
+body.vscode-high-contrast-light .rebase-todo-item {
+  border: 1px solid #ffffff !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==========================================================================
+   Multi-Repository & Submodule Switcher (Issue #3)
+   ========================================================================== */
+.repo-select {
+  font-weight: 600;
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--accent-cyan);
+  max-width: 180px;
+}
+
+.submodule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: #c084fc;
+}
+
+/* ==========================================================================
+   Interactive Rebase Studio & Banner (Issue #4)
+   ========================================================================== */
+.rebase-banner {
+  margin: 6px 12px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(99, 102, 241, 0.12));
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.rebase-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rebase-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(168, 85, 247, 0.25);
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  color: #e9d5ff;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.rebase-info {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.rebase-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-rebase-continue {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #059669;
+}
+.btn-rebase-continue:hover {
+  background: #059669;
+}
+
+.btn-rebase-abort {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+.btn-rebase-abort:hover {
+  background: rgba(239, 68, 68, 0.35);
+}
+
+.rebase-todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rebase-todo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.rebase-todo-item.dragging {
+  opacity: 0.4;
+  border-style: dashed;
+  border-color: var(--accent-cyan);
+}
+
+.rebase-todo-item.drag-over {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+.rebase-todo-item.action-squash,
+.rebase-todo-item.action-fixup {
+  margin-left: 20px;
+  border-left: 3px solid var(--accent-amber);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.rebase-todo-item.action-drop {
+  opacity: 0.6;
+  text-decoration: line-through;
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.rebase-item-handle {
+  color: var(--text-muted);
+  cursor: grab;
+  font-size: 14px;
+}
+
+.rebase-action-select {
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rebase-item-sha {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+.rebase-item-subject {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rebase-item-author {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.rebase-item-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.ai-studio-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.ai-studio-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 14px;
+}
+
+.ai-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-header-title-row h2 {
+  margin: 0;
+  font-size: var(--font-size-lg, 16px);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ai-sparkle-icon {
+  font-size: 20px;
+  color: var(--accent-cyan, #00f0ff);
+}
+
+.mcp-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: var(--font-size-xs, 11px);
+  font-weight: 500;
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.status-indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.8);
+}
+
+.ai-header-subtitle {
+  margin: 6px 0 0 0;
+  font-size: var(--font-size-sm, 12px);
+  color: var(--text-muted);
+}
+
+.ai-generator-card,
+.ai-client-snippets-card,
+.ai-keys-table-card {
+  background: var(--bg-card, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 6px);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-card-title,
+.snippets-header,
+.keys-table-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: var(--font-size-md, 13px);
+  color: var(--text-primary);
+}
+
+.ai-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.ai-input,
+.ai-select {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--border-subtle));
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--font-size-sm, 12px);
+  box-sizing: border-box;
+}
+
+.ai-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.ai-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.ai-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.ai-key-reveal-banner {
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: var(--radius-md, 6px);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reveal-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: var(--font-size-sm, 12px);
+  color: #eab308;
+}
+
+.reveal-key-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-revealed-key-input {
+  flex: 1;
+  padding: 6px 10px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid #eab308;
+  border-radius: var(--radius-sm, 4px);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm, 12px);
+}
+
+.snippet-subtabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 6px;
+  overflow-x: auto;
+}
+
+.snippet-subtab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--font-size-xs, 11px);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.snippet-subtab-btn.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.snippet-pane {
+  display: none;
+  margin-top: 8px;
+}
+
+.snippet-pane.active {
+  display: block;
+}
+
+.snippet-code-box {
+  position: relative;
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  padding: 10px;
+}
+
+.snippet-code-box pre {
+  margin: 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs, 11px);
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+}
+
+.btn-copy-snippet {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm, 4px);
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.btn-copy-snippet:hover {
+  background: var(--bg-hover);
+}
+
+.keys-table-responsive-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.ai-keys-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs, 11px);
+}
+
+.ai-keys-table th {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ai-keys-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.empty-table-cell {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 16px !important;
+}
+
+.key-status-badge {
+  display: inline-flex;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.key-status-badge.active {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.key-status-badge.revoked {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.key-status-badge.expired {
+  background: rgba(156, 163, 175, 0.15);
+  color: #9ca3af;
+}
+
+.btn-revoke-key {
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid var(--vscode-errorForeground, #f87171);
+  color: var(--vscode-errorForeground, #f87171);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.btn-revoke-key:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+@media (max-width: 320px) {
+  .ai-studio-container {
+    padding: 8px;
+    gap: 10px;
+  }
+  .ai-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .ai-header-title-row h2 {
+    font-size: 14px;
+  }
+}
 
 
 
 
+
+
+/* ==========================================================================
+   CommitFlow Comprehensive Responsive Master Suite (Issue #1, #2, #5, #11)
+   Covers every single box, component, modal, drawer, toolbar, table, card,
+   and dock viewport across desktop, split-screen, sidebar, nano, & short docks.
+   ========================================================================== */
+
+/* Universal Fluid Reset & Boundary Safety */
+.main-viewport,
+.tab-pane,
+.tab-pane.active,
+.header-bar,
+.toolbar-controls,
+.stats-bar,
+.upstream-sync-bar,
+.graph-table-container,
+.file-history-container,
+.pr-launchpad-container,
+.worktrees-container,
+.cloud-patches-container,
+.issues-hub-container,
+.ai-studio-container,
+.modal-overlay,
+.modal-card,
+.commit-drawer,
+.issue-drawer {
+  box-sizing: border-box;
+}
+
+/* Ensure all form inputs, selects and textareas never cause horizontal spill */
+input[type="text"],
+input[type="search"],
+select,
+textarea {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Code Snippet and Diff Safety across all views */
+pre,
+code,
+.snippet-code-box pre,
+.patch-diff-preview pre,
+.diff-content {
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive Table Wrappers */
+.keys-table-responsive-wrapper,
+.table-responsive-wrapper,
+.comparison-files-list {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ai-keys-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+}
+
+/* Universal Modal Card Responsive Baseline */
+.modal-card {
+  width: min(680px, calc(100vw - 20px)) !important;
+  max-width: 100vw !important;
+  max-height: calc(100vh - 24px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  margin: auto !important;
+}
+
+.modal-card .modal-body {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  min-height: 0 !important;
+}
+
+.modal-card .modal-footer {
+  flex-shrink: 0 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+}
+
+/* Modals with custom widths scaling responsively */
+#stash-modal .modal-card { width: min(540px, calc(100vw - 20px)) !important; }
+#personal-modal .modal-card { width: min(620px, calc(100vw - 20px)) !important; }
+#settings-modal .modal-card { width: min(600px, calc(100vw - 20px)) !important; }
+#worktree-create-modal .modal-card { width: min(560px, calc(100vw - 20px)) !important; }
+#patch-create-modal .modal-card { width: min(600px, calc(100vw - 20px)) !important; }
+#patch-apply-modal .modal-card { width: min(640px, calc(100vw - 20px)) !important; }
+#tag-create-modal .modal-card { width: min(520px, calc(100vw - 20px)) !important; }
+#reflog-modal .modal-card { width: min(720px, calc(100vw - 20px)) !important; }
+#repo-health-modal .modal-card { width: min(640px, calc(100vw - 20px)) !important; }
+#comparison-modal .modal-card { width: min(780px, calc(100vw - 20px)) !important; }
+#bisect-modal .modal-card { width: min(560px, calc(100vw - 20px)) !important; }
+#cherry-pick-forecast-modal .modal-card { width: min(600px, calc(100vw - 20px)) !important; }
+#rebase-studio-modal .modal-card { width: min(850px, calc(100vw - 20px)) !important; }
+
+/* --------------------------------------------------------------------------
+   Breakpoint: Medium Wide / Split View (max-width: 900px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .stats-bar {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 6px;
+  }
+  
+  .worktrees-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+  
+  .pr-cards-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Breakpoint: Tablet / Narrow Split View (max-width: 750px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 750px) {
+  .header-bar {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .nav-tab-bar {
+    gap: 4px;
+    padding: 3px 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .nav-tab-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tab-btn {
+    padding: 5px 9px;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .toolbar-controls {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .search-input-wrapper {
+    flex: 1 1 180px;
+    min-width: 140px;
+  }
+
+  .branch-select {
+    flex: 1 1 140px;
+    max-width: 220px;
+  }
+
+  .btn-checkout {
+    flex-shrink: 0;
+  }
+
+  /* Upstream Sync Bar Wrap */
+  .upstream-sync-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 10px;
+  }
+
+  .upstream-sync-actions {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Bisect & Rebase Banners Fluidity */
+  .bisect-banner-content,
+  .rebase-banner-content {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .bisect-actions-group,
+  .rebase-actions {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Breakpoint: Drawers Full-Width & Modal Fluid (max-width: 580px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 580px) {
+  .commit-drawer,
+  .issue-drawer {
+    width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .modal-card {
+    width: calc(100vw - 12px) !important;
+    margin: 6px auto !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .modal-header {
+    padding: 10px 14px !important;
+  }
+
+  .modal-body {
+    padding: 10px 14px !important;
+  }
+
+  .modal-footer {
+    padding: 10px 14px !important;
+  }
+
+  .settings-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .settings-tab-btn {
+    flex: 1 1 45%;
+    text-align: center;
+  }
+
+  .ai-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ai-radio-group {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .patches-actions-bar,
+  .worktrees-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .patches-actions-bar button,
+  .worktrees-header button {
+    width: 100% !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Breakpoint: Compact Sidebar Mode (max-width: 440px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 440px) {
+  .header-bar {
+    padding: 4px 6px;
+    gap: 4px;
+  }
+
+  .header-row-primary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .brand-section {
+    gap: 5px;
+  }
+
+  .brand-title {
+    font-size: 12px;
+  }
+
+  .active-branch-badge {
+    max-width: 110px;
+    font-size: 11px;
+    padding: 2px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header-quick-actions {
+    gap: 3px;
+  }
+
+  .btn-header-action {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+  }
+
+  /* Tab text labels hide on compact sidebar to save space */
+  .nav-tab-bar {
+    padding: 2px 4px;
+    gap: 2px;
+  }
+
+  .nav-tab-btn {
+    padding: 5px 6px;
+    gap: 4px;
+  }
+
+  .nav-tab-btn span {
+    display: none;
+  }
+
+  .tab-badge {
+    margin-left: 0;
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+
+  /* Toolbar Controls */
+  .toolbar-controls {
+    padding: 4px 6px;
+    gap: 4px;
+  }
+
+  .search-input-wrapper {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .branch-select {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: calc(100% - 70px);
+  }
+
+  .btn-checkout {
+    flex-shrink: 0;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  /* Stats Bar 2-column grid */
+  .stats-bar {
+    grid-template-columns: repeat(2, 1fr);
+    padding: 4px 6px;
+    gap: 4px;
+  }
+
+  .stat-item {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+
+  .stat-value {
+    font-size: 13px;
+  }
+
+  .top-contributors-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Compact Card DAG items */
+  .commit-row.compact-card {
+    padding: 4px 6px;
+  }
+
+  .commit-card-top {
+    flex-wrap: wrap;
+    gap: 3px;
+    align-items: center;
+  }
+
+  .commit-subject {
+    max-width: calc(100vw - 75px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  .card-author-name {
+    max-width: 75px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* AI Studio in Compact Sidebar */
+  .ai-studio-container {
+    padding: 8px 6px;
+    gap: 8px;
+  }
+
+  .ai-header-title-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .ai-header-title-row h2 {
+    font-size: 14px;
+  }
+
+  .ai-generator-card {
+    padding: 10px;
+  }
+
+  .reveal-key-row {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .reveal-key-row input {
+    width: 100%;
+  }
+
+  .reveal-key-row button {
+    width: 100%;
+  }
+
+  .snippet-subtabs {
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+
+  .snippet-subtab-btn {
+    padding: 4px 6px;
+    font-size: 10px;
+  }
+
+  .keys-table-header {
+    padding: 6px 10px;
+  }
+
+  .ai-keys-table th,
+  .ai-keys-table td {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Breakpoint: Ultra-Compact Sidebar / Nano (max-width: 260px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 260px) {
+  .brand-title {
+    display: none !important;
+  }
+
+  .active-branch-badge {
+    max-width: 70px !important;
+    font-size: 10px !important;
+  }
+
+  .private-repo-badge span {
+    display: none !important;
+  }
+
+  .header-quick-actions {
+    gap: 2px !important;
+  }
+
+  .btn-header-action {
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 11px !important;
+  }
+
+  .stats-bar {
+    grid-template-columns: 1fr !important;
+    gap: 3px !important;
+  }
+
+  .stat-item {
+    padding: 3px 4px !important;
+  }
+
+  .card-author-name {
+    max-width: 45px !important;
+  }
+
+  .card-hash {
+    display: none !important;
+  }
+
+  .card-meta-dot:last-of-type {
+    display: none !important;
+  }
+
+  .modal-card {
+    width: calc(100vw - 6px) !important;
+    margin: 3px !important;
+    padding: 6px !important;
+  }
+
+  .modal-footer button {
+    width: 100% !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Vertical Dock Breakpoint: Short Viewports (max-height: 480px)
+   -------------------------------------------------------------------------- */
+@media (max-height: 480px) {
+  .modal-card {
+    max-height: calc(100vh - 12px) !important;
+  }
+
+  body.layout-bottom .commit-drawer,
+  body.auto-detected-bottom .commit-drawer,
+  body.layout-bottom .issue-drawer,
+  body.auto-detected-bottom .issue-drawer {
+    max-height: 55vh !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Vertical Dock Breakpoint: Medium Short Docks (max-height: 340px)
+   -------------------------------------------------------------------------- */
+@media (max-height: 340px) {
+  .header-bar {
+    padding: 2px 6px !important;
+    gap: 3px !important;
+  }
+
+  .brand-section {
+    gap: 4px !important;
+  }
+
+  .stats-bar {
+    padding: 2px 6px !important;
+    gap: 3px !important;
+  }
+
+  .stat-item {
+    padding: 2px 4px !important;
+  }
+
+  .stat-value {
+    font-size: 12px !important;
+  }
+
+  .nav-tab-bar {
+    padding: 2px 4px !important;
+    gap: 2px !important;
+  }
+
+  .nav-tab-btn {
+    padding: 3px 6px !important;
+    font-size: 11px !important;
+  }
+
+  .toolbar-controls {
+    padding: 3px 6px !important;
+  }
+
+  body.layout-bottom .commit-drawer,
+  body.auto-detected-bottom .commit-drawer,
+  body.layout-bottom .issue-drawer,
+  body.auto-detected-bottom .issue-drawer {
+    height: 50vh !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Vertical Dock Breakpoint: Ultra-Short Docks (max-height: 220px)
+   -------------------------------------------------------------------------- */
+@media (max-height: 220px) {
+  /* Hide stats bar completely to save precious graph viewport space */
+  .stats-bar {
+    display: none !important;
+  }
+
+  .header-bar {
+    padding: 1px 4px !important;
+  }
+
+  .nav-tab-bar {
+    padding: 1px 3px !important;
+  }
+
+  .nav-tab-btn {
+    padding: 2px 5px !important;
+  }
+
+  .toolbar-controls {
+    padding: 2px 4px !important;
+    gap: 3px !important;
+  }
+
+  .upstream-sync-bar {
+    padding: 2px 6px !important;
+    font-size: 10px !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Vertical Dock Breakpoint: Nano Short Docks (max-height: 180px)
+   -------------------------------------------------------------------------- */
+@media (max-height: 180px) {
+  .nav-tab-btn span {
+    display: none !important;
+  }
+
+  .brand-title {
+    display: none !important;
+  }
+
+  .upstream-sync-bar {
+    display: none !important;
+  }
+}

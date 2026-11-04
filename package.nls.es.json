@@ -19,6 +19,8 @@
   "commitflow.command.refreshGraph": "Refrescar Grafo de Git",
   "commitflow.command.openIssues": "Abrir Hub de Issues",
   "commitflow.command.openInFork": "Abrir Repositorio en Fork",
+  "commitflow.command.connectAi": "Conectar con tu IA (Servidor MCP y Claves API)",
+  "commitflow.command.copyHash": "Copiar Hash del Commit",
   "commitflow.view.graphView": "Grafo de Commits y Ramas",
   "commitflow.config.title": "CommitFlow",
   "commitflow.config.inlineBlame.enabled": "Muestra información de autoría y commit al final de la línea activa.",

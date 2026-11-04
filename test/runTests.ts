@@ -16,10 +16,12 @@ import { ForkIntegration } from '../src/remotes/forkIntegration';
 import { IssueBranchLinker } from '../src/issues/issueBranchLinker';
 import { IssueService } from '../src/issues/issueService';
 import { CommitFlowMcpServer } from '../src/mcp/commitflowMcpServer';
+import { ApiKeyManager } from '../src/mcp/apiKeyManager';
+import { CommitFlowHttpServer } from '../src/mcp/commitflowHttpServer';
 import { PersistenceManager } from '../src/state/persistenceManager';
 import { GitFsReader } from '../src/git/gitFsReader';
 
-console.log('🧪 Starting CommitFlow Extended Test Suite...\n');
+console.log('Starting CommitFlow Extended Test Suite...\n');
 
 // 1. Test AvatarService
 console.log('▶ Testing AvatarService...');
@@ -310,7 +312,7 @@ const initResponse = mcpServer['handleJsonRpc']({
 });
 initResponse.then((res: any) => {
   assert.strictEqual(res.result.serverInfo.name, 'commitflow-mcp');
-  assert.strictEqual(res.result.serverInfo.version, '0.4.5');
+  assert.strictEqual(res.result.serverInfo.version, '0.4.7');
 });
 
 // Test tools/list method
@@ -1059,8 +1061,243 @@ Host *.internal.corp
 
   console.log('  ✔ Responsive Viewport Tiers, Multi-Dock Layouts & Brand Integrity tests passed!');
 
-  console.log('\n🎉 ALL 37 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  console.log('\nTesting API Key Management & Scoped Cryptographic Secrets...');
+  const keyMgr = ApiKeyManager.getInstance();
+  const readGen = await keyMgr.generateKey('Test Read Assistant', 'read');
+  assert.ok(readGen.plaintextKey.startsWith('cf_live_'));
+  assert.strictEqual(readGen.metadata.permissions, 'read');
+  assert.strictEqual(readGen.metadata.hash, keyMgr.hashKey(readGen.plaintextKey));
+  assert.strictEqual((readGen.metadata as any).plaintextKey, undefined);
+
+  const validRead = await keyMgr.validateKey(readGen.plaintextKey, 'read');
+  assert.strictEqual(validRead.valid, true);
+
+  const invalidWrite = await keyMgr.validateKey(readGen.plaintextKey, 'read-write');
+  assert.strictEqual(invalidWrite.valid, false);
+  assert.ok(invalidWrite.reason?.includes('read-only'));
+
+  const rwGen = await keyMgr.generateKey('Test Admin Assistant', 'read-write');
+  assert.strictEqual(rwGen.metadata.permissions, 'read-write');
+  const validRW = await keyMgr.validateKey(rwGen.plaintextKey, 'read-write');
+  assert.strictEqual(validRW.valid, true);
+
+  const revoked = await keyMgr.revokeKey(readGen.metadata.id);
+  assert.strictEqual(revoked, true);
+  const checkRevoked = await keyMgr.validateKey(readGen.plaintextKey, 'read');
+  assert.strictEqual(checkRevoked.valid, false);
+  assert.ok(checkRevoked.reason?.includes('revoked'));
+  console.log('  [PASS] API Key Management & Scoped Cryptographic Secrets tests passed!');
+
+  console.log('\nTesting Extended MCP Server Tools & Scoped Execution...');
+  {
+    const serverInstance = new CommitFlowMcpServer(process.cwd());
+    const initResponse = await serverInstance.processDirectRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {},
+    });
+    assert.strictEqual(initResponse.result.serverInfo.name, 'commitflow-mcp');
+
+    const toolsResponse = await serverInstance.processDirectRequest({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/list',
+      params: {},
+    });
+    const declaredTools = toolsResponse.result.tools.map((t: any) => t.name);
+    assert.ok(declaredTools.includes('get_repo_state'));
+    assert.ok(declaredTools.includes('get_commit_history'));
+    assert.ok(declaredTools.includes('get_diff'));
+    assert.ok(declaredTools.includes('get_blame'));
+    assert.ok(declaredTools.includes('get_branches'));
+    assert.ok(declaredTools.includes('get_worktrees'));
+    assert.ok(declaredTools.includes('get_pull_requests'));
+    assert.ok(declaredTools.includes('get_cloud_patches'));
+    assert.ok(declaredTools.includes('create_commit'));
+    assert.ok(declaredTools.includes('checkout_branch'));
+    assert.ok(declaredTools.includes('git_push'));
+
+    const repoStateCall = await serverInstance.processDirectRequest({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/call',
+      params: { name: 'get_repo_state', arguments: {} },
+    });
+    const repoStateData = JSON.parse(repoStateCall.result.content[0].text);
+    assert.ok('currentBranch' in repoStateData);
+    assert.ok('stashCount' in repoStateData);
+
+    const branchesCall = await serverInstance.processDirectRequest({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: { name: 'get_branches', arguments: {} },
+    });
+    const branchesData = JSON.parse(branchesCall.result.content[0].text);
+    assert.ok(Array.isArray(branchesData));
+
+    const writeDeniedCall = await serverInstance.processDirectRequest(
+      {
+        jsonrpc: '2.0',
+        id: 5,
+        method: 'tools/call',
+        params: { name: 'create_commit', arguments: { message: 'test' } },
+      },
+      {
+        id: 'k1',
+        name: 'ReadOnlyKey',
+        keyPrefix: 'cf_live_...',
+        hash: 'h1',
+        permissions: 'read',
+        createdAt: new Date().toISOString(),
+        revoked: false,
+      }
+    );
+    assert.strictEqual(writeDeniedCall.error.code, -32003);
+    assert.ok(writeDeniedCall.error.message.includes('Write permission denied'));
+  }
+  console.log('  [PASS] Extended MCP Server Tools & Scoped Execution tests passed!');
+
+  console.log('\nTesting CommitFlow HTTP/SSE Streamable Server...');
+  {
+    const httpServer = new CommitFlowHttpServer({ port: 48931, repoRoot: process.cwd() });
+    await httpServer.start();
+    assert.strictEqual(httpServer.isRunning(), true);
+    assert.strictEqual(httpServer.getPort(), 48931);
+    assert.strictEqual(httpServer.getHost(), '127.0.0.1');
+
+    const httpTestKey = await keyMgr.generateKey('HTTP Test Client', 'read');
+    const endpointHealthRes = await fetch('http://127.0.0.1:48931/health');
+    assert.strictEqual(endpointHealthRes.status, 200);
+    const healthJson = (await endpointHealthRes.json()) as any;
+    assert.strictEqual(healthJson.status, 'ok');
+
+    const unauthRes = await fetch('http://127.0.0.1:48931/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    assert.strictEqual(unauthRes.status, 401);
+
+    const authMcpRes = await fetch('http://127.0.0.1:48931/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${httpTestKey.plaintextKey}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    assert.strictEqual(authMcpRes.status, 200);
+    const authMcpJson = (await authMcpRes.json()) as any;
+    assert.ok(Array.isArray(authMcpJson.result.tools));
+
+    await httpServer.stop();
+    assert.strictEqual(httpServer.isRunning(), false);
+  }
+  console.log('  [PASS] CommitFlow HTTP/SSE Streamable Server tests passed!');
+
+  console.log('\nTesting Virtual Scrolling DAG & A11y DOM Semantics...');
+  const cssContent = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'style.css'), 'utf8');
+  assert.ok(cssContent.includes('.virtual-scroll-spacer'));
+  assert.ok(cssContent.includes('.virtual-scroll-viewport'));
+  assert.ok(cssContent.includes('.submodule-badge'));
+  assert.ok(cssContent.includes('.rebase-todo-item'));
+
+  assert.ok(mainTsContent.includes('updateVirtualWindow'));
+  assert.ok(mainTsContent.includes('jumpToCommitIndex'));
+  assert.ok(mainTsContent.includes('trapModalFocus'));
+  assert.ok(mainTsContent.includes('role'));
+  assert.ok(mainTsContent.includes('treegrid'));
+  assert.ok(mainTsContent.includes('gridcell'));
+  console.log('  [PASS] Virtual Scrolling DAG & A11y DOM Semantics tests passed!');
+
+  console.log('\nTesting AI Studio, Multi-Client Snippets & Instant Key Revocation E2E...');
+  const graphWebviewContent = fs.readFileSync(path.join(__dirname, '..', 'src', 'graph', 'graphWebviewProvider.ts'), 'utf8');
+  assert.ok(graphWebviewContent.includes('data-tab="tab-ai"'));
+  assert.ok(graphWebviewContent.includes('id="tab-ai"'));
+  assert.ok(graphWebviewContent.includes('btn-generate-ai-key'));
+  assert.ok(graphWebviewContent.includes('ai-key-reveal-banner'));
+  assert.ok(graphWebviewContent.includes('snippet-code-claude'));
+  assert.ok(graphWebviewContent.includes('snippet-code-antigravity'));
+  assert.ok(graphWebviewContent.includes('ai-keys-table'));
+
+  assert.ok(cssContent.includes('.ai-studio-container'));
+  assert.ok(cssContent.includes('.ai-generator-card'));
+  assert.ok(cssContent.includes('.snippet-subtabs'));
+  assert.ok(cssContent.includes('.ai-keys-table'));
+
+  assert.ok(mainTsContent.includes('initAiStudio'));
+  assert.ok(mainTsContent.includes('handleAiKeyGenerated'));
+  assert.ok(mainTsContent.includes('handleAiKeysData'));
+
+  {
+    const keyMgr = ApiKeyManager.getInstance();
+    const generated = await keyMgr.generateKey('Antigravity Pair', 'read', undefined, 30);
+    assert.ok(generated.plaintextKey.startsWith('cf_live_'));
+    assert.strictEqual(generated.metadata.name, 'Antigravity Pair');
+    assert.strictEqual(generated.metadata.permissions, 'read');
+    assert.strictEqual(generated.metadata.revoked, false);
+
+    const server = new CommitFlowHttpServer({ port: 47293, repoRoot: process.cwd() });
+    await server.start();
+
+    const checkRes = await fetch('http://127.0.0.1:47293/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${generated.plaintextKey}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-read',
+        method: 'tools/list',
+      }),
+    });
+    assert.strictEqual(checkRes.status, 200);
+
+    const writeRes = await fetch('http://127.0.0.1:47293/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${generated.plaintextKey}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-write',
+        method: 'tools/call',
+        params: {
+          name: 'create_commit',
+          arguments: { message: 'Write attempt' },
+        },
+      }),
+    });
+    const writeJson = (await writeRes.json()) as any;
+    assert.strictEqual(writeJson.error.code, -32003);
+
+    const revokeSuccess = await keyMgr.revokeKey(generated.metadata.id);
+    assert.strictEqual(revokeSuccess, true);
+
+    const postRevokeRes = await fetch('http://127.0.0.1:47293/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${generated.plaintextKey}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-after-revoke',
+        method: 'tools/list',
+      }),
+    });
+    assert.strictEqual(postRevokeRes.status, 403);
+
+    await server.stop();
+  }
+  console.log('  [PASS] AI Studio, Multi-Client Snippets & Instant Key Revocation E2E tests passed!');
+
+  console.log('\n[PASS] ALL 42 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
-  console.error('❌ Test suite failed:', err);
+  console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);
 });

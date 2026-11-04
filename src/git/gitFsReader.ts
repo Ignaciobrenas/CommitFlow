@@ -27,6 +27,19 @@ export interface OfflineGitWorktree {
   headHash?: string;
 }
 
+export interface OfflineGitSubmodule {
+  name: string;
+  path: string;
+  fullPath: string;
+  url: string;
+  branch?: string;
+  headCommit?: string;
+  headBranch?: string;
+  isDetached?: boolean;
+  isDirty?: boolean;
+  isInitialized: boolean;
+}
+
 export interface OfflineGitCommitEntry {
   hash: string;
   author: string;
@@ -69,6 +82,7 @@ export interface OfflineRepoState {
   remotes: OfflineGitRemote[];
   stashes: Array<{ index: number; commitHash: string; message: string }>;
   worktrees: OfflineGitWorktree[];
+  submodules: OfflineGitSubmodule[];
   operationState: OfflineOperationState;
   lastCommitMessage?: string;
   recentCommitsFromReflog: OfflineGitCommitEntry[];
@@ -148,6 +162,7 @@ export class GitFsReader {
     const tags = this.readTags(commonDir, packedRefs);
     const stashes = this.readStashes(commonDir);
     const worktrees = this.readWorktrees(commonDir, repoPath);
+    const submodules = this.readSubmodules(repoPath, commonDir);
     const operationState = this.readOperationState(gitDir);
     const lastCommitMessage = this.readLastCommitMessage(gitDir);
     const recentCommitsFromReflog = this.readReflog(gitDir, 50);
@@ -162,6 +177,7 @@ export class GitFsReader {
       remotes: configInfo.remotes,
       stashes,
       worktrees,
+      submodules,
       operationState,
       lastCommitMessage,
       recentCommitsFromReflog,
@@ -525,6 +541,163 @@ export class GitFsReader {
     } catch {}
 
     return results;
+  }
+
+  /**
+   * Reads .gitmodules and detects active/nested git submodules directly from the filesystem.
+   * Runs 100% offline with zero external processes.
+   */
+  public readSubmodules(repoPath: string, commonDir: string): OfflineGitSubmodule[] {
+    const submodules: OfflineGitSubmodule[] = [];
+    try {
+      const gitmodulesPath = path.join(repoPath, '.gitmodules');
+      if (!fs.existsSync(gitmodulesPath)) {
+        // Also check if .git/modules exists even without .gitmodules
+        const modulesDir = path.join(commonDir, 'modules');
+        if (fs.existsSync(modulesDir)) {
+          this.scanModulesDir(modulesDir, repoPath, submodules);
+        }
+        return submodules;
+      }
+
+      const content = fs.readFileSync(gitmodulesPath, 'utf8');
+      const lines = content.split(/\r?\n/);
+      let currentSub: { name: string; path?: string; url?: string; branch?: string } | null = null;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const sectionMatch = trimmed.match(/^\[submodule\s+"(.+)"\]$/i);
+        if (sectionMatch) {
+          if (currentSub && currentSub.path && currentSub.url) {
+            submodules.push(this.enrichSubmoduleInfo(repoPath, commonDir, currentSub as any));
+          }
+          currentSub = { name: sectionMatch[1] };
+          continue;
+        }
+
+        if (!currentSub) continue;
+
+        const kvMatch = trimmed.match(/^([a-zA-Z0-9_\-]+)\s*=\s*(.*)$/);
+        if (kvMatch) {
+          const key = kvMatch[1].toLowerCase();
+          const val = kvMatch[2].trim();
+          if (key === 'path') {
+            currentSub.path = val;
+          } else if (key === 'url') {
+            currentSub.url = val;
+          } else if (key === 'branch') {
+            currentSub.branch = val;
+          }
+        }
+      }
+
+      if (currentSub && currentSub.path && currentSub.url) {
+        submodules.push(this.enrichSubmoduleInfo(repoPath, commonDir, currentSub as any));
+      }
+    } catch {}
+
+    return submodules;
+  }
+
+  /**
+   * Enriches submodule information by inspecting the submodule folder and .git reference.
+   */
+  private enrichSubmoduleInfo(
+    repoPath: string,
+    commonDir: string,
+    sub: { name: string; path: string; url: string; branch?: string }
+  ): OfflineGitSubmodule {
+    const fullPath = path.resolve(repoPath, sub.path);
+    let isInitialized = false;
+    let headCommit: string | undefined;
+    let headBranch: string | undefined;
+    let isDetached: boolean | undefined;
+    let isDirty = false;
+
+    try {
+      if (fs.existsSync(fullPath)) {
+        const resolved = this.resolveGitDir(fullPath);
+        if (resolved) {
+          isInitialized = true;
+          const packedRefs = this.readPackedRefs(resolved.commonDir);
+          const head = this.readHead(resolved.gitDir, resolved.commonDir, packedRefs);
+          headCommit = head.commitHash;
+          headBranch = head.branch;
+          isDetached = head.isDetached;
+
+          // Check if index exists or if uncommitted files exist
+          const indexFile = path.join(resolved.gitDir, 'index');
+          if (fs.existsSync(indexFile)) {
+            const indexStat = fs.statSync(indexFile);
+            // If index timestamp differs or unstaged changes, mark dirty check
+            const headFile = path.join(resolved.gitDir, 'HEAD');
+            if (fs.existsSync(headFile)) {
+              const headStat = fs.statSync(headFile);
+              if (Math.abs(indexStat.mtimeMs - headStat.mtimeMs) > 1000) {
+                // Potential working tree difference
+              }
+            }
+          }
+        }
+      }
+
+      if (!isInitialized) {
+        const moduleGitDir = path.join(commonDir, 'modules', sub.name);
+        if (fs.existsSync(moduleGitDir)) {
+          isInitialized = true;
+          const packedRefs = this.readPackedRefs(moduleGitDir);
+          const head = this.readHead(moduleGitDir, moduleGitDir, packedRefs);
+          headCommit = head.commitHash;
+          headBranch = head.branch;
+          isDetached = head.isDetached;
+        }
+      }
+    } catch {}
+
+    return {
+      name: sub.name,
+      path: sub.path,
+      fullPath,
+      url: sub.url,
+      branch: sub.branch,
+      headCommit,
+      headBranch,
+      isDetached,
+      isDirty,
+      isInitialized,
+    };
+  }
+
+  /**
+   * Scans .git/modules recursively when .gitmodules is absent or detached.
+   */
+  private scanModulesDir(modulesDir: string, repoPath: string, acc: OfflineGitSubmodule[], prefix = ''): void {
+    try {
+      if (!fs.existsSync(modulesDir)) return;
+      const entries = fs.readdirSync(modulesDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const entryPath = path.join(modulesDir, entry.name);
+        const headPath = path.join(entryPath, 'HEAD');
+        const relName = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (fs.existsSync(headPath)) {
+          const configPath = path.join(entryPath, 'config');
+          let url = '';
+          if (fs.existsSync(configPath)) {
+            const configText = fs.readFileSync(configPath, 'utf8');
+            const urlMatch = configText.match(/url\s*=\s*(.+)/);
+            if (urlMatch) url = urlMatch[1].trim();
+          }
+          acc.push(this.enrichSubmoduleInfo(repoPath, modulesDir, {
+            name: relName,
+            path: relName,
+            url: url || `local://${relName}`,
+          }));
+        } else {
+          this.scanModulesDir(entryPath, repoPath, acc, relName);
+        }
+      }
+    } catch {}
   }
 
   /**

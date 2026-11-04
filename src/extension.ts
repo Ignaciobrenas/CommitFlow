@@ -7,11 +7,13 @@ import { BranchWatcherService } from './git/branchWatcher';
 import { GitClient } from './git/gitClient';
 import { ForkIntegration } from './remotes/forkIntegration';
 import { PersistenceManager } from './state/persistenceManager';
+import { CommitFlowHttpServer } from './mcp/commitflowHttpServer';
 import { t } from './i18n/locales';
 
 let blameController: BlameController | undefined;
 let graphProvider: GraphWebviewProvider | undefined;
 let branchWatcher: BranchWatcherService | undefined;
+let httpServer: CommitFlowHttpServer | undefined;
 
 function tr(key: string, params?: Record<string, string | number>): string {
   const config = vscode.workspace.getConfiguration('commitflow');
@@ -20,8 +22,6 @@ function tr(key: string, params?: Record<string, string | number>): string {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  console.log('⚡ [CommitFlow] Activating Git Graph & Live Blame extension...');
-
   // 0. Initialize Persistence Manager (Settings & SecretStorage)
   PersistenceManager.getInstance().init(context);
 
@@ -381,24 +381,41 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  // 26. Command: Open Repository in Fork Git Client
   context.subscriptions.push(
     vscode.commands.registerCommand('commitflow.openInFork', async () => {
       const gitClient = GitClient.getInstance();
       const root = await gitClient.getRepoRoot();
       if (!root) {
-        vscode.window.showWarningMessage('No active Git repository detected.');
+        vscode.window.showWarningMessage(tr('ext.noRepoFound'));
         return;
       }
       await ForkIntegration.getInstance().openInFork(root);
     })
   );
 
-  console.log('⚡ [CommitFlow] Successfully initialized and ready.');
+  context.subscriptions.push(
+    vscode.commands.registerCommand('commitflow.connectAi', () => {
+      graphProvider?.openFullPanel();
+      graphProvider?.switchTab('tab-ai');
+    })
+  );
+
+  const aiStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  aiStatusBarItem.command = 'commitflow.connectAi';
+  aiStatusBarItem.text = '$(sparkle) CommitFlow AI';
+  aiStatusBarItem.tooltip = tr('ext.connectAi');
+  aiStatusBarItem.show();
+  context.subscriptions.push(aiStatusBarItem);
+
+  try {
+    httpServer = new CommitFlowHttpServer();
+    httpServer.start().catch(() => {});
+  } catch {}
 }
 
 export function deactivate(): void {
   blameController?.dispose();
   graphProvider?.dispose();
   branchWatcher?.dispose();
+  httpServer?.stop();
 }

@@ -5,7 +5,7 @@ import { GraphLayout } from '../src/graph/graphLayout';
 import { GitHubService } from '../src/git/githubService';
 
 async function runLiveAudit() {
-  console.log('🔍 [CommitFlow Live Audit] Starting real Git repository audit...\n');
+  console.log('[CommitFlow Live Audit] Starting real Git repository audit...\n');
 
   const repoDir = path.resolve(__dirname, '..');
   const gitClient = GitClient.getInstance();
@@ -132,7 +132,7 @@ async function runLiveAudit() {
   console.log('   ✔ All 6 new themes computed custom chromatic lanes successfully');
 
   console.log('\n======================================================');
-  console.log('🎉 LIVE VERIFICATION COMPLETED WITH 100% SUCCESS!');
+  console.log('[PASS] LIVE VERIFICATION COMPLETED WITH 100% SUCCESS!');
   console.log('   All Git readers, parsers, and services WORK FLAWLESSLY.');
   console.log('======================================================\n');
 }

@@ -83,7 +83,7 @@ export class GraphLayout {
         if (l !== safeLane && activeLanes[l] !== null) {
           passingLanes.push({
             lane: l,
-            color: GraphLayout.LANE_COLORS[l % GraphLayout.LANE_COLORS.length],
+            color: palette[l % palette.length],
           });
         }
       }
@@ -145,8 +145,7 @@ export class GraphLayout {
             }
           }
 
-          const mergeColor =
-            GraphLayout.LANE_COLORS[parentLane % GraphLayout.LANE_COLORS.length];
+          const mergeColor = palette[parentLane % palette.length];
 
           lines.push({
             fromLane: safeLane,

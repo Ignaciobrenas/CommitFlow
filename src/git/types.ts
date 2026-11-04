@@ -334,7 +334,19 @@ export interface WebviewToExtensionMessage {
     | 'stepBisect'
     | 'resetBisect'
     | 'requestBisectStatus'
-    | 'previewCherryPick';
+    | 'previewCherryPick'
+    // Multi-Repository & Submodules:
+    | 'requestRepositories'
+    | 'switchRepository'
+    // Interactive Rebase Studio:
+    | 'requestRebaseCommits'
+    | 'simulateRebase'
+    | 'startInteractiveRebase'
+    | 'continueRebase'
+    | 'skipRebase'
+    | 'requestAiKeys'
+    | 'generateAiKey'
+    | 'revokeAiKey';
   payload?: any;
 }
 
@@ -363,6 +375,13 @@ export interface ExtensionToWebviewMessage {
     | 'repoHealthData'
     | 'bisectStatusData'
     | 'cherryPickPreviewData'
+    | 'repositoriesData'
+    | 'rebaseCommitsData'
+    | 'rebaseSimulationData'
+    | 'rebaseStatusData'
+    | 'aiKeysData'
+    | 'aiKeyGenerated'
+    | 'aiKeyRevoked'
     | 'error'
     | 'loading';
   payload?: any;
@@ -425,3 +444,42 @@ export interface CherryPickPreviewResult {
   conflicts: string[];
   rawDetails?: string;
 }
+
+export interface GitSubmodule {
+  name: string;
+  path: string;
+  fullPath: string;
+  url: string;
+  branch?: string;
+  headCommit?: string;
+  headBranch?: string;
+  isDetached?: boolean;
+  isDirty?: boolean;
+  isInitialized: boolean;
+}
+
+export interface RepositoryOption {
+  id: string;
+  name: string;
+  path: string;
+  type: 'root' | 'submodule' | 'worktree';
+  currentBranch?: string;
+  isDirty?: boolean;
+}
+
+export interface RebaseCommitItem {
+  hash: string;
+  shortHash: string;
+  author: string;
+  subject: string;
+  action: 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
+}
+
+export interface RebaseSimulationResult {
+  canRebaseCleanly: boolean;
+  potentialConflicts: string[];
+  reorderedCommitsCount: number;
+  squashCount: number;
+  dropCount: number;
+}
+

@@ -11,14 +11,12 @@ async function build() {
     fs.mkdirSync(distDir, { recursive: true });
   }
 
-  // Copy CSS to dist
   const cssSrc = path.join(__dirname, 'src', 'webview', 'style.css');
   const cssDest = path.join(distDir, 'webview.css');
   if (fs.existsSync(cssSrc)) {
     fs.copyFileSync(cssSrc, cssDest);
   }
 
-  // Copy @vscode/codicons assets to dist
   const codiconDir = path.join(__dirname, 'node_modules', '@vscode', 'codicons', 'dist');
   if (fs.existsSync(codiconDir)) {
     const codiconCssSrc = path.join(codiconDir, 'codicon.css');
@@ -31,7 +29,6 @@ async function build() {
     }
   }
 
-  // 1. Build Extension Host Bundle (Node.js)
   const extensionCtx = await esbuild.context({
     entryPoints: ['src/extension.ts'],
     bundle: true,
@@ -44,7 +41,6 @@ async function build() {
     minify: isProduction,
   });
 
-  // 2. Build Webview Bundle (Browser)
   const webviewCtx = await esbuild.context({
     entryPoints: ['src/webview/main.ts'],
     bundle: true,
@@ -56,7 +52,6 @@ async function build() {
     minify: isProduction,
   });
 
-  // 3. Build Standalone MCP Server Bundle (Node.js)
   const mcpCtx = await esbuild.context({
     entryPoints: ['src/mcp/commitflowMcpServer.ts'],
     bundle: true,
@@ -70,18 +65,18 @@ async function build() {
   });
 
   if (isWatch) {
-    console.log('👀 Watching for changes in extension, webview and mcp...');
+    console.log('Watching for changes in extension, webview and mcp...');
     await Promise.all([extensionCtx.watch(), webviewCtx.watch(), mcpCtx.watch()]);
   } else {
     await Promise.all([extensionCtx.rebuild(), webviewCtx.rebuild(), mcpCtx.rebuild()]);
     await extensionCtx.dispose();
     await webviewCtx.dispose();
     await mcpCtx.dispose();
-    console.log(`✅ Build complete! [Production: ${isProduction}]`);
+    console.log(`[CommitFlow] Build complete [Production: ${isProduction}]`);
   }
 }
 
 build().catch((err) => {
-  console.error('❌ Build failed:', err);
+  console.error('[CommitFlow] Build failed:', err);
   process.exit(1);
 });

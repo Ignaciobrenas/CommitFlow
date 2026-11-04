@@ -64,7 +64,7 @@ export class BlameHoverProvider implements vscode.HoverProvider {
           try {
             const issue = await this.issueService.getIssue(root, issueNum);
             if (issue) {
-              const stateIcon = issue.state === 'open' ? '🟢' : '🔴';
+              const stateIcon = issue.state === 'open' ? '$(issues)' : '$(issue-closed)';
               const stateLabel = issue.state === 'open' ? 'Abierto' : 'Cerrado';
               md.appendMarkdown(
                 `> ${stateIcon} **Issue #${issue.number}: ${issue.title}** (${stateLabel})\n`

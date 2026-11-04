@@ -19,6 +19,8 @@
   "commitflow.command.refreshGraph": "Refresh Graph",
   "commitflow.command.openIssues": "Open Issues Hub",
   "commitflow.command.openInFork": "Open Repository in Fork",
+  "commitflow.command.connectAi": "Connect with your AI (MCP Server & API Keys)",
+  "commitflow.command.copyHash": "Copy Commit Hash",
   "commitflow.view.graphView": "Commit & Branch Graph",
   "commitflow.config.title": "CommitFlow",
   "commitflow.config.inlineBlame.enabled": "Show author and commit information at the end of the current active line.",
