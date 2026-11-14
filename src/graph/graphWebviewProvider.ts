@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { GitClient } from '../git/gitClient';
+import { GitFsReader } from '../git/gitFsReader';
 import { GraphLayout } from './graphLayout';
 import { GitContentProvider } from '../git/gitContentProvider';
 import { t } from '../i18n/locales';
@@ -33,6 +34,11 @@ export class GraphWebviewProvider
   public async getEffectiveRepoRoot(): Promise<string | null> {
     if (this.activeRepoPath && fs.existsSync(this.activeRepoPath)) {
       return this.activeRepoPath;
+    }
+    const persistedRepo = this.persistence.getActiveRepository();
+    if (persistedRepo && fs.existsSync(persistedRepo) && GitFsReader.getInstance().resolveGitDir(persistedRepo)) {
+      this.activeRepoPath = persistedRepo;
+      return persistedRepo;
     }
     return await this.gitClient.getRepoRoot();
   }
@@ -1135,6 +1141,7 @@ export class GraphWebviewProvider
         case 'switchRepository':
           if (msg.payload) {
             this.activeRepoPath = msg.payload;
+            await this.persistence.setActiveRepository(msg.payload);
             await this.refreshData();
           }
           break;

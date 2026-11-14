@@ -1380,7 +1380,139 @@ Host *.internal.corp
   }
   console.log('  [PASS] Interactive Rebase Studio tests passed!');
 
-  console.log('\n[PASS] ALL 44 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  console.log('\nTesting GitFsReader Binary Objects, Packfiles, .git/index, SHA-256 & Reftable...');
+  {
+    const osMod = await import('os');
+    const cpMod = await import('child_process');
+    const reader = GitFsReader.getInstance();
+
+    // 1. Real packed Git repo test (loose objects, .git/index, pack v2 + delta, offline status)
+    const tmpBinRepo = fs.mkdtempSync(path.join(osMod.tmpdir(), 'commitflow-bin-repo-'));
+    try {
+      cpMod.execFileSync('git', ['init'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['config', 'user.email', 'bin@commitflow.dev'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['config', 'user.name', 'Binary Tester'], { cwd: tmpBinRepo });
+      fs.writeFileSync(path.join(tmpBinRepo, 'hello.txt'), 'A'.repeat(200) + '\n', 'utf8');
+      fs.mkdirSync(path.join(tmpBinRepo, 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(tmpBinRepo, 'nested', 'sub.txt'), 'nested file content\n', 'utf8');
+      cpMod.execFileSync('git', ['add', '.'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'initial binary commit'], { cwd: tmpBinRepo });
+
+      const resolved = reader.resolveGitDir(tmpBinRepo)!;
+      assert.ok(resolved);
+      const offline = reader.readOfflineRepoState(tmpBinRepo)!;
+      assert.strictEqual(offline.objectFormat, 'sha1');
+      assert.strictEqual(offline.refStorage, 'files');
+      const headSha = offline.head.commitHash;
+      assert.ok(reader.isValidObjectId(headSha));
+
+      // Loose object + commit/tree parsing
+      const looseCommit = reader.readLooseObject(resolved.commonDir, headSha);
+      assert.ok(looseCommit && looseCommit.type === 'commit');
+      const parsedCommit = reader.parseCommitObject(headSha, looseCommit!.data);
+      assert.strictEqual(parsedCommit.message, 'initial binary commit');
+      assert.ok(reader.isValidObjectId(parsedCommit.tree));
+
+      const treeObj = reader.readGitObject(resolved.commonDir, parsedCommit.tree);
+      assert.ok(treeObj && treeObj.type === 'tree');
+      const treeEntries = reader.parseTreeObject(treeObj!.data);
+      const helloEntry = treeEntries.find((e) => e.name === 'hello.txt');
+      assert.ok(helloEntry && helloEntry.type === 'blob');
+
+      const blobObj = reader.readGitObject(resolved.commonDir, helloEntry!.hash);
+      assert.ok(blobObj && blobObj.data.toString('utf8') === 'A'.repeat(200) + '\n');
+
+      // .git/index parser & offline working tree status
+      const idxEntries = reader.readIndexEntries(resolved.gitDir, resolved.commonDir);
+      assert.ok(idxEntries.some((e) => e.path === 'hello.txt'));
+      assert.ok(idxEntries.some((e) => e.path === 'nested/sub.txt'));
+      const cleanStatus = reader.computeOfflineWorkingTreeStatus(tmpBinRepo, resolved.gitDir, resolved.commonDir);
+      assert.strictEqual(cleanStatus.unstagedModified.length, 0);
+
+      fs.writeFileSync(path.join(tmpBinRepo, 'hello.txt'), 'A'.repeat(200) + '\nMODIFIED LINE\n', 'utf8');
+      const dirtyStatus = reader.computeOfflineWorkingTreeStatus(tmpBinRepo, resolved.gitDir, resolved.commonDir);
+      assert.ok(dirtyStatus.unstagedModified.includes('hello.txt'));
+
+      // Commit modification & repack into packfile v2 with deltas
+      cpMod.execFileSync('git', ['add', 'hello.txt'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'second commit for pack'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['repack', '-a', '-d'], { cwd: tmpBinRepo });
+      const newHeadSha = cpMod.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tmpBinRepo, encoding: 'utf8' }).trim();
+      assert.strictEqual(reader.readLooseObject(resolved.commonDir, newHeadSha), null, 'repacked object should not be loose');
+      const packedCommit = reader.readGitObject(resolved.commonDir, newHeadSha);
+      assert.ok(packedCommit && packedCommit.type === 'commit', 'Should read packed commit from .pack/.idx');
+      const packedParsed = reader.parseCommitObject(newHeadSha, packedCommit!.data);
+      assert.strictEqual(packedParsed.message, 'second commit for pack');
+    } finally {
+      fs.rmSync(tmpBinRepo, { recursive: true, force: true });
+    }
+
+    // 2. applyGitDelta copy + insert opcodes
+    const deltaOut = reader.applyGitDelta(
+      Buffer.from('Hello World!'),
+      Buffer.from([
+        12, // baseSize = 12
+        16, // resultSize = 16
+        0x90 | 0x01, 0, 6, // copy offset=0, size=6 ("Hello ")
+        10, ...Buffer.from('CommitFlow'), // insert 10 bytes ("CommitFlow")
+      ])
+    );
+    assert.strictEqual(deltaOut.toString('utf8'), 'Hello CommitFlow');
+
+    // 3. SHA-256 & Reftable & nested submodules offline detection
+    const tmpSha256Repo = fs.mkdtempSync(path.join(osMod.tmpdir(), 'commitflow-sha256-'));
+    try {
+      const fakeGit = path.join(tmpSha256Repo, '.git');
+      fs.mkdirSync(path.join(fakeGit, 'refs', 'heads'), { recursive: true });
+      fs.mkdirSync(path.join(fakeGit, 'reftable'), { recursive: true });
+      const sha256Hex = 'a'.repeat(64);
+      fs.writeFileSync(path.join(fakeGit, 'HEAD'), 'ref: refs/heads/main\n', 'utf8');
+      fs.writeFileSync(path.join(fakeGit, 'refs', 'heads', 'main'), sha256Hex + '\n', 'utf8');
+      fs.writeFileSync(
+        path.join(fakeGit, 'config'),
+        '[core]\n\trepositoryformatversion = 1\n[extensions]\n\tobjectformat = sha256\n\trefstorage = reftable\n',
+        'utf8'
+      );
+      fs.writeFileSync(path.join(fakeGit, 'reftable', 'tables.list'), 'table1.ref\ntable2.ref\n', 'utf8');
+      assert.strictEqual(reader.detectHashAlgorithm(fakeGit), 'sha256');
+      const rt = reader.detectReftable(fakeGit);
+      assert.strictEqual(rt.isReftable, true);
+      assert.strictEqual(rt.tablesCount, 2);
+      const sha256State = reader.readOfflineRepoState(tmpSha256Repo)!;
+      assert.strictEqual(sha256State.head.commitHash, sha256Hex);
+      assert.strictEqual(sha256State.objectFormat, 'sha256');
+      assert.strictEqual(sha256State.refStorage, 'reftable');
+
+      // Nested submodules via .gitmodules + gitdir: file
+      fs.writeFileSync(path.join(tmpSha256Repo, '.gitmodules'), '[submodule "subA"]\n\tpath = libs/subA\n\turl = https://example.com/subA.git\n', 'utf8');
+      const subAPath = path.join(tmpSha256Repo, 'libs', 'subA');
+      const subAModuleGit = path.join(fakeGit, 'modules', 'subA');
+      const childGit = path.join(subAModuleGit, 'modules', 'subB');
+      fs.mkdirSync(subAPath, { recursive: true });
+      fs.mkdirSync(path.join(subAModuleGit, 'refs', 'heads'), { recursive: true });
+      fs.mkdirSync(path.join(childGit, 'refs', 'heads'), { recursive: true });
+      fs.writeFileSync(path.join(subAPath, '.git'), 'gitdir: ../../.git/modules/subA\n', 'utf8');
+      fs.writeFileSync(path.join(subAModuleGit, 'HEAD'), sha256Hex + '\n', 'utf8');
+      fs.writeFileSync(path.join(subAPath, '.gitmodules'), '[submodule "subB"]\n\tpath = nested/subB\n\turl = https://example.com/subB.git\n', 'utf8');
+      const subBPath = path.join(subAPath, 'nested', 'subB');
+      fs.mkdirSync(subBPath, { recursive: true });
+      fs.writeFileSync(path.join(subBPath, '.git'), 'gitdir: ../../../../.git/modules/subA/modules/subB\n', 'utf8');
+      fs.writeFileSync(path.join(childGit, 'HEAD'), sha256Hex + '\n', 'utf8');
+      const discoveredSubs = reader.readSubmodules(tmpSha256Repo, fakeGit);
+      assert.ok(discoveredSubs.some((s) => s.name === 'subA'), 'Top-level submodule discovered');
+      assert.ok(discoveredSubs.some((s) => s.name === 'subA/subB'), 'Nested submodule discovered recursively');
+    } finally {
+      fs.rmSync(tmpSha256Repo, { recursive: true, force: true });
+    }
+
+    // 4. PersistenceManager active repository session persistence
+    const pm = PersistenceManager.getInstance();
+    await pm.setActiveRepository('C:/repos/sample-root');
+    assert.strictEqual(pm.getActiveRepository(), 'C:/repos/sample-root');
+  }
+  console.log('  [PASS] GitFsReader Binary Objects, Packfiles, .git/index, SHA-256 & Reftable tests passed!');
+
+  console.log('\n[PASS] ALL 45 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);
