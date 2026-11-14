@@ -70,7 +70,7 @@ export class IssueBranchLinker {
       .replace(/\s+/g, '-')          // Spaces to dashes
       .replace(/-+/g, '-');          // Deduplicate dashes
 
-    return slug.slice(0, maxLength).replace(/-$/, '');
+    return slug.slice(0, maxLength).replace(/^-+|-+$/g, '');
   }
 
   /**
