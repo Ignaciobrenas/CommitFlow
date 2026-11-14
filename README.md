@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
- <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v0.4.8-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
+ <a href="https://marketplace.visualstudio.com/items?itemName=Ignaciobrenas.commitflow"><img src="https://img.shields.io/badge/VS_Code_Marketplace-v1.0.0-0284c7?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code Marketplace" /></a>
  <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/CI_Gate-Passing-10b981?style=flat-square&logo=githubactions&logoColor=white" alt="CI Status" /></a>
  <a href="https://github.com/Ignaciobrenas/CommitFlow/actions/workflows/pr-approval-gate.yml"><img src="https://img.shields.io/badge/PR_Gate-Owner_Protected-6366f1?style=flat-square&logo=github&logoColor=white" alt="PR Approval Gate" /></a>
- <a href="test/runTests.ts"><img src="https://img.shields.io/badge/Tests-42_Suites_Passing-10b981?style=flat-square&logo=jest&logoColor=white" alt="Tests Status" /></a>
+ <a href="test/runTests.ts"><img src="https://img.shields.io/badge/Tests-50_Suites_Passing-10b981?style=flat-square&logo=jest&logoColor=white" alt="Tests Status" /></a>
  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square" alt="License" /></a>
  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.6_Strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
  <a href="PRIVACY.md"><img src="https://img.shields.io/badge/Telemetry-Zero_Private-14b8a6?style=flat-square" alt="Privacy" /></a>
@@ -368,7 +368,7 @@ CommitFlow includes a built-in Model Context Protocol server (`CommitFlowMcpServ
 To install a pre-built `.vsix` release:
 
 ```bash
-code --install-extension commitflow-0.4.8.vsix
+code --install-extension commitflow-1.0.0.vsix
 ```
 
 ---
@@ -520,7 +520,7 @@ To connect external tools such as Claude Desktop, add CommitFlow to your client 
  "commitflow": {
  "command": "node",
  "args": [
- "C:/Users/<Username>/.vscode/extensions/ignaciobrenas.commitflow-0.4.8/dist/mcp.js",
+ "C:/Users/<Username>/.vscode/extensions/ignaciobrenas.commitflow-1.0.0/dist/mcp.js",
  "--repo",
  "C:/Path/To/Your/Repository"
  ]

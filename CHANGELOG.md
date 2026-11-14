@@ -2,6 +2,21 @@
 
 All notable changes to the "commitflow" extension will be documented in this file.
 
+## [1.0.0] - 2026-11-14
+
+### Added
+- **Design System & Agent Skills**: Created root `DESIGN.md` visual system and `.claude/skills/` suites (`commitflow-ui-design`, `commitflow-canvas-dag`, `commitflow-qa-testing`, `commitflow-issue-workflow`) plus custom `--vscode-*` UI primitives (`CfButton`, `CfBadge`, `CfDrawer`, `CfTabs`, `CfToast`, `CfSkeleton`) with zero deprecated `@vscode/webview-ui-toolkit` dependencies.
+- **DAG Minimap, Filters, Drag-and-Drop & Onboarding**: Interactive canvas minimap, combined `--first-parent`/date/path/remote filters, quick `Jump to HEAD`/`Jump to Bisect Probe`, drag-and-drop branch reset & commit cherry-pick/rebase workflows, illustrated empty states, and initial skeleton loaders.
+- **Offline Binary `.git` Engine & Submodules**: Completed binary loose object decompression, packfile v2 (`0xff744f63`) + `OFS_DELTA`/`REF_DELTA` decoding, `.git/index` (`DIRC` v2/v3/v4) staging inspection, `.gitmodules` nested submodule discovery, `gitdir:` worktree linking, SHA-256 detection, and `reftable` detection.
+- **Web Worker / OffscreenCanvas & Virtualization**: Off-thread topological DAG computation via `DagWorkerEngine`, DOM row recycling pool, adaptive `FileSystemWatcher` debouncer, and batched webview IPC dispatch.
+- **Conflict Resolution Studio, Conventional Commits & Remote Parity**: Interactive Conflict Resolution Studio integrated with VS Code 3-way Merge Editor (`git.openMergeEditor`), Conventional Commits Builder with `.gitmessage` loading and live `#issue` autocomplete, plus GitHub/GitLab/Forgejo TTL-cached PR/MR inline comments, approvals, CI status checks, and triage.
+- **Security Hardening & MCP Audit Trail**: Strict CSP nonces, `IpcSchemaValidator` runtime command allowlist + path-traversal/prototype-pollution guard, sliding-window MCP HTTP rate limiter (`429 Retry-After`), and circular `McpAuditRingBuffer` exposed via `commitflow://mcp/audit-log`.
+- **Enterprise QA Pyramid (50 Suites)**: Added 1,050 deterministic seeded fuzzing iterations (`test/fuzzTests.ts`), real-repo MCP stdio/HTTP/SSE end-to-end suite (`test/mcpE2eTests.ts`), 50,000-commit synthetic DAG benchmark (`scripts/benchmark-50k.js`), headless extension lifecycle smoke runner (`scripts/run-e2e-smoke.js`), and expanded Edge CDP audit matrix (`64/64` across 4 themes × 4 views × 4 breakpoints with WCAG 2.1 AA treegrid/ARIA validation).
+
+### Fixed
+- Eliminated an $O(N^2)$ converging-lane memory leak in `GraphLayout.compute` by clearing duplicate converging commit pointers across active lanes (50,000 commits now lay out in ~28 ms sync / ~15 ms worker with ~38 MB heap delta).
+- Fixed `IssueBranchLinker.createSlug` leading-hyphen sanitization edge case and extended `IpcSchemaValidator` payload scanning across entire IPC message envelopes.
+
 ## [0.4.8] - 2026-11-04
 
 ### Added

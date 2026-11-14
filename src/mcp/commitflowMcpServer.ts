@@ -94,7 +94,7 @@ export class CommitFlowMcpServer {
             protocolVersion: '2024-11-05',
             serverInfo: {
               name: 'commitflow-mcp',
-              version: '0.4.7',
+              version: '1.0.0',
             },
             capabilities: {
               tools: {},

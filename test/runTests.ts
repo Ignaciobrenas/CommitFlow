@@ -332,7 +332,7 @@ const initResponse = mcpServer['handleJsonRpc']({
 });
 initResponse.then((res: any) => {
   assert.strictEqual(res.result.serverInfo.name, 'commitflow-mcp');
-  assert.strictEqual(res.result.serverInfo.version, '0.4.7');
+  assert.strictEqual(res.result.serverInfo.version, '1.0.0');
 });
 
 // Test tools/list method
