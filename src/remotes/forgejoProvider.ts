@@ -474,6 +474,33 @@ export class ForgejoProvider implements RemoteProvider {
     return this.prsCache.get(cacheKey) || [];
   }
 
+  public async getPullRequestComments(repoInfo: RemoteRepoInfo, prNumber: number): Promise<IssueComment[]> {
+    return this.getIssueComments(repoInfo, prNumber);
+  }
+
+  public async createPullRequestComment(
+    repoInfo: RemoteRepoInfo,
+    prNumber: number,
+    body: string
+  ): Promise<IssueComment> {
+    return this.createIssueComment(repoInfo, prNumber, body);
+  }
+
+  public async approvePullRequest(repoInfo: RemoteRepoInfo, prNumber: number): Promise<void> {
+    const apiBase = this.getApiBaseUrl(repoInfo);
+    const url = `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}/pulls/${prNumber}/reviews`;
+    const headers = await this.getAuthHeaders(repoInfo);
+    headers['Content-Type'] = 'application/json';
+    const res = await this.safeFetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ event: 'APPROVED' }),
+    });
+    if (!res.ok) {
+      throw new Error(`Forgejo PR approval failed: HTTP ${res.status}`);
+    }
+  }
+
   /**
    * Retrieves CI commit status checks from /api/v1/repos/{owner}/{repo}/statuses/{sha}
    */

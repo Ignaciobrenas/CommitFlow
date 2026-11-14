@@ -5574,3 +5574,86 @@ button:focus-visible,
     width: auto;
   }
 }
+
+/* Conflict Resolution Studio, Conventional Commit Builder & PR Discussion (Issues #14, #15, #16) */
+.conflict-studio-list,
+.pr-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.conflict-file-card,
+.pr-comment-card {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.conflict-file-header,
+.pr-comment-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--font-size-xs);
+}
+
+.conflict-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.conflict-preview-pre,
+.cb-preview-box {
+  margin: 4px 0 0 0;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.commit-builder-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.commit-issue-autocomplete {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--vscode-focusBorder, var(--accent-cyan));
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.commit-issue-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+}
+
+.commit-issue-option:hover,
+.commit-issue-option:focus-visible {
+  background: var(--bg-hover);
+}

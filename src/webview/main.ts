@@ -366,6 +366,7 @@ window.addEventListener('message', (event) => {
 
       bisectStatus = message.payload.bisectStatus || null;
       updateBisectBanner();
+      updateConflictBanner(message.payload.conflictedFiles || []);
 
       if (activeTab === 'tab-worktrees') renderWorktrees();
       if (activeTab === 'tab-prs') renderPullRequests();
@@ -443,6 +444,37 @@ window.addEventListener('message', (event) => {
 
     case 'aiKeyGenerated':
       handleAiKeyGenerated(message.payload);
+      break;
+
+    case 'conflictedFilesData':
+      updateConflictBanner(message.payload?.files || []);
+      renderConflictStudioFiles(message.payload?.files || []);
+      break;
+
+    case 'commitTemplateData':
+      handleCommitTemplateData(message.payload);
+      break;
+
+    case 'commitCreated':
+      closeCommitBuilderModal();
+      break;
+
+    case 'prCommentsData':
+      if (message.payload?.prNumber) {
+        renderPrComments(message.payload.prNumber, message.payload.comments || []);
+      }
+      break;
+
+    case 'prCommentAdded':
+      if (message.payload?.prNumber && activePrModalNumber === Number(message.payload.prNumber)) {
+        vscode.postMessage({ command: 'requestPrComments', payload: { prNumber: activePrModalNumber } });
+      }
+      break;
+
+    case 'prApproved':
+      if (activePrModalNumber) {
+        vscode.postMessage({ command: 'requestPullRequests' });
+      }
       break;
 
     case 'rebaseCommitsData':
@@ -2976,6 +3008,12 @@ function renderPullRequests(): void {
             <button class="btn-sm btn-pr-checkout" data-pr="${pr.number}" data-branch="${pr.sourceBranch}" title="${tr('pr.checkoutActionTitle')}">
               <i class="codicon codicon-arrow-swap"></i> ${tr('pr.checkoutAction')}
             </button>
+            <button class="btn-sm btn-pr-comments" data-pr="${pr.number}" data-title="${escapeHtml(pr.title || '')}" title="View and add PR comments">
+              <i class="codicon codicon-comment"></i> ${pr.commentsCount || 0}
+            </button>
+            <button class="btn-sm btn-pr-approve" data-pr="${pr.number}" title="Approve Pull Request">
+              <i class="codicon codicon-check-all"></i> Approve
+            </button>
             ${
               pr.url
                 ? `<button class="btn-sm btn-pr-open" data-url="${pr.url}" title="${tr('pr.viewWebActionTitle')}">
@@ -2997,6 +3035,28 @@ function renderPullRequests(): void {
         vscode.postMessage({
           command: 'checkoutPullRequest',
           payload: { prNumber, branchName },
+        });
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-pr-comments').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const prNumber = parseInt(btn.getAttribute('data-pr') || '0', 10);
+      const prTitle = btn.getAttribute('data-title') || `PR #${prNumber}`;
+      if (prNumber) {
+        openPrDetailModal(prNumber, prTitle);
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-pr-approve').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const prNumber = parseInt(btn.getAttribute('data-pr') || '0', 10);
+      if (prNumber) {
+        vscode.postMessage({
+          command: 'approvePullRequest',
+          payload: { prNumber },
         });
       }
     });
@@ -4676,4 +4736,334 @@ document.getElementById('btn-dnd-confirm')?.addEventListener('click', () => {
     vscode.postMessage(pendingDndConfirmAction);
   }
   closeDndConfirmModal();
+});
+
+// Conflict Resolution Studio (Issue #14)
+let currentConflictedFiles: any[] = [];
+
+function updateConflictBanner(files: any[]): void {
+  currentConflictedFiles = Array.isArray(files) ? files : [];
+  const banner = document.getElementById('rebase-resolution-banner');
+  const countBadge = document.getElementById('conflict-count-badge');
+  if (countBadge) {
+    countBadge.textContent = String(currentConflictedFiles.length);
+  }
+  if (banner) {
+    banner.style.display = currentConflictedFiles.length > 0 ? 'flex' : 'none';
+  }
+}
+
+function renderConflictStudioFiles(files: any[]): void {
+  const listEl = document.getElementById('conflict-studio-list');
+  if (!listEl) return;
+
+  if (!files || files.length === 0) {
+    listEl.innerHTML = `<div class="empty-state" style="padding:18px;">
+      <i class="codicon codicon-check" style="color:#10b981; font-size:20px;"></i>
+      <div>No active merge or rebase conflicts detected.</div>
+    </div>`;
+    return;
+  }
+
+  listEl.innerHTML = files
+    .map((file) => {
+      const previewText = Array.isArray(file.previewLines) ? file.previewLines.slice(0, 6).join('\n') : '';
+      return `
+        <div class="conflict-file-card" data-path="${escapeHtml(file.filePath)}">
+          <div class="conflict-file-header">
+            <span class="mono-num" style="font-weight:600;">${escapeHtml(file.filePath)}</span>
+            <span class="cf-badge cf-badge-danger mono-num">${file.hunksCount || 0} hunks</span>
+          </div>
+          ${previewText ? `<pre class="conflict-preview-pre">${escapeHtml(previewText)}</pre>` : ''}
+          <div class="conflict-file-actions">
+            <button class="cf-btn cf-btn-ghost btn-resolve-ours" data-path="${escapeHtml(file.filePath)}">
+              Accept Ours${file.oursLabel ? ` (${escapeHtml(file.oursLabel)})` : ''}
+            </button>
+            <button class="cf-btn cf-btn-ghost btn-resolve-theirs" data-path="${escapeHtml(file.filePath)}">
+              Accept Theirs${file.theirsLabel ? ` (${escapeHtml(file.theirsLabel)})` : ''}
+            </button>
+            <button class="cf-btn cf-btn-primary btn-open-merge-editor" data-path="${escapeHtml(file.filePath)}">
+              <i class="codicon codicon-split-horizontal" aria-hidden="true"></i> 3-Way Merge Editor
+            </button>
+            <button class="cf-btn cf-btn-ghost btn-mark-resolved" data-path="${escapeHtml(file.filePath)}">
+              <i class="codicon codicon-check" aria-hidden="true"></i> Mark Resolved
+            </button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  const bindResolve = (selector: string, strategy: 'ours' | 'theirs' | 'mark-resolved') => {
+    listEl.querySelectorAll(selector).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const filePath = btn.getAttribute('data-path');
+        if (filePath) {
+          vscode.postMessage({
+            command: 'resolveConflictFile',
+            payload: { filePath, strategy },
+          });
+        }
+      });
+    });
+  };
+
+  bindResolve('.btn-resolve-ours', 'ours');
+  bindResolve('.btn-resolve-theirs', 'theirs');
+  bindResolve('.btn-mark-resolved', 'mark-resolved');
+
+  listEl.querySelectorAll('.btn-open-merge-editor').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const filePath = btn.getAttribute('data-path');
+      if (filePath) {
+        vscode.postMessage({
+          command: 'openMergeEditor',
+          payload: { filePath },
+        });
+      }
+    });
+  });
+}
+
+function openConflictStudioModal(): void {
+  const modal = document.getElementById('conflict-studio-modal');
+  if (!modal) return;
+  modal.classList.add('open');
+  renderConflictStudioFiles(currentConflictedFiles);
+  vscode.postMessage({ command: 'requestConflictedFiles' });
+}
+
+function closeConflictStudioModal(): void {
+  document.getElementById('conflict-studio-modal')?.classList.remove('open');
+}
+
+document.getElementById('btn-open-conflict-studio')?.addEventListener('click', openConflictStudioModal);
+document.getElementById('conflict-studio-close')?.addEventListener('click', closeConflictStudioModal);
+document.getElementById('btn-conflict-studio-done')?.addEventListener('click', closeConflictStudioModal);
+document.getElementById('btn-conflict-abort-merge')?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'abortMerge' });
+  closeConflictStudioModal();
+});
+document.getElementById('btn-conflict-continue-rebase')?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'continueRebase' });
+  closeConflictStudioModal();
+});
+
+// Conventional Commits Builder & #issue Autocomplete (Issue #15)
+let activeCommitAutocompleteInput: HTMLInputElement | HTMLTextAreaElement | null = null;
+
+function formatConventionalCommitPreview(): string {
+  const typeEl = document.getElementById('cb-type') as HTMLSelectElement | null;
+  const scopeEl = document.getElementById('cb-scope') as HTMLInputElement | null;
+  const subjectEl = document.getElementById('cb-subject') as HTMLInputElement | null;
+  const bodyEl = document.getElementById('cb-body') as HTMLTextAreaElement | null;
+  const breakingEl = document.getElementById('cb-breaking') as HTMLInputElement | null;
+  const previewEl = document.getElementById('cb-preview');
+  const countEl = document.getElementById('cb-subject-count');
+
+  const type = (typeEl?.value || 'feat').trim();
+  const scope = (scopeEl?.value || '').trim().replace(/[()\r\n]/g, '');
+  const subject = (subjectEl?.value || '').trim();
+  const body = (bodyEl?.value || '').trim();
+  const breaking = Boolean(breakingEl?.checked);
+
+  if (countEl) {
+    const len = subject.length;
+    countEl.textContent = `${len}/72`;
+    countEl.style.color = len > 72 ? '#ef4444' : 'var(--text-muted)';
+  }
+
+  const header = `${type}${scope ? `(${scope})` : ''}${breaking ? '!' : ''}: ${subject || '<description>'}`;
+  const sections = [header];
+  if (body) sections.push(body);
+  if (breaking && !/BREAKING CHANGE:/i.test(body)) {
+    sections.push(`BREAKING CHANGE: ${subject || 'introduces breaking changes'}`);
+  }
+  const full = sections.join('\n\n');
+  if (previewEl) previewEl.textContent = full;
+  return subject ? full : '';
+}
+
+function hideCommitIssueAutocomplete(): void {
+  const box = document.getElementById('commit-issue-autocomplete');
+  if (box) box.style.display = 'none';
+  activeCommitAutocompleteInput = null;
+}
+
+function updateCommitIssueAutocomplete(target: HTMLInputElement | HTMLTextAreaElement): void {
+  const box = document.getElementById('commit-issue-autocomplete');
+  if (!box) return;
+  const cursor = target.selectionStart ?? target.value.length;
+  const beforeCursor = target.value.slice(0, cursor);
+  const hashMatch = beforeCursor.match(/(?:^|\s)#([a-zA-Z0-9_-]*)$/);
+  if (!hashMatch) {
+    box.style.display = 'none';
+    return;
+  }
+
+  const q = (hashMatch[1] || '').toLowerCase();
+  const matches = (issuesHubData.allIssues || [])
+    .filter((i: any) => !q || String(i.number).includes(q) || (i.title || '').toLowerCase().includes(q))
+    .slice(0, 6);
+
+  if (matches.length === 0) {
+    box.style.display = 'none';
+    return;
+  }
+
+  activeCommitAutocompleteInput = target;
+  box.innerHTML = matches
+    .map(
+      (i: any) => `
+      <button type="button" class="commit-issue-option" data-num="${i.number}">
+        <span class="mono-num" style="font-weight:700; color:var(--accent-cyan);">#${i.number}</span>
+        <span>${escapeHtml(i.title || '')}</span>
+      </button>
+    `
+    )
+    .join('');
+  box.style.display = 'flex';
+
+  box.querySelectorAll('.commit-issue-option').forEach((opt) => {
+    opt.addEventListener('click', () => {
+      const num = opt.getAttribute('data-num');
+      if (!num || !activeCommitAutocompleteInput) return;
+      const inp = activeCommitAutocompleteInput;
+      const pos = inp.selectionStart ?? inp.value.length;
+      const left = inp.value.slice(0, pos);
+      const right = inp.value.slice(pos);
+      const replacedLeft = left.replace(/#([a-zA-Z0-9_-]*)$/, `#${num} `);
+      inp.value = replacedLeft + right;
+      inp.focus();
+      formatConventionalCommitPreview();
+      hideCommitIssueAutocomplete();
+    });
+  });
+}
+
+function handleCommitTemplateData(payload: { template?: string | null; changesCount?: number }): void {
+  const infoEl = document.getElementById('cb-changes-info');
+  const bodyEl = document.getElementById('cb-body') as HTMLTextAreaElement | null;
+  if (infoEl) {
+    const cnt = payload?.changesCount || 0;
+    infoEl.textContent = `${cnt} modified file${cnt === 1 ? '' : 's'} detected`;
+  }
+  if (bodyEl && !bodyEl.value.trim() && payload?.template) {
+    bodyEl.value = payload.template;
+  }
+  formatConventionalCommitPreview();
+}
+
+function openCommitBuilderModal(): void {
+  const modal = document.getElementById('commit-builder-modal');
+  if (!modal) return;
+  modal.classList.add('open');
+  formatConventionalCommitPreview();
+  vscode.postMessage({ command: 'requestCommitTemplate' });
+  if ((issuesHubData.allIssues || []).length === 0) {
+    vscode.postMessage({ command: 'requestIssues' });
+  }
+}
+
+function closeCommitBuilderModal(): void {
+  document.getElementById('commit-builder-modal')?.classList.remove('open');
+  hideCommitIssueAutocomplete();
+}
+
+document.getElementById('btn-commit-builder')?.addEventListener('click', openCommitBuilderModal);
+document.getElementById('commit-builder-close')?.addEventListener('click', closeCommitBuilderModal);
+document.getElementById('btn-cb-cancel')?.addEventListener('click', closeCommitBuilderModal);
+
+['cb-type', 'cb-scope', 'cb-breaking'].forEach((id) => {
+  document.getElementById(id)?.addEventListener('change', formatConventionalCommitPreview);
+  document.getElementById(id)?.addEventListener('input', formatConventionalCommitPreview);
+});
+
+['cb-subject', 'cb-body'].forEach((id) => {
+  const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+  el?.addEventListener('input', () => {
+    formatConventionalCommitPreview();
+    updateCommitIssueAutocomplete(el);
+  });
+});
+
+document.getElementById('btn-cb-submit')?.addEventListener('click', () => {
+  const message = formatConventionalCommitPreview();
+  if (!message) {
+    (document.getElementById('cb-subject') as HTMLInputElement | null)?.focus();
+    return;
+  }
+  const stageAll = Boolean((document.getElementById('cb-stage-all') as HTMLInputElement | null)?.checked);
+  vscode.postMessage({
+    command: 'commitStagedChanges',
+    payload: { message, stageAll },
+  });
+});
+
+// PR Comments & Approval Modal (Issue #16)
+let activePrModalNumber: number | null = null;
+
+function openPrDetailModal(prNumber: number, prTitle: string): void {
+  activePrModalNumber = prNumber;
+  const modal = document.getElementById('pr-detail-modal');
+  const titleEl = document.getElementById('pr-detail-title');
+  const listEl = document.getElementById('pr-comments-list');
+  if (titleEl) {
+    titleEl.textContent = `PR #${prNumber}: ${prTitle}`;
+  }
+  if (listEl) {
+    listEl.innerHTML = '<div style="color:var(--text-muted); font-size:var(--font-size-xs);">Loading comments...</div>';
+  }
+  modal?.classList.add('open');
+  vscode.postMessage({ command: 'requestPrComments', payload: { prNumber } });
+}
+
+function renderPrComments(prNumber: number, comments: any[]): void {
+  if (activePrModalNumber !== prNumber) return;
+  const listEl = document.getElementById('pr-comments-list');
+  if (!listEl) return;
+  if (!comments || comments.length === 0) {
+    listEl.innerHTML = '<div style="color:var(--text-muted); font-size:var(--font-size-xs);">No comments on this Pull Request yet.</div>';
+    return;
+  }
+  listEl.innerHTML = comments
+    .map(
+      (c) => `
+      <div class="pr-comment-card">
+        <div class="pr-comment-meta">
+          <strong>${escapeHtml(c.author?.name || 'User')}</strong>
+          <span>${escapeHtml(c.author?.relativeTime || c.createdAt || '')}</span>
+        </div>
+        <div class="pr-comment-body">${escapeHtml(c.body || '').replace(/\n/g, '<br/>')}</div>
+      </div>
+    `
+    )
+    .join('');
+}
+
+function closePrDetailModal(): void {
+  document.getElementById('pr-detail-modal')?.classList.remove('open');
+  activePrModalNumber = null;
+}
+
+document.getElementById('pr-detail-close')?.addEventListener('click', closePrDetailModal);
+document.getElementById('btn-pr-modal-close')?.addEventListener('click', closePrDetailModal);
+document.getElementById('btn-pr-modal-comment')?.addEventListener('click', () => {
+  const input = document.getElementById('pr-comment-input') as HTMLTextAreaElement | null;
+  const body = input?.value.trim() || '';
+  if (activePrModalNumber && body) {
+    vscode.postMessage({
+      command: 'addPrComment',
+      payload: { prNumber: activePrModalNumber, body },
+    });
+    if (input) input.value = '';
+  }
+});
+document.getElementById('btn-pr-modal-approve')?.addEventListener('click', () => {
+  if (activePrModalNumber) {
+    vscode.postMessage({
+      command: 'approvePullRequest',
+      payload: { prNumber: activePrModalNumber },
+    });
+  }
 });
