@@ -346,8 +346,21 @@ export interface WebviewToExtensionMessage {
     | 'skipRebase'
     | 'requestAiKeys'
     | 'generateAiKey'
-    | 'revokeAiKey';
+    | 'revokeAiKey'
+    // Advanced DAG Filters & Drag-and-Drop:
+    | 'applyDagFilters'
+    | 'dndResetBranchToCommit'
+    | 'dndCherryPickToBranch'
+    | 'dndRebaseOntoCommit';
   payload?: any;
+}
+
+export interface DagQueryFilters {
+  firstParent?: boolean;
+  hideRemotes?: boolean;
+  since?: string;
+  until?: string;
+  filePath?: string;
 }
 
 export interface ExtensionToWebviewMessage {

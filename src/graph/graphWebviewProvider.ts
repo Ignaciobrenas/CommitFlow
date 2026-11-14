@@ -13,6 +13,7 @@ import { ApiKeyManager } from '../mcp/apiKeyManager';
 import { AdaptiveDebouncer } from '../git/branchWatcher';
 import {
   CommitFlowSettings,
+  DagQueryFilters,
   ExtensionToWebviewMessage,
   LayoutMode,
   WebviewToExtensionMessage,
@@ -37,6 +38,7 @@ export class GraphWebviewProvider
   });
   private refreshInFlight: Promise<void> | null = null;
   private refreshPending = false;
+  private currentDagFilters: DagQueryFilters = {};
   private ipcBatchQueue = new Map<vscode.Webview, ExtensionToWebviewMessage[]>();
   private ipcBatchTimer: NodeJS.Timeout | null = null;
 
@@ -273,7 +275,7 @@ export class GraphWebviewProvider
         repositories,
         submodules,
       ] = await Promise.all([
-        this.gitClient.getCommits(root, limit),
+        this.gitClient.getCommits(root, limit, 0, this.currentDagFilters),
         this.gitClient.getBranches(root),
         this.gitClient.getCurrentBranch(root),
         this.gitClient.getGitHubRepoInfo(root),
@@ -1223,6 +1225,60 @@ export class GraphWebviewProvider
           }
           break;
 
+        case 'applyDagFilters':
+          this.currentDagFilters = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
+          await this.refreshData();
+          break;
+
+        case 'dndResetBranchToCommit':
+          if (root && msg.payload?.branchName && msg.payload?.targetHash) {
+            try {
+              const mode = msg.payload.mode || 'mixed';
+              await this.gitClient.resetBranchToCommit(root, msg.payload.branchName, msg.payload.targetHash, mode);
+              vscode.window.showInformationMessage(
+                `Branch "${msg.payload.branchName}" updated to ${String(msg.payload.targetHash).slice(0, 7)} (--${mode}).`
+              );
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Drag-and-drop reset failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'dndCherryPickToBranch':
+          if (root && msg.payload?.commitHash) {
+            try {
+              if (msg.payload.targetBranch) {
+                await this.gitClient.checkoutBranch(root, msg.payload.targetBranch);
+              }
+              const cpRes = await this.gitClient.cherryPick(root, msg.payload.commitHash);
+              if (cpRes.success) {
+                vscode.window.showInformationMessage(`Cherry-picked ${String(msg.payload.commitHash).slice(0, 7)}.`);
+              } else {
+                vscode.window.showWarningMessage(`Cherry-pick notice: ${cpRes.message}`);
+              }
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Drag-and-drop cherry-pick failed: ${err.message}`);
+            }
+          }
+          break;
+
+        case 'dndRebaseOntoCommit':
+          if (root && msg.payload?.targetHash) {
+            try {
+              if (msg.payload.sourceBranch) {
+                await this.gitClient.checkoutBranch(root, msg.payload.sourceBranch);
+              }
+              await this.gitClient.rebase(root, msg.payload.targetHash);
+              vscode.window.showInformationMessage(`Rebased onto ${String(msg.payload.targetHash).slice(0, 7)}.`);
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Drag-and-drop rebase failed: ${err.message}`);
+            }
+          }
+          break;
+
         case 'requestRebaseCommits':
           if (root && msg.payload?.baseHash) {
             try {
@@ -1671,11 +1727,43 @@ export class GraphWebviewProvider
         </div>
       </div>
 
-      <div id="graph-table-container" class="graph-table-container" role="treegrid" aria-label="CommitFlow Git DAG Graph" tabindex="0">
-        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
-          <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
-          <div>${tr('graph.loading')}</div>
+      <!-- Advanced DAG Filters & Quick Jumps (Issue #8) -->
+      <div id="dag-advanced-filters-bar" class="dag-advanced-filters-bar">
+        <button id="btn-filter-first-parent" class="cf-btn cf-btn-ghost filter-toggle-pill" aria-pressed="false" title="Ver historia lineal principal (--first-parent)">
+          <i class="codicon codicon-git-commit" aria-hidden="true"></i> --first-parent
+        </button>
+        <button id="btn-filter-hide-remotes" class="cf-btn cf-btn-ghost filter-toggle-pill" aria-pressed="false" title="Ocultar ramas remotas (origin/*)">
+          <i class="codicon codicon-eye-closed" aria-hidden="true"></i> Sin remotas
+        </button>
+        <input type="date" id="filter-date-since" class="search-input dag-filter-date" title="Desde fecha" aria-label="Desde fecha" />
+        <input type="date" id="filter-date-until" class="search-input dag-filter-date" title="Hasta fecha" aria-label="Hasta fecha" />
+        <input type="text" id="filter-file-path" class="search-input dag-filter-path" placeholder="Ruta (ej. src/)" aria-label="Filtrar por ruta de archivo" />
+        <button id="btn-filter-apply" class="cf-btn cf-btn-secondary" title="Aplicar filtros DAG">
+          <i class="codicon codicon-filter" aria-hidden="true"></i> Aplicar
+        </button>
+        <button id="btn-filter-reset" class="cf-btn cf-btn-ghost" title="Limpiar filtros DAG">
+          <i class="codicon codicon-clear-all" aria-hidden="true"></i>
+        </button>
+        <div class="dag-jump-group">
+          <button id="btn-jump-head" class="cf-btn cf-btn-secondary" title="Saltar a HEAD">
+            <i class="codicon codicon-target" aria-hidden="true"></i> HEAD
+          </button>
+          <button id="btn-jump-bisect-probe" class="cf-btn cf-btn-secondary" style="display:none;" title="Saltar al Probe de Bisect">
+            <i class="codicon codicon-compass" aria-hidden="true"></i> Bisect
+          </button>
         </div>
+      </div>
+
+      <div class="dag-workspace-row">
+        <div id="graph-table-container" class="graph-table-container" role="treegrid" aria-label="CommitFlow Git DAG Graph" tabindex="0">
+          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
+            <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
+            <div>${tr('graph.loading')}</div>
+          </div>
+        </div>
+        <aside id="dag-minimap-container" class="dag-minimap-container" aria-label="DAG Branch Minimap">
+          <canvas id="dag-minimap-canvas" width="76" height="480" title="Arrastra o haz clic para navegar por el historial"></canvas>
+        </aside>
       </div>
     </div>
 
@@ -2382,6 +2470,31 @@ Always check repo state and active branch before making modifications.</code></p
               <i class="codicon codicon-check"></i> Iniciar Rebase
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DAG Drag-and-Drop Confirmation Modal (Issue #9) -->
+    <div id="dnd-confirm-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="dnd-modal-title">
+      <div class="modal-card" style="width: min(460px, 100%);">
+        <div class="modal-header">
+          <span id="dnd-modal-title" style="font-weight:700; font-size:var(--font-size-base);">
+            <i class="codicon codicon-git-merge" aria-hidden="true"></i> Confirmar Acción DAG (Drag & Drop)
+          </span>
+          <button id="dnd-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body" style="padding:14px; display:flex; flex-direction:column; gap:10px;">
+          <div id="dnd-modal-summary" style="font-size:var(--font-size-sm); color:var(--text-primary);"></div>
+          <label style="font-size:var(--font-size-xs); color:var(--text-muted); display:flex; flex-direction:column; gap:4px;">
+            Operación Git a ejecutar:
+            <select id="dnd-action-select" class="branch-select" style="width:100%;"></select>
+          </label>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; padding:12px; border-top:1px solid var(--border-color); background:var(--bg-secondary);">
+          <button id="btn-dnd-cancel" class="cf-btn cf-btn-ghost">${tr('modal.close')}</button>
+          <button id="btn-dnd-confirm" class="cf-btn cf-btn-primary">
+            <i class="codicon codicon-check" aria-hidden="true"></i> Ejecutar
+          </button>
         </div>
       </div>
     </div>

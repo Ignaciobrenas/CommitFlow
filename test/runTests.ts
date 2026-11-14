@@ -1608,7 +1608,56 @@ Host *.internal.corp
   }
   console.log('  [PASS] DAG Worker Engine, DOM Recycling, AdaptiveDebouncer & IPC Batching tests passed!');
 
-  console.log('\n[PASS] ALL 46 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  console.log('\nTesting DAG Minimap, Advanced Filters, Interactive Drag-and-Drop & Onboarding...');
+  {
+    const providerSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'graph', 'graphWebviewProvider.ts'), 'utf8');
+    const webviewSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'main.ts'), 'utf8');
+
+    assert.ok(providerSrc.includes('id="dag-advanced-filters-bar"'));
+    assert.ok(providerSrc.includes('id="dag-minimap-canvas"'));
+    assert.ok(providerSrc.includes('id="btn-jump-head"') && providerSrc.includes('id="btn-jump-bisect-probe"'));
+    assert.ok(providerSrc.includes('id="dnd-confirm-modal"'));
+    assert.ok(webviewSrc.includes('createRefPillElement') && webviewSrc.includes('openDndConfirmModal'));
+    assert.ok(webviewSrc.includes('updateDagMinimap') && webviewSrc.includes('dag-empty-onboarding'));
+    assert.ok(cssContent.includes('.dag-advanced-filters-bar') && cssContent.includes('.dag-minimap-container'));
+    assert.ok(cssContent.includes('.commit-row.dag-drop-target'));
+
+    // Real git filter & resetBranchToCommit test
+    const osMod = await import('os');
+    const cpMod = await import('child_process');
+    const tmpFilterRepo = fs.mkdtempSync(path.join(osMod.tmpdir(), 'commitflow-filter-dnd-'));
+    try {
+      cpMod.execFileSync('git', ['init'], { cwd: tmpFilterRepo });
+      cpMod.execFileSync('git', ['config', 'user.email', 'f@commitflow.dev'], { cwd: tmpFilterRepo });
+      cpMod.execFileSync('git', ['config', 'user.name', 'Filter Test'], { cwd: tmpFilterRepo });
+      fs.writeFileSync(path.join(tmpFilterRepo, 'app.ts'), 'const x = 1;\n', 'utf8');
+      cpMod.execFileSync('git', ['add', 'app.ts'], { cwd: tmpFilterRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'c1: add app.ts'], { cwd: tmpFilterRepo });
+      const baseSha = cpMod.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tmpFilterRepo, encoding: 'utf8' }).trim();
+
+      fs.writeFileSync(path.join(tmpFilterRepo, 'readme.md'), '# doc\n', 'utf8');
+      cpMod.execFileSync('git', ['add', 'readme.md'], { cwd: tmpFilterRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'c2: add readme.md'], { cwd: tmpFilterRepo });
+
+      const gc = new GitClient();
+      const allCommits = await gc.getCommits(tmpFilterRepo, 50, 0);
+      assert.strictEqual(allCommits.length, 2);
+
+      const pathCommits = await gc.getCommits(tmpFilterRepo, 50, 0, { filePath: 'app.ts', firstParent: true });
+      assert.strictEqual(pathCommits.length, 1);
+      assert.strictEqual(pathCommits[0].subject, 'c1: add app.ts');
+
+      cpMod.execFileSync('git', ['branch', 'feature/dnd-test', 'HEAD'], { cwd: tmpFilterRepo });
+      await gc.resetBranchToCommit(tmpFilterRepo, 'feature/dnd-test', baseSha, 'mixed');
+      const movedSha = cpMod.execFileSync('git', ['rev-parse', 'feature/dnd-test'], { cwd: tmpFilterRepo, encoding: 'utf8' }).trim();
+      assert.strictEqual(movedSha, baseSha, 'resetBranchToCommit should move non-current branch to baseSha');
+    } finally {
+      fs.rmSync(tmpFilterRepo, { recursive: true, force: true });
+    }
+  }
+  console.log('  [PASS] DAG Minimap, Advanced Filters, Interactive Drag-and-Drop & Onboarding tests passed!');
+
+  console.log('\n[PASS] ALL 47 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);

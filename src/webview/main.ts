@@ -692,9 +692,180 @@ function parseSearchQuery(query: string): {
   return result;
 }
 
+let advFilterFirstParent = false;
+let advFilterHideRemotes = false;
+let advFilterSince = '';
+let advFilterUntil = '';
+let advFilterFilePath = '';
+
+interface DagDragPayload {
+  kind: 'branch' | 'commit';
+  branchName?: string;
+  sourceHash: string;
+  shortHash?: string;
+}
+
+let activeDagDragPayload: DagDragPayload | null = null;
+let pendingDndConfirmAction: {
+  command: 'dndResetBranchToCommit' | 'dndCherryPickToBranch' | 'dndRebaseOntoCommit';
+  payload: any;
+} | null = null;
+
+function createRefPillElement(
+  ref: { type: string; name: string; isHead: boolean },
+  node: GraphNode
+): HTMLElement {
+  const pill = document.createElement('span');
+  pill.className = `ref-pill ${ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'}`;
+  const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
+  pill.innerHTML = `<i class="codicon ${icon}" aria-hidden="true" style="font-size:10px;"></i> ${
+    ref.isHead ? `HEAD -> ${escapeHtml(ref.name)}` : escapeHtml(ref.name)
+  }`;
+  pill.title = ref.name;
+
+  if (ref.type !== 'tag' && ref.type !== 'remote-branch') {
+    pill.draggable = true;
+    pill.addEventListener('dragstart', (e) => {
+      e.stopPropagation();
+      activeDagDragPayload = {
+        kind: 'branch',
+        branchName: ref.name,
+        sourceHash: node.commit.hash,
+        shortHash: node.commit.shortHash,
+      };
+      pill.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('application/x-commitflow-dag', JSON.stringify(activeDagDragPayload));
+      }
+    });
+    pill.addEventListener('dragend', () => {
+      activeDagDragPayload = null;
+      pill.classList.remove('dragging');
+    });
+  }
+
+  pill.addEventListener('mouseenter', (e) => {
+    e.stopPropagation();
+    highlightBranchPath(node.commit.hash);
+  });
+  pill.addEventListener('mouseleave', () => {
+    clearBranchPathHighlight();
+  });
+  return pill;
+}
+
+function openDndConfirmModal(dragData: DagDragPayload, targetNode: GraphNode): void {
+  const modal = document.getElementById('dnd-confirm-modal');
+  const summary = document.getElementById('dnd-modal-summary');
+  const actionSelect = document.getElementById('dnd-action-select') as HTMLSelectElement | null;
+  if (!modal || !summary || !actionSelect) return;
+
+  actionSelect.innerHTML = '';
+  const targetShort = targetNode.commit.shortHash || targetNode.commit.hash.slice(0, 7);
+  const targetBranch = targetNode.commit.refs.find((r) => r.type === 'branch' || r.type === 'head')?.name;
+
+  if (dragData.kind === 'branch' && dragData.branchName) {
+    summary.innerHTML = `Arrastraste la rama <code>${escapeHtml(dragData.branchName)}</code> sobre el commit <code>${escapeHtml(targetShort)}</code>.`;
+    [
+      { value: 'reset-mixed', label: `Mover / Reset '${dragData.branchName}' a ${targetShort} (--mixed)` },
+      { value: 'reset-soft', label: `Reset suave '${dragData.branchName}' a ${targetShort} (--soft)` },
+      { value: 'reset-hard', label: `Reset duro '${dragData.branchName}' a ${targetShort} (--hard)` },
+      { value: 'rebase', label: `Rebase '${dragData.branchName}' sobre ${targetShort}` },
+    ].forEach((opt) => {
+      const o = document.createElement('option');
+      o.value = opt.value;
+      o.textContent = opt.label;
+      actionSelect.appendChild(o);
+    });
+  } else {
+    const srcShort = dragData.shortHash || dragData.sourceHash.slice(0, 7);
+    summary.innerHTML = `Arrastraste el commit <code>${escapeHtml(srcShort)}</code> sobre <code>${escapeHtml(targetBranch || targetShort)}</code>.`;
+    [
+      {
+        value: 'cherry-pick',
+        label: targetBranch ? `Cherry-pick ${srcShort} en '${targetBranch}'` : `Cherry-pick ${srcShort} en HEAD`,
+      },
+      { value: 'rebase-onto', label: `Rebase HEAD sobre ${targetShort}` },
+    ].forEach((opt) => {
+      const o = document.createElement('option');
+      o.value = opt.value;
+      o.textContent = opt.label;
+      actionSelect.appendChild(o);
+    });
+  }
+
+  const updatePendingAction = () => {
+    const val = actionSelect.value;
+    if (dragData.kind === 'branch' && dragData.branchName) {
+      if (val === 'rebase') {
+        pendingDndConfirmAction = {
+          command: 'dndRebaseOntoCommit',
+          payload: { sourceBranch: dragData.branchName, targetHash: targetNode.commit.hash },
+        };
+      } else {
+        const mode = val === 'reset-soft' ? 'soft' : val === 'reset-hard' ? 'hard' : 'mixed';
+        pendingDndConfirmAction = {
+          command: 'dndResetBranchToCommit',
+          payload: { branchName: dragData.branchName, targetHash: targetNode.commit.hash, mode },
+        };
+      }
+    } else if (val === 'rebase-onto') {
+      pendingDndConfirmAction = {
+        command: 'dndRebaseOntoCommit',
+        payload: { targetHash: targetNode.commit.hash },
+      };
+    } else {
+      pendingDndConfirmAction = {
+        command: 'dndCherryPickToBranch',
+        payload: { commitHash: dragData.sourceHash, targetBranch },
+      };
+    }
+  };
+
+  actionSelect.onchange = updatePendingAction;
+  updatePendingAction();
+  modal.classList.add('open');
+  trapModalFocus(modal);
+}
+
+function updateDagMinimap(): void {
+  const minimapCanvas = document.getElementById('dag-minimap-canvas') as HTMLCanvasElement | null;
+  if (!minimapCanvas || filteredNodes.length === 0) return;
+
+  const rowHeight = getRowHeight();
+  const totalHeight = Math.max(1, filteredNodes.length * rowHeight);
+  const startRatio = Math.max(0, Math.min(1, tableContainer.scrollTop / totalHeight));
+  const endRatio = Math.max(startRatio, Math.min(1, (tableContainer.scrollTop + (tableContainer.clientHeight || 600)) / totalHeight));
+  const selectedIndex = selectedNode ? filteredNodes.indexOf(selectedNode) : -1;
+
+  dagWorkerEngine.renderMinimap(filteredNodes, minimapCanvas, {
+    width: minimapCanvas.clientWidth || 76,
+    height: minimapCanvas.clientHeight || 480,
+    selectedIndex,
+    viewportStartRatio: startRatio,
+    viewportEndRatio: endRatio,
+  });
+}
+
 function applyFilters(): void {
   filteredNodes = allNodes.filter((node) => {
     const commit = node.commit;
+    if (advFilterHideRemotes && commit.refs.length > 0 && commit.refs.every((r) => r.type === 'remote-branch')) {
+      return false;
+    }
+    if (advFilterSince) {
+      const sinceMs = Date.parse(advFilterSince);
+      if (!Number.isNaN(sinceMs) && new Date(commit.author.date).getTime() < sinceMs) {
+        return false;
+      }
+    }
+    if (advFilterUntil) {
+      const untilMs = Date.parse(advFilterUntil);
+      if (!Number.isNaN(untilMs) && new Date(commit.author.date).getTime() > untilMs + 86_399_999) {
+        return false;
+      }
+    }
     if (searchQuery) {
       const parsed = parseSearchQuery(searchQuery);
 
@@ -960,23 +1131,7 @@ function renderCommitRow(
     }
 
     node.commit.refs.forEach((ref) => {
-      const pill = document.createElement('span');
-      pill.className = `ref-pill ${
-        ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
-      }`;
-      const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
-      pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
-        ref.isHead ? `HEAD -> ${ref.name}` : ref.name
-      }`;
-      pill.title = ref.name;
-      pill.addEventListener('mouseenter', (e) => {
-        e.stopPropagation();
-        highlightBranchPath(node.commit.hash);
-      });
-      pill.addEventListener('mouseleave', () => {
-        clearBranchPathHighlight();
-      });
-      cardTop.appendChild(pill);
+      cardTop.appendChild(createRefPillElement(ref, node));
     });
 
     const subjectSpan = document.createElement('span');
@@ -1067,23 +1222,7 @@ function renderCommitRow(
     }
 
     node.commit.refs.forEach((ref) => {
-      const pill = document.createElement('span');
-      pill.className = `ref-pill ${
-        ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
-      }`;
-      const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
-      pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
-        ref.isHead ? `HEAD -> ${ref.name}` : ref.name
-      }`;
-      pill.title = ref.name;
-      pill.addEventListener('mouseenter', (e) => {
-        e.stopPropagation();
-        highlightBranchPath(node.commit.hash);
-      });
-      pill.addEventListener('mouseleave', () => {
-        clearBranchPathHighlight();
-      });
-      infoCol.appendChild(pill);
+      infoCol.appendChild(createRefPillElement(ref, node));
     });
 
     const subjectSpan = document.createElement('span');
@@ -1220,7 +1359,43 @@ function renderCommitRow(
     row.appendChild(rowActions);
   }
 
-  // Row Click, Context Menu & Hover handlers
+  // Row Click, Context Menu, Drag-and-Drop & Hover handlers
+  row.draggable = true;
+  row.addEventListener('dragstart', (e) => {
+    if ((e.target as HTMLElement)?.closest('.ref-pill')) return;
+    activeDagDragPayload = {
+      kind: 'commit',
+      sourceHash: node.commit.hash,
+      shortHash: node.commit.shortHash,
+    };
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copyMove';
+      e.dataTransfer.setData('application/x-commitflow-dag', JSON.stringify(activeDagDragPayload));
+    }
+  });
+  row.addEventListener('dragover', (e) => {
+    if (!activeDagDragPayload || activeDagDragPayload.sourceHash === node.commit.hash) return;
+    e.preventDefault();
+    row.classList.add('dag-drop-target');
+  });
+  row.addEventListener('dragleave', () => {
+    row.classList.remove('dag-drop-target');
+  });
+  row.addEventListener('drop', (e) => {
+    e.preventDefault();
+    row.classList.remove('dag-drop-target');
+    const rawJson = e.dataTransfer?.getData('application/x-commitflow-dag');
+    let dragData = activeDagDragPayload;
+    if (!dragData && rawJson) {
+      try {
+        dragData = JSON.parse(rawJson);
+      } catch {}
+    }
+    activeDagDragPayload = null;
+    if (dragData && dragData.sourceHash !== node.commit.hash) {
+      openDndConfirmModal(dragData, node);
+    }
+  });
   row.addEventListener('click', () => selectCommit(node));
   row.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -1304,6 +1479,7 @@ function updateVirtualWindow(): void {
 
   virtualViewport.innerHTML = '';
   virtualViewport.appendChild(fragment);
+  updateDagMinimap();
 }
 
 function jumpToCommitIndex(index: number): void {
@@ -1327,12 +1503,23 @@ function renderGraph(): void {
 
   if (allNodes.length === 0) {
     tableContainer.innerHTML = `
-      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; padding:20px; text-align:center;">
-        <i class="codicon codicon-repo" style="font-size:36px; color:var(--text-muted);"></i>
+      <div class="dag-empty-onboarding" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:10px; padding:24px; text-align:center;">
+        <svg width="48" height="48" viewBox="0 0 48 48" aria-hidden="true" style="opacity:0.85;">
+          <circle cx="16" cy="12" r="5" fill="none" stroke="var(--accent-cyan)" stroke-width="2.5"/>
+          <circle cx="32" cy="24" r="5" fill="none" stroke="var(--accent-purple)" stroke-width="2.5"/>
+          <circle cx="16" cy="36" r="5" fill="none" stroke="var(--accent-emerald)" stroke-width="2.5"/>
+          <path d="M16 17v14M16 17c8 0 16 1 16 7M32 29c0 6-8 7-16 7" fill="none" stroke="var(--text-muted)" stroke-width="2"/>
+        </svg>
         <div style="font-weight:600; font-size:var(--font-size-base); color:var(--text-primary);">${tr('graph.emptyRepo')}</div>
-        <div style="max-width:320px; font-size:var(--font-size-sm); color:var(--text-muted);">${tr('graph.emptyRepoDesc')}</div>
+        <div style="max-width:340px; font-size:var(--font-size-sm); color:var(--text-muted);">${tr('graph.emptyRepoDesc')}</div>
+        <button id="btn-empty-refresh" class="cf-btn cf-btn-primary" style="margin-top:4px;">
+          <i class="codicon codicon-refresh" aria-hidden="true"></i> ${tr('action.refresh')}
+        </button>
       </div>
     `;
+    document.getElementById('btn-empty-refresh')?.addEventListener('click', () => {
+      vscode.postMessage({ command: 'requestData' });
+    });
     return;
   }
 
@@ -2422,6 +2609,10 @@ function renderComparisonModal(comparison: CommitComparisonResult): void {
 
 // Git Bisect Assistant
 function updateBisectBanner(): void {
+  const probeJumpBtn = document.getElementById('btn-jump-bisect-probe');
+  if (probeJumpBtn) {
+    probeJumpBtn.style.display = bisectStatus?.isActive ? 'inline-flex' : 'none';
+  }
   if (!bisectBanner) return;
   if (bisectStatus?.isActive) {
     bisectBanner.style.display = 'block';
@@ -4374,4 +4565,115 @@ document.getElementById('active-branch-pill')?.addEventListener('click', () => {
   if (branchSelect) {
     branchSelect.focus();
   }
+});
+
+// Advanced DAG Filters & Quick Jumps (Issue #8)
+function dispatchDagFilters(): void {
+  advFilterSince = (document.getElementById('filter-date-since') as HTMLInputElement | null)?.value || '';
+  advFilterUntil = (document.getElementById('filter-date-until') as HTMLInputElement | null)?.value || '';
+  advFilterFilePath = (document.getElementById('filter-file-path') as HTMLInputElement | null)?.value.trim() || '';
+  vscode.postMessage({
+    command: 'applyDagFilters',
+    payload: {
+      firstParent: advFilterFirstParent,
+      hideRemotes: advFilterHideRemotes,
+      since: advFilterSince || undefined,
+      until: advFilterUntil || undefined,
+      filePath: advFilterFilePath || undefined,
+    },
+  });
+  applyFilters();
+}
+
+document.getElementById('btn-filter-first-parent')?.addEventListener('click', (e) => {
+  advFilterFirstParent = !advFilterFirstParent;
+  const btn = e.currentTarget as HTMLElement;
+  btn.classList.toggle('active', advFilterFirstParent);
+  btn.setAttribute('aria-pressed', String(advFilterFirstParent));
+  dispatchDagFilters();
+});
+
+document.getElementById('btn-filter-hide-remotes')?.addEventListener('click', (e) => {
+  advFilterHideRemotes = !advFilterHideRemotes;
+  const btn = e.currentTarget as HTMLElement;
+  btn.classList.toggle('active', advFilterHideRemotes);
+  btn.setAttribute('aria-pressed', String(advFilterHideRemotes));
+  dispatchDagFilters();
+});
+
+document.getElementById('btn-filter-apply')?.addEventListener('click', dispatchDagFilters);
+
+document.getElementById('btn-filter-reset')?.addEventListener('click', () => {
+  advFilterFirstParent = false;
+  advFilterHideRemotes = false;
+  advFilterSince = '';
+  advFilterUntil = '';
+  advFilterFilePath = '';
+  ['btn-filter-first-parent', 'btn-filter-hide-remotes'].forEach((id) => {
+    const el = document.getElementById(id);
+    el?.classList.remove('active');
+    el?.setAttribute('aria-pressed', 'false');
+  });
+  ['filter-date-since', 'filter-date-until', 'filter-file-path'].forEach((id) => {
+    const inp = document.getElementById(id) as HTMLInputElement | null;
+    if (inp) inp.value = '';
+  });
+  dispatchDagFilters();
+});
+
+document.getElementById('btn-jump-head')?.addEventListener('click', () => {
+  const headIdx = filteredNodes.findIndex((n) => n.commit.refs.some((r) => r.isHead));
+  if (headIdx >= 0) jumpToCommitIndex(headIdx);
+  else if (filteredNodes.length > 0) jumpToCommitIndex(0);
+});
+
+document.getElementById('btn-jump-bisect-probe')?.addEventListener('click', () => {
+  if (!bisectStatus?.isActive) return;
+  const probeIdx = filteredNodes.findIndex(
+    (n) =>
+      n.commit.hash === bisectStatus?.currentCommit ||
+      n.commit.shortHash === bisectStatus?.currentShortCommit
+  );
+  if (probeIdx >= 0) jumpToCommitIndex(probeIdx);
+});
+
+// Interactive Minimap Scrubbing (Issue #8)
+(() => {
+  const minimapCanvas = document.getElementById('dag-minimap-canvas') as HTMLCanvasElement | null;
+  if (!minimapCanvas) return;
+  let isScrubbing = false;
+
+  const jumpFromPointer = (clientY: number) => {
+    if (filteredNodes.length === 0) return;
+    const rect = minimapCanvas.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientY - rect.top) / Math.max(1, rect.height)));
+    jumpToCommitIndex(Math.min(filteredNodes.length - 1, Math.floor(ratio * filteredNodes.length)));
+  };
+
+  minimapCanvas.addEventListener('pointerdown', (e) => {
+    isScrubbing = true;
+    minimapCanvas.setPointerCapture?.(e.pointerId);
+    jumpFromPointer(e.clientY);
+  });
+  minimapCanvas.addEventListener('pointermove', (e) => {
+    if (isScrubbing) jumpFromPointer(e.clientY);
+  });
+  minimapCanvas.addEventListener('pointerup', () => {
+    isScrubbing = false;
+  });
+})();
+
+// DAG Drag-and-Drop Confirmation Modal controls (Issue #9)
+function closeDndConfirmModal(): void {
+  document.getElementById('dnd-confirm-modal')?.classList.remove('open');
+  pendingDndConfirmAction = null;
+}
+
+document.getElementById('dnd-modal-close')?.addEventListener('click', closeDndConfirmModal);
+document.getElementById('btn-dnd-cancel')?.addEventListener('click', closeDndConfirmModal);
+document.getElementById('btn-dnd-confirm')?.addEventListener('click', () => {
+  if (pendingDndConfirmAction) {
+    vscode.postMessage(pendingDndConfirmAction);
+  }
+  closeDndConfirmModal();
 });

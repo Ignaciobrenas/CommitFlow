@@ -9,6 +9,7 @@ import {
   CloudPatch,
   CommitComparisonResult,
   ContributorStat,
+  DagQueryFilters,
   FileCommitRevision,
   GitAuthor,
   GitBisectStatus,
@@ -202,20 +203,35 @@ export class GitClient {
   public async getCommits(
     cwd: string,
     limit = 300,
-    skip = 0
+    skip = 0,
+    filters?: DagQueryFilters
   ): Promise<GitCommit[]> {
     const format =
       '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%ct%x1f%D%x1f%s%x1f%b%x1f%G?%x1f%GS%x1f%GK%x1e';
-    const args = [
-      'log',
-      '--all',
+    const args = ['log', filters?.hideRemotes ? '--branches' : '--all'];
+    if (filters?.hideRemotes) {
+      args.push('--tags');
+    }
+    if (filters?.firstParent) {
+      args.push('--first-parent');
+    }
+    args.push(
       '--topo-order',
       '--parents',
       `--format=${format}`,
-      `-n`,
+      '-n',
       limit.toString(),
-      `--skip=${skip}`,
-    ];
+      `--skip=${skip}`
+    );
+    if (filters?.since) {
+      args.push(`--since=${filters.since}`);
+    }
+    if (filters?.until) {
+      args.push(`--until=${filters.until}`);
+    }
+    if (filters?.filePath && !filters.filePath.includes('..') && !filters.filePath.startsWith('-')) {
+      args.push('--', filters.filePath);
+    }
 
     try {
       const raw = await this.execute(args, cwd);
@@ -2094,6 +2110,24 @@ export class GitClient {
       conflicts,
       rawDetails,
     };
+  }
+
+  /**
+   * Moves or resets a branch pointer to a target commit hash (supports soft/mixed/hard for active branch).
+   */
+  public async resetBranchToCommit(
+    cwd: string,
+    branchName: string,
+    targetHash: string,
+    mode: 'soft' | 'mixed' | 'hard' = 'mixed'
+  ): Promise<void> {
+    const cleanBranch = branchName.replace(/^HEAD\s*->\s*/, '').trim();
+    const current = await this.getCurrentBranch(cwd).catch(() => '');
+    if (current && current === cleanBranch) {
+      await this.execute(['reset', `--${mode}`, targetHash], cwd);
+    } else {
+      await this.execute(['branch', '-f', cleanBranch, targetHash], cwd);
+    }
   }
 
   /**
