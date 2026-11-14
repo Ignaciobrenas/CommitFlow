@@ -403,6 +403,8 @@
     "dev": "node esbuild.js --watch",
     "test": "node -e \"require('esbuild').buildSync({entryPoints:['test/runTests.ts'],outfile:'dist/test.js',bundle:true,platform:'node',alias:{'vscode':'./test/vscodeMock.ts'}}); require('./dist/test.js')\"",
     "test:live": "node -e \"require('esbuild').buildSync({entryPoints:['test/verifyLiveIntegration.ts'],outfile:'dist/verifyLive.js',bundle:true,platform:'node',alias:{'vscode':'./test/vscodeMock.ts'}}); require('./dist/verifyLive.js')\"",
+    "test:e2e": "node scripts/run-e2e-smoke.js",
+    "benchmark": "node scripts/benchmark-50k.js",
     "mcp": "node dist/mcp.js",
     "package": "vsce package"
   },

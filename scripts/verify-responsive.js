@@ -62,11 +62,31 @@ const themeVariables = {
     --vscode-testing-iconPassed: #89d185;
     --vscode-editorWarning-foreground: #cca700;
   `,
+  'high-contrast-light': `
+    --vscode-editor-background: #ffffff;
+    --vscode-editor-foreground: #292929;
+    --vscode-sideBar-background: #ffffff;
+    --vscode-sideBar-foreground: #292929;
+    --vscode-input-background: #ffffff;
+    --vscode-input-foreground: #292929;
+    --vscode-input-border: #0f4a85;
+    --vscode-contrastBorder: #0f4a85;
+    --vscode-contrastActiveBorder: #006bbd;
+    --vscode-button-background: #0f4a85;
+    --vscode-button-foreground: #ffffff;
+    --vscode-button-border: #0f4a85;
+    --vscode-button-hoverBackground: #0c3b6b;
+    --vscode-button-secondaryBackground: #ffffff;
+    --vscode-button-secondaryForeground: #292929;
+    --vscode-errorForeground: #b5200d;
+    --vscode-testing-iconPassed: #374e06;
+    --vscode-editorWarning-foreground: #895503;
+  `,
 };
 
 function buildGraphHtml(themeName) {
   return `<!DOCTYPE html>
-<html lang="es" class="vscode-${themeName === 'high-contrast' ? 'high-contrast' : themeName}">
+<html lang="es" class="vscode-${themeName}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -83,7 +103,7 @@ function buildGraphHtml(themeName) {
     }
   </style>
 </head>
-<body data-theme="${themeName}">
+<body data-theme="${themeName}" class="vscode-${themeName}">
   <div class="commitflow-app" style="height:100vh; display:flex; flex-direction:column;">
     <div class="header-bar" id="header-bar">
       <div class="header-row-primary">
@@ -95,64 +115,58 @@ function buildGraphHtml(themeName) {
           <span class="branch-name">main</span>
         </div>
         <div class="header-quick-actions">
-          <button id="btn-layout-mode" class="btn-icon"><i class="codicon codicon-layout"></i></button>
-          <button id="btn-theme-mode" class="btn-icon"><i class="codicon codicon-symbol-color"></i></button>
-          <button id="btn-reflog" class="btn-icon"><i class="codicon codicon-history"></i></button>
-          <button id="btn-repo-health" class="btn-icon"><i class="codicon codicon-pulse"></i></button>
-          <button id="btn-bisect" class="btn-icon"><i class="codicon codicon-search"></i></button>
-          <button id="btn-changelog" class="btn-icon"><i class="codicon codicon-markdown"></i></button>
-          <button id="btn-undo-commit" class="btn-icon"><i class="codicon codicon-discard"></i></button>
-          <button id="refresh-btn" class="btn-icon"><i class="codicon codicon-refresh"></i></button>
-          <button id="btn-popout" class="btn-icon"><i class="codicon codicon-link-external"></i></button>
-          <button id="btn-stash" class="btn-icon"><i class="codicon codicon-archive"></i></button>
-          <button id="btn-personal-stats" class="btn-icon"><i class="codicon codicon-graph"></i></button>
-          <button id="btn-settings" class="btn-icon"><i class="codicon codicon-settings-gear"></i></button>
+          <button id="btn-layout-mode" class="btn-icon" aria-label="Layout mode"><i class="codicon codicon-layout" aria-hidden="true"></i></button>
+          <button id="btn-theme-mode" class="btn-icon" aria-label="Theme mode"><i class="codicon codicon-symbol-color" aria-hidden="true"></i></button>
+          <button id="btn-reflog" class="btn-icon" aria-label="Time machine reflog"><i class="codicon codicon-history" aria-hidden="true"></i></button>
+          <button id="btn-repo-health" class="btn-icon" aria-label="Repository health"><i class="codicon codicon-pulse" aria-hidden="true"></i></button>
+          <button id="btn-bisect" class="btn-icon" aria-label="Git bisect"><i class="codicon codicon-search" aria-hidden="true"></i></button>
+          <button id="btn-changelog" class="btn-icon" aria-label="Generate changelog"><i class="codicon codicon-markdown" aria-hidden="true"></i></button>
+          <button id="btn-undo-commit" class="btn-icon" aria-label="Undo commit"><i class="codicon codicon-discard" aria-hidden="true"></i></button>
+          <button id="refresh-btn" class="btn-icon" aria-label="Refresh graph"><i class="codicon codicon-refresh" aria-hidden="true"></i></button>
+          <button id="btn-popout" class="btn-icon" aria-label="Popout editor"><i class="codicon codicon-link-external" aria-hidden="true"></i></button>
+          <button id="btn-stash" class="btn-icon" aria-label="Stashes"><i class="codicon codicon-archive" aria-hidden="true"></i></button>
+          <button id="btn-personal-stats" class="btn-icon" aria-label="Personal stats"><i class="codicon codicon-graph" aria-hidden="true"></i></button>
+          <button id="btn-settings" class="btn-icon" aria-label="Settings"><i class="codicon codicon-settings-gear" aria-hidden="true"></i></button>
         </div>
       </div>
       <div class="nav-tab-bar">
-        <button class="nav-tab-btn active"><i class="codicon codicon-git-branch"></i> <span>Grafo</span></button>
-        <button class="nav-tab-btn"><i class="codicon codicon-history"></i> <span>Historial</span></button>
-        <button class="nav-tab-btn"><i class="codicon codicon-issues"></i> <span>Issues</span> <span class="tab-badge">2</span></button>
-        <button class="nav-tab-btn"><i class="codicon codicon-git-pull-request"></i> <span>PRs</span> <span class="tab-badge">1</span></button>
-        <button class="nav-tab-btn"><i class="codicon codicon-repo-forked"></i> <span>Worktrees</span></button>
-        <button class="nav-tab-btn"><i class="codicon codicon-sparkle"></i> <span>Conectar IA</span></button>
+        <button class="nav-tab-btn active"><i class="codicon codicon-git-branch" aria-hidden="true"></i> <span>Grafo</span></button>
+        <button class="nav-tab-btn"><i class="codicon codicon-history" aria-hidden="true"></i> <span>Historial</span></button>
+        <button class="nav-tab-btn"><i class="codicon codicon-issues" aria-hidden="true"></i> <span>Issues</span> <span class="tab-badge">2</span></button>
+        <button class="nav-tab-btn"><i class="codicon codicon-git-pull-request" aria-hidden="true"></i> <span>PRs</span> <span class="tab-badge">1</span></button>
+        <button class="nav-tab-btn"><i class="codicon codicon-repo-forked" aria-hidden="true"></i> <span>Worktrees</span></button>
+        <button class="nav-tab-btn"><i class="codicon codicon-sparkle" aria-hidden="true"></i> <span>Conectar IA</span></button>
       </div>
       <div class="toolbar-controls">
         <div class="search-input-wrapper">
-          <span class="search-icon"><i class="codicon codicon-search"></i></span>
-          <input type="text" class="search-input" value="feat(mcp)" />
+          <span class="search-icon"><i class="codicon codicon-search" aria-hidden="true"></i></span>
+          <input type="text" class="search-input" aria-label="Filter commits" value="feat(mcp)" />
         </div>
-        <select class="branch-select"><option>all (Todas las ramas)</option><option>main</option></select>
-        <button class="btn-icon" id="btn-checkout"><i class="codicon codicon-arrow-swap"></i></button>
+        <select class="branch-select" aria-label="Select branch filter"><option>all (Todas las ramas)</option><option>main</option></select>
+        <button class="btn-icon" id="btn-checkout" aria-label="Checkout selected branch"><i class="codicon codicon-arrow-swap" aria-hidden="true"></i></button>
       </div>
     </div>
 
     <div class="stats-bar">
-      <div class="stat-item"><i class="codicon codicon-git-commit"></i> Commits: <span class="stat-value">128</span></div>
-      <div class="stat-item"><i class="codicon codicon-organization"></i> Autores: <span class="stat-value">4</span></div>
-      <div class="stat-item"><i class="codicon codicon-git-branch"></i> Ramas: <span class="stat-value">6</span></div>
-      <div class="stat-item"><i class="codicon codicon-archive"></i> Stashes: <span class="stat-value">1</span></div>
+      <div class="stat-item"><i class="codicon codicon-git-commit" aria-hidden="true"></i> Commits: <span class="stat-value tabular-nums mono-num">128</span></div>
+      <div class="stat-item"><i class="codicon codicon-organization" aria-hidden="true"></i> Autores: <span class="stat-value tabular-nums mono-num">4</span></div>
+      <div class="stat-item"><i class="codicon codicon-git-branch" aria-hidden="true"></i> Ramas: <span class="stat-value tabular-nums mono-num">6</span></div>
+      <div class="stat-item"><i class="codicon codicon-archive" aria-hidden="true"></i> Stashes: <span class="stat-value tabular-nums mono-num">1</span></div>
     </div>
 
-    <div class="graph-table-container" style="flex:1; overflow:auto;">
-      <table class="graph-table" style="width:100%; border-collapse:collapse;">
-        <tbody>
-          <tr class="graph-row active">
-            <td style="width:70px; padding:6px 8px;"><code style="color:var(--accent-cyan);">cf4821a</code></td>
-            <td style="width:30px;"><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#00f0ff;"></span></td>
-            <td style="padding:6px 8px; font-weight:600;"><span class="branch-pill">main</span> feat(mcp): streamable HTTP and stdio authenticated server</td>
-            <td style="padding:6px 8px; color:var(--text-muted); font-size:11px;">Ignacio</td>
-            <td style="padding:6px 8px; color:var(--text-muted); font-size:11px;">Just now</td>
-          </tr>
-          <tr class="graph-row">
-            <td style="padding:6px 8px;"><code style="color:var(--accent-cyan);">ab8291f</code></td>
-            <td><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#d946ef;"></span></td>
-            <td style="padding:6px 8px;"><span class="branch-pill" style="background:rgba(217,70,239,0.2);">dev</span> feat(ai): Connect with your AI studio and key generator</td>
-            <td style="padding:6px 8px; color:var(--text-muted); font-size:11px;">Ignacio</td>
-            <td style="padding:6px 8px; color:var(--text-muted); font-size:11px;">10m ago</td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="graph-table-container" role="treegrid" aria-label="CommitFlow Interactive Git Graph" style="flex:1; overflow:auto;">
+      <div class="virtual-viewport">
+        <div class="commit-row selected" role="row" tabindex="0" aria-rowindex="1" aria-selected="true" aria-label="cf4821a — [main] — feat(mcp): streamable HTTP and stdio authenticated server — by Ignacio (Just now)" style="height:32px; display:flex; align-items:center; gap:8px; padding:0 8px; overflow:hidden;">
+          <span class="graph-canvas-col" role="gridcell" aria-label="Commit graph lane 0" style="width:20px; flex-shrink:0;"><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#00f0ff;"></span></span>
+          <span class="commit-hash tabular-nums mono-num" role="gridcell" style="flex-shrink:0;">cf4821a</span>
+          <span class="commit-subject" role="gridcell" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><span class="branch-pill">main</span> feat(mcp): streamable HTTP and stdio authenticated server</span>
+        </div>
+        <div class="commit-row" role="row" tabindex="0" aria-rowindex="2" aria-selected="false" aria-label="ab8291f — [dev] — feat(ai): Connect with your AI studio and key generator — by Ignacio (10m ago)" style="height:32px; display:flex; align-items:center; gap:8px; padding:0 8px; overflow:hidden;">
+          <span class="graph-canvas-col" role="gridcell" aria-label="Commit graph lane 1" style="width:20px; flex-shrink:0;"><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#d946ef;"></span></span>
+          <span class="commit-hash tabular-nums mono-num" role="gridcell" style="flex-shrink:0;">ab8291f</span>
+          <span class="commit-subject" role="gridcell" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><span class="branch-pill" style="background:rgba(217,70,239,0.2);">dev</span> feat(ai): Connect with your AI studio and key generator</span>
+        </div>
+      </div>
     </div>
   </div>
 </body>
@@ -161,7 +175,7 @@ function buildGraphHtml(themeName) {
 
 function buildRebaseStudioHtml(themeName) {
   return `<!DOCTYPE html>
-<html lang="es" class="vscode-${themeName === 'high-contrast' ? 'high-contrast' : themeName}">
+<html lang="es" class="vscode-${themeName}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -177,53 +191,53 @@ function buildRebaseStudioHtml(themeName) {
     }
   </style>
 </head>
-<body data-theme="${themeName}">
+<body data-theme="${themeName}" class="vscode-${themeName}">
   <div id="rebase-studio-modal" class="modal-overlay open" style="opacity:1; pointer-events:auto; position:relative; width:100%; height:100%; box-sizing:border-box; display:flex; align-items:center; justify-content:center;">
     <div class="modal-card" style="width: min(850px, 100%); max-height: min(85vh, 750px); display: flex; flex-direction: column;">
       <div class="modal-header">
         <div style="display:flex; align-items:center; gap:8px;">
-          <i class="codicon codicon-git-pull-request-go-to-changes" style="font-size:16px; color:var(--accent-purple);"></i>
+          <i class="codicon codicon-git-pull-request-go-to-changes" aria-hidden="true" style="font-size:16px; color:var(--accent-purple);"></i>
           <span style="font-weight:700; font-size:var(--font-size-base);">Interactive Rebase Studio</span>
         </div>
-        <button class="btn-icon" id="rebase-studio-modal-close"><i class="codicon codicon-close"></i></button>
+        <button class="btn-icon" id="rebase-studio-modal-close" aria-label="Close Rebase Studio"><i class="codicon codicon-close" aria-hidden="true"></i></button>
       </div>
       <div class="modal-body" style="overflow-y:auto; overflow-x:hidden; box-sizing:border-box; flex:1; display:flex; flex-direction:column; gap:12px; padding:12px;">
         <div style="font-size:var(--font-size-sm); color:var(--text-muted); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
           <span>Reordena los commits arrastrando o usando los botones. Selecciona la acción:</span>
-          <span style="font-weight:600; color:var(--text-primary);">3 commits</span>
+          <span class="tabular-nums" style="font-weight:600; color:var(--text-primary);">3 commits</span>
         </div>
         <div class="rebase-todo-list" style="display:flex; flex-direction:column; gap:6px;">
           <div class="rebase-todo-item">
-            <i class="codicon codicon-grabber rebase-item-handle"></i>
-            <select class="rebase-action-select"><option>pick</option><option>reword</option><option>edit</option><option>squash</option><option>drop</option></select>
+            <i class="codicon codicon-grabber rebase-item-handle" aria-hidden="true"></i>
+            <select class="rebase-action-select" aria-label="Rebase action"><option>pick</option><option>reword</option><option>edit</option><option>squash</option><option>drop</option></select>
             <span class="rebase-item-sha">f775f85</span>
             <span class="rebase-item-subject">feat(release): release v0.4.8 with universal responsive design</span>
             <span class="rebase-item-author">Ignacio</span>
             <div class="rebase-item-controls">
-              <button class="btn-sm"><i class="codicon codicon-arrow-up"></i></button>
-              <button class="btn-sm"><i class="codicon codicon-arrow-down"></i></button>
+              <button class="btn-sm" aria-label="Move commit up"><i class="codicon codicon-arrow-up" aria-hidden="true"></i></button>
+              <button class="btn-sm" aria-label="Move commit down"><i class="codicon codicon-arrow-down" aria-hidden="true"></i></button>
             </div>
           </div>
           <div class="rebase-todo-item action-squash">
-            <i class="codicon codicon-grabber rebase-item-handle"></i>
-            <select class="rebase-action-select"><option selected>squash</option><option>pick</option></select>
+            <i class="codicon codicon-grabber rebase-item-handle" aria-hidden="true"></i>
+            <select class="rebase-action-select" aria-label="Rebase action"><option selected>squash</option><option>pick</option></select>
             <span class="rebase-item-sha">aa1779d</span>
             <span class="rebase-item-subject">fix(ui): close all popups, popovers and modals when clicking outside</span>
             <span class="rebase-item-author">Ignacio</span>
             <div class="rebase-item-controls">
-              <button class="btn-sm"><i class="codicon codicon-arrow-up"></i></button>
-              <button class="btn-sm"><i class="codicon codicon-arrow-down"></i></button>
+              <button class="btn-sm" aria-label="Move commit up"><i class="codicon codicon-arrow-up" aria-hidden="true"></i></button>
+              <button class="btn-sm" aria-label="Move commit down"><i class="codicon codicon-arrow-down" aria-hidden="true"></i></button>
             </div>
           </div>
           <div class="rebase-todo-item action-drop">
-            <i class="codicon codicon-grabber rebase-item-handle"></i>
-            <select class="rebase-action-select"><option selected>drop</option></select>
+            <i class="codicon codicon-grabber rebase-item-handle" aria-hidden="true"></i>
+            <select class="rebase-action-select" aria-label="Rebase action"><option selected>drop</option></select>
             <span class="rebase-item-sha">98cd31a</span>
             <span class="rebase-item-subject">chore: remove temporary debug logs</span>
             <span class="rebase-item-author">Ignacio</span>
             <div class="rebase-item-controls">
-              <button class="btn-sm"><i class="codicon codicon-arrow-up"></i></button>
-              <button class="btn-sm"><i class="codicon codicon-arrow-down"></i></button>
+              <button class="btn-sm" aria-label="Move commit up"><i class="codicon codicon-arrow-up" aria-hidden="true"></i></button>
+              <button class="btn-sm" aria-label="Move commit down"><i class="codicon codicon-arrow-down" aria-hidden="true"></i></button>
             </div>
           </div>
         </div>
@@ -246,7 +260,7 @@ function buildRebaseStudioHtml(themeName) {
 
 function buildCommitDrawerHtml(themeName) {
   return `<!DOCTYPE html>
-<html lang="es" class="vscode-${themeName === 'high-contrast' ? 'high-contrast' : themeName}">
+<html lang="es" class="vscode-${themeName}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -263,12 +277,12 @@ function buildCommitDrawerHtml(themeName) {
     }
   </style>
 </head>
-<body data-theme="${themeName}">
+<body data-theme="${themeName}" class="vscode-${themeName}">
   <div class="commitflow-app" style="height:100vh; display:flex;">
     <div class="commit-drawer open" style="width:100%; display:flex; flex-direction:column; border-left:none;">
       <div class="drawer-header" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid var(--border-subtle);">
         <span style="font-weight:600; font-size:var(--font-size-base);">Detalles del Commit</span>
-        <button class="btn-icon" id="drawer-close-btn"><i class="codicon codicon-close"></i></button>
+        <button class="btn-icon" id="drawer-close-btn" aria-label="Close commit drawer"><i class="codicon codicon-close" aria-hidden="true"></i></button>
       </div>
       <div class="drawer-body">
         <div class="author-hero-card">
@@ -327,7 +341,7 @@ function buildCommitDrawerHtml(themeName) {
 
 function buildAiStudioHtml(themeName) {
   return `<!DOCTYPE html>
-<html lang="es" class="vscode-${themeName === 'high-contrast' ? 'high-contrast' : themeName}">
+<html lang="es" class="vscode-${themeName}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -344,7 +358,7 @@ function buildAiStudioHtml(themeName) {
     }
   </style>
 </head>
-<body data-theme="${themeName}">
+<body data-theme="${themeName}" class="vscode-${themeName}">
   <div class="ai-studio-container">
     <div class="ai-studio-header">
       <div class="ai-header-info">
@@ -427,7 +441,7 @@ function buildAiStudioHtml(themeName) {
 
       <div class="snippet-code-box" style="margin-top:8px;">
         <pre><code>claude mcp add --transport sse commitflow http://127.0.0.1:47291/sse?token=cf_live_9b4e7a82c31045f918e9d023b7498c1a</code></pre>
-        <button class="btn-copy-snippet"><i class="codicon codicon-copy"></i></button>
+        <button class="btn-copy-snippet" aria-label="Copy snippet"><i class="codicon codicon-copy" aria-hidden="true"></i></button>
       </div>
     </div>
 
@@ -466,20 +480,20 @@ function buildAiStudioHtml(themeName) {
 </html>`;
 }
 
+const themes = ['dark', 'light', 'high-contrast', 'high-contrast-light'];
+
 const viewports = [
   { name: 'nano-240px', width: 240, height: 700 },
-  { name: 'narrow-280px', width: 280, height: 750 },
   { name: 'sidebar-360px', width: 360, height: 750 },
-  { name: 'medium-450px', width: 450, height: 800 },
-  { name: 'split-750px', width: 750, height: 800 },
-  { name: 'full-1200px', width: 1200, height: 800 },
+  { name: 'compact-520px', width: 520, height: 800 },
+  { name: 'wide-1100px', width: 1100, height: 800 },
 ];
 
 const views = [
-  { name: 'Graph View', builder: buildGraphHtml },
-  { name: 'AI Studio', builder: buildAiStudioHtml },
-  { name: 'Rebase Studio Modal', builder: buildRebaseStudioHtml },
-  { name: 'Commit Drawer', builder: buildCommitDrawerHtml },
+  { name: 'Graph View', builder: buildGraphHtml, checkA11yGraph: true },
+  { name: 'AI Studio', builder: buildAiStudioHtml, checkA11yGraph: false },
+  { name: 'Rebase Studio Modal', builder: buildRebaseStudioHtml, checkA11yGraph: false },
+  { name: 'Commit Drawer', builder: buildCommitDrawerHtml, checkA11yGraph: false },
 ];
 
 async function verifyResponsiveAndButtons() {
@@ -544,141 +558,189 @@ async function verifyResponsiveAndButtons() {
   let passedAudits = 0;
   let totalButtonsVerified = 0;
 
-  for (const view of views) {
-    console.log(`\n▶ Auditing View: ${view.name}`);
-    const html = view.builder('dark');
-    await send('Page.setDocumentContent', { frameId, html });
+  for (const themeName of themes) {
+    console.log(`\n==================== THEME: ${themeName} ====================`);
+    for (const view of views) {
+      console.log(`\n▶ Auditing View: ${view.name} [${themeName}]`);
+      const html = view.builder(themeName);
+      await send('Page.setDocumentContent', { frameId, html });
 
-    for (const vp of viewports) {
-      await send('Emulation.setDeviceMetricsOverride', {
-        width: vp.width,
-        height: vp.height,
-        deviceScaleFactor: 1,
-        mobile: false
-      });
+      for (const vp of viewports) {
+        await send('Emulation.setDeviceMetricsOverride', {
+          width: vp.width,
+          height: vp.height,
+          deviceScaleFactor: 1,
+          mobile: false
+        });
 
-      await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 60));
 
-      const evalRes = await send('Runtime.evaluate', {
-        expression: `
-          (function() {
-            const results = {
-              horizontalOverflows: [],
-              overlappingElements: [],
-              buttonsInfo: []
-            };
+        const evalRes = await send('Runtime.evaluate', {
+          expression: `
+            (function() {
+              const results = {
+                horizontalOverflows: [],
+                overlappingElements: [],
+                buttonsInfo: [],
+                a11yErrors: [],
+                themeBg: window.getComputedStyle(document.body).backgroundColor
+              };
 
-            // 1. Check for unintentional horizontal overflows
-            const bodyWidth = document.body.clientWidth;
-            const allElements = Array.from(document.querySelectorAll('*'));
-            for (const el of allElements) {
-              const cs = window.getComputedStyle(el);
-              if (cs.display === 'none' || cs.visibility === 'hidden') continue;
-              // Ignore intentional horizontal scroll containers, inputs, and ellipsis text
-              if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') continue;
-              const tag = el.tagName.toLowerCase();
-              if (tag === 'input' || tag === 'textarea') continue;
-              if (cs.textOverflow === 'ellipsis') continue;
-              if (cs.overflowX === 'hidden' && (cs.textOverflow === 'clip' || cs.textOverflow === 'ellipsis')) continue;
-              if (el.scrollWidth > el.clientWidth + 3 && el.clientWidth > 0) {
-                // Ignore small sub-pixel text rendering difference
-                const cls = (el.className && typeof el.className === 'string') ? el.className.slice(0, 30) : '';
-                const id = el.id ? '#' + el.id : '';
-                results.horizontalOverflows.push({
-                  selector: tag + id + (cls ? '.' + cls.split(' ').join('.') : ''),
-                  clientWidth: el.clientWidth,
-                  scrollWidth: el.scrollWidth
-                });
-              }
-            }
-
-            // 2. Check all interactive buttons & controls
-            const buttons = Array.from(document.querySelectorAll('button, select, input[type="text"]'));
-            for (const btn of buttons) {
-              const rect = btn.getBoundingClientRect();
-              const cs = window.getComputedStyle(btn);
-              if (cs.display === 'none' || cs.visibility === 'hidden') continue;
-
-              const isVisible = rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight;
-              let isObscured = false;
-              if (isVisible) {
-                const centerX = Math.min(Math.max(rect.left + rect.width / 2, 0), window.innerWidth - 1);
-                const centerY = Math.min(Math.max(rect.top + rect.height / 2, 0), window.innerHeight - 1);
-                const topEl = document.elementFromPoint(centerX, centerY);
-                if (topEl && !btn.contains(topEl) && !topEl.contains(btn)) {
-                  isObscured = true;
+              // 1. Check for unintentional horizontal overflows
+              const allElements = Array.from(document.querySelectorAll('*'));
+              for (const el of allElements) {
+                const cs = window.getComputedStyle(el);
+                if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+                if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') continue;
+                const tag = el.tagName.toLowerCase();
+                if (tag === 'input' || tag === 'textarea') continue;
+                if (cs.textOverflow === 'ellipsis') continue;
+                if (cs.overflowX === 'hidden' && (cs.textOverflow === 'clip' || cs.textOverflow === 'ellipsis')) continue;
+                if (el.scrollWidth > el.clientWidth + 3 && el.clientWidth > 0) {
+                  const cls = (el.className && typeof el.className === 'string') ? el.className.slice(0, 30) : '';
+                  const id = el.id ? '#' + el.id : '';
+                  results.horizontalOverflows.push({
+                    selector: tag + id + (cls ? '.' + cls.split(' ').join('.') : ''),
+                    clientWidth: el.clientWidth,
+                    scrollWidth: el.scrollWidth
+                  });
                 }
               }
 
-              results.buttonsInfo.push({
-                tag: btn.tagName.toLowerCase(),
-                id: btn.id || '',
-                text: (btn.textContent || btn.value || btn.title || '').trim().slice(0, 25),
-                width: Math.round(rect.width),
-                height: Math.round(rect.height),
-                isVisible,
-                isObscured
-              });
-            }
+              // 2. Check all interactive buttons & controls + WCAG accessible name
+              const buttons = Array.from(document.querySelectorAll('button, select, input[type="text"]'));
+              for (const btn of buttons) {
+                const rect = btn.getBoundingClientRect();
+                const cs = window.getComputedStyle(btn);
+                if (cs.display === 'none' || cs.visibility === 'hidden') continue;
 
-            // 3. Collision/Overlap detection between direct siblings in flex/grid
-            const containers = Array.from(document.querySelectorAll('.drawer-action-buttons, .bisect-actions, .issues-filter-pills, .snippet-subtabs, .modal-footer, .header-row-primary'));
-            for (const container of containers) {
-              const children = Array.from(container.children).filter(c => {
-                const s = window.getComputedStyle(c);
-                return s.display !== 'none' && s.visibility !== 'hidden';
-              });
-              for (let i = 0; i < children.length; i++) {
-                for (let j = i + 1; j < children.length; j++) {
-                  const r1 = children[i].getBoundingClientRect();
-                  const r2 = children[j].getBoundingClientRect();
-                  if (r1.width === 0 || r2.width === 0) continue;
-                  // Check intersection with 3px tolerance
-                  const overlapX = Math.max(0, Math.min(r1.right, r2.right) - Math.max(r1.left, r2.left));
-                  const overlapY = Math.max(0, Math.min(r1.bottom, r2.bottom) - Math.max(r1.top, r2.top));
-                  if (overlapX > 3 && overlapY > 3) {
-                    results.overlappingElements.push({
-                      container: container.className,
-                      el1: children[i].tagName + (children[i].id ? '#' + children[i].id : ''),
-                      el2: children[j].tagName + (children[j].id ? '#' + children[j].id : ''),
-                      overlapX,
-                      overlapY
-                    });
+                const isVisible = rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight;
+                let isObscured = false;
+                if (isVisible) {
+                  const centerX = Math.min(Math.max(rect.left + rect.width / 2, 0), window.innerWidth - 1);
+                  const centerY = Math.min(Math.max(rect.top + rect.height / 2, 0), window.innerHeight - 1);
+                  const topEl = document.elementFromPoint(centerX, centerY);
+                  if (topEl && !btn.contains(topEl) && !topEl.contains(btn)) {
+                    isObscured = true;
+                  }
+                }
+
+                const accessibleName = (
+                  btn.getAttribute('aria-label') ||
+                  btn.getAttribute('title') ||
+                  btn.textContent ||
+                  btn.value ||
+                  ''
+                ).trim();
+                if (btn.tagName.toLowerCase() === 'button' && !accessibleName) {
+                  results.a11yErrors.push('Button missing accessible name: #' + (btn.id || btn.className));
+                }
+
+                results.buttonsInfo.push({
+                  tag: btn.tagName.toLowerCase(),
+                  id: btn.id || '',
+                  text: accessibleName.slice(0, 25),
+                  width: Math.round(rect.width),
+                  height: Math.round(rect.height),
+                  isVisible,
+                  isObscured
+                });
+              }
+
+              // 3. Collision/Overlap detection between direct siblings in flex/grid
+              const containers = Array.from(document.querySelectorAll('.drawer-action-buttons, .bisect-actions, .issues-filter-pills, .snippet-subtabs, .modal-footer, .header-row-primary'));
+              for (const container of containers) {
+                const children = Array.from(container.children).filter(c => {
+                  const s = window.getComputedStyle(c);
+                  return s.display !== 'none' && s.visibility !== 'hidden';
+                });
+                for (let i = 0; i < children.length; i++) {
+                  for (let j = i + 1; j < children.length; j++) {
+                    const r1 = children[i].getBoundingClientRect();
+                    const r2 = children[j].getBoundingClientRect();
+                    if (r1.width === 0 || r2.width === 0) continue;
+                    const overlapX = Math.max(0, Math.min(r1.right, r2.right) - Math.max(r1.left, r2.left));
+                    const overlapY = Math.max(0, Math.min(r1.bottom, r2.bottom) - Math.max(r1.top, r2.top));
+                    if (overlapX > 3 && overlapY > 3) {
+                      results.overlappingElements.push({
+                        container: container.className,
+                        el1: children[i].tagName + (children[i].id ? '#' + children[i].id : ''),
+                        el2: children[j].tagName + (children[j].id ? '#' + children[j].id : ''),
+                        overlapX,
+                        overlapY
+                      });
+                    }
                   }
                 }
               }
-            }
 
-            return results;
-          })()
-        `,
-        returnByValue: true
-      });
+              // 4. WCAG 2.1 AA Treegrid, Row ARIA labels & tabular-nums checks on Graph View
+              if (${view.checkA11yGraph ? 'true' : 'false'}) {
+                const treegrid = document.querySelector('[role="treegrid"]');
+                if (!treegrid || !(treegrid.getAttribute('aria-label') || '').trim()) {
+                  results.a11yErrors.push('Missing role="treegrid" with aria-label on graph container');
+                }
+                const rows = Array.from(document.querySelectorAll('.commit-row[role="row"]'));
+                if (rows.length === 0) {
+                  results.a11yErrors.push('Expected at least one .commit-row[role="row"]');
+                } else {
+                  for (const r of rows) {
+                    if (!(r.getAttribute('aria-label') || '').trim()) {
+                      results.a11yErrors.push('Commit row missing descriptive aria-label');
+                    }
+                    if (r.getAttribute('tabindex') === null) {
+                      results.a11yErrors.push('Commit row missing focusable tabindex');
+                    }
+                  }
+                }
+                const monoNums = Array.from(document.querySelectorAll('.mono-num, .tabular-nums'));
+                if (monoNums.length === 0) {
+                  results.a11yErrors.push('Missing .mono-num / .tabular-nums numeric elements');
+                } else {
+                  for (const m of monoNums) {
+                    const fvn = window.getComputedStyle(m).fontVariantNumeric || '';
+                    if (!fvn.includes('tabular-nums')) {
+                      results.a11yErrors.push('Numeric element missing tabular-nums font-variant-numeric: ' + fvn);
+                    }
+                  }
+                }
+              }
 
-      const res = evalRes.result.value;
-      totalAudits++;
+              return results;
+            })()
+          `,
+          returnByValue: true
+        });
 
-      const hasOverflows = res.horizontalOverflows.length > 0;
-      const hasOverlaps = res.overlappingElements.length > 0;
-      const obscuredButtons = res.buttonsInfo.filter(b => b.isVisible && b.isObscured);
+        const res = evalRes.result.value;
+        totalAudits++;
 
-      if (!hasOverflows && !hasOverlaps && obscuredButtons.length === 0) {
-        passedAudits++;
-        console.log(`  ✔ [PASS] Viewport ${vp.name.padEnd(14)} (${vp.width}x${vp.height}) - ${res.buttonsInfo.length} buttons OK, 0 overlaps, 0 overflows`);
-      } else {
-        console.log(`  ✖ [WARN] Viewport ${vp.name} (${vp.width}x${vp.height}):`);
-        if (hasOverflows) {
-          console.log(`     Overflows:`, res.horizontalOverflows);
+        const hasOverflows = res.horizontalOverflows.length > 0;
+        const hasOverlaps = res.overlappingElements.length > 0;
+        const hasA11yErrors = res.a11yErrors.length > 0;
+        const obscuredButtons = res.buttonsInfo.filter(b => b.isVisible && b.isObscured);
+
+        if (!hasOverflows && !hasOverlaps && !hasA11yErrors && obscuredButtons.length === 0) {
+          passedAudits++;
+          console.log(`  ✔ [PASS] ${themeName.padEnd(19)} | ${vp.name.padEnd(14)} (${vp.width}x${vp.height}) - ${res.buttonsInfo.length} controls, a11y OK, 0 overlaps, 0 overflows`);
+        } else {
+          console.log(`  ✖ [WARN] ${themeName} | ${vp.name} (${vp.width}x${vp.height}):`);
+          if (hasOverflows) {
+            console.log(`     Overflows:`, res.horizontalOverflows);
+          }
+          if (hasOverlaps) {
+            console.log(`     Overlaps:`, res.overlappingElements);
+          }
+          if (hasA11yErrors) {
+            console.log(`     A11y errors:`, res.a11yErrors);
+          }
+          if (obscuredButtons.length > 0) {
+            console.log(`     Obscured buttons:`, obscuredButtons);
+          }
         }
-        if (hasOverlaps) {
-          console.log(`     Overlaps ("se pisa"):`, res.overlappingElements);
-        }
-        if (obscuredButtons.length > 0) {
-          console.log(`     Obscured buttons:`, obscuredButtons);
-        }
+
+        totalButtonsVerified += res.buttonsInfo.length;
       }
-
-      totalButtonsVerified += res.buttonsInfo.length;
     }
   }
 

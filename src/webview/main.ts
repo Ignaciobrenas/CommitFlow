@@ -1116,6 +1116,31 @@ function renderCommitRow(
         node.commit.hash.startsWith(bisectStatus.badCommit))
   );
   const bisectClass = isBisectCurrent ? 'row-bisect-current' : '';
+  const refNames = node.commit.refs.map((r) => r.name).join(', ');
+  const bisectLabel = isBisectCurrent
+    ? '[Bisect Current Probe]'
+    : isBisectGood
+    ? '[Bisect Good]'
+    : isBisectBad
+    ? '[Bisect Bad]'
+    : '';
+  const sigLabel =
+    node.commit.signatureStatus === 'valid'
+      ? `Signed (${node.commit.signer || 'Verified'})`
+      : '';
+  const ariaLabel = [
+    node.commit.shortHash,
+    refNames ? `[${refNames}]` : '',
+    node.commit.subject,
+    `by ${node.commit.author.name} (${node.commit.author.relativeTime})`,
+    sigLabel,
+    bisectLabel,
+  ]
+    .filter(Boolean)
+    .join(' — ');
+  row.tabIndex = 0;
+  row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+  row.setAttribute('aria-label', ariaLabel);
   row.style.height = `${rowHeight}px`;
 
   // 1. Canvas Column with High-DPI support

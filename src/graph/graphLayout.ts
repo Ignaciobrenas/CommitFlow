@@ -55,12 +55,13 @@ export class GraphLayout {
       const commit = commits[i];
       let assignedLane = -1;
 
-      // 1. Check if this commit was expected in an active lane
+      // 1. Check if this commit was expected in active lanes and clear all converging pointers
       for (let l = 0; l < activeLanes.length; l++) {
         if (activeLanes[l] === commit.hash) {
-          assignedLane = l;
+          if (assignedLane === -1) {
+            assignedLane = l;
+          }
           activeLanes[l] = null;
-          break;
         }
       }
 

@@ -156,7 +156,7 @@ export class IpcSchemaValidator {
       return { valid: false, reason: `Unknown or disallowed IPC command: ${String(command)}` };
     }
 
-    const safetyError = scanPayloadSafety(msg.payload);
+    const safetyError = scanPayloadSafety(msg);
     if (safetyError) {
       return { valid: false, reason: safetyError };
     }

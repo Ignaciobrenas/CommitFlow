@@ -23,6 +23,8 @@ import { CommitFlowHttpServer } from '../src/mcp/commitflowHttpServer';
 import { PersistenceManager } from '../src/state/persistenceManager';
 import { GitFsReader } from '../src/git/gitFsReader';
 import { computeClampedPosition, escapeHtml } from '../src/webview/primitives';
+import { runFuzzTestSuite } from './fuzzTests';
+import { runMcpE2eTestSuite } from './mcpE2eTests';
 import { DagWorkerEngine } from '../src/graph/dagWorkerClient';
 import { AdaptiveDebouncer } from '../src/git/branchWatcher';
 import { GraphWebviewProvider } from '../src/graph/graphWebviewProvider';
@@ -2019,7 +2021,15 @@ Host *.internal.corp
 
   console.log('  [PASS] IPC Schema Validator, MCP Rate Limiter & Audit Log Resource tests passed!');
 
-  console.log('\n[PASS] ALL 49 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  // =========================================================================
+  // Suite 50: Deterministic Fuzzing (1050 iterations) & MCP E2E Integration
+  // =========================================================================
+  console.log('\n[Test 50/50] Running Deterministic Fuzzing & Real Repo MCP E2E Suite...');
+  await runFuzzTestSuite();
+  await runMcpE2eTestSuite();
+  console.log('  [PASS] Deterministic Fuzzing (1,050 iterations) & Real-Repo MCP E2E Suite passed!');
+
+  console.log('\n[PASS] ALL 50 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);

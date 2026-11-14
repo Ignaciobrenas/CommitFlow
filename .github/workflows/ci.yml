@@ -38,5 +38,11 @@ jobs:
       - name: Compile and Bundle Production Assets
         run: npm run build
 
+      - name: Run Headless E2E Smoke Suite
+        run: npm run test:e2e
+
+      - name: Run 50k DAG Performance Benchmark
+        run: npm run benchmark
+
       - name: Verify VSIX Package Creation
         run: npx vsce package --no-git-tag-version
