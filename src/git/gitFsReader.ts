@@ -1,5 +1,49 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as zlib from 'zlib';
+
+export type GitHashAlgorithm = 'sha1' | 'sha256';
+export type GitRefStorageFormat = 'files' | 'reftable';
+
+export interface OfflineGitObject {
+  type: 'commit' | 'tree' | 'blob' | 'tag';
+  size: number;
+  data: Buffer;
+}
+
+export interface OfflineCommitObject {
+  hash: string;
+  tree: string;
+  parents: string[];
+  author: string;
+  committer: string;
+  message: string;
+}
+
+export interface OfflineTreeEntry {
+  mode: string;
+  type: 'blob' | 'tree' | 'commit';
+  name: string;
+  hash: string;
+}
+
+export interface OfflineGitIndexEntry {
+  path: string;
+  sha1: string;
+  size: number;
+  mtimeMs: number;
+  mode: number;
+  flags: number;
+  assumeValid: boolean;
+  stage: number;
+}
+
+export interface OfflineWorkingTreeStatus {
+  stagedCount: number;
+  unstagedModified: string[];
+  untracked: string[];
+  totalIndexEntries: number;
+}
 
 export interface OfflineGitRef {
   name: string;
@@ -88,6 +132,8 @@ export interface OfflineRepoState {
   recentCommitsFromReflog: OfflineGitCommitEntry[];
   userName?: string;
   userEmail?: string;
+  objectFormat?: GitHashAlgorithm;
+  refStorage?: GitRefStorageFormat;
 }
 
 /**
@@ -183,6 +229,8 @@ export class GitFsReader {
       recentCommitsFromReflog,
       userName: configInfo.userName,
       userEmail: configInfo.userEmail,
+      objectFormat: configInfo.objectFormat || this.detectHashAlgorithm(commonDir),
+      refStorage: configInfo.refStorage || (this.detectReftable(commonDir).isReftable ? 'reftable' : 'files'),
     };
   }
 
@@ -276,18 +324,22 @@ export class GitFsReader {
   }
 
   /**
-   * Reads .git/config to extract remotes, upstream tracking, and user info.
+   * Reads .git/config to extract remotes, upstream tracking, user info, and repository extensions.
    */
   public readConfig(commonDir: string): {
     remotes: OfflineGitRemote[];
     branchUpstreams: Map<string, string>;
     userName?: string;
     userEmail?: string;
+    objectFormat?: GitHashAlgorithm;
+    refStorage?: GitRefStorageFormat;
   } {
     const remotesMap = new Map<string, OfflineGitRemote>();
     const branchUpstreams = new Map<string, string>();
     let userName: string | undefined;
     let userEmail: string | undefined;
+    let objectFormat: GitHashAlgorithm | undefined;
+    let refStorage: GitRefStorageFormat | undefined;
 
     try {
       const configFile = path.join(commonDir, 'config');
@@ -347,6 +399,12 @@ export class GitFsReader {
         } else if (currentSection.type === 'user') {
           if (key === 'name') userName = value;
           else if (key === 'email') userEmail = value;
+        } else if (currentSection.type === 'extensions') {
+          if (key === 'objectformat' && (value === 'sha1' || value === 'sha256')) {
+            objectFormat = value;
+          } else if (key === 'refstorage' && (value === 'files' || value === 'reftable')) {
+            refStorage = value;
+          }
         }
       }
     } catch {}
@@ -356,6 +414,61 @@ export class GitFsReader {
       branchUpstreams,
       userName,
       userEmail,
+      objectFormat,
+      refStorage,
+    };
+  }
+
+  /**
+   * Validates 40-char SHA-1 or 64-char SHA-256 Git object identifiers.
+   */
+  public isValidObjectId(oid: string): boolean {
+    return /^[0-9a-f]{40}$|^[0-9a-f]{64}$/i.test(oid.trim());
+  }
+
+  /**
+   * Detects repository hash algorithm ('sha1' or 'sha256') from config or loose refs.
+   */
+  public detectHashAlgorithm(commonDir: string): GitHashAlgorithm {
+    const cfg = this.readConfig(commonDir);
+    if (cfg.objectFormat) return cfg.objectFormat;
+    try {
+      const refsHeads = path.join(commonDir, 'refs', 'heads');
+      if (fs.existsSync(refsHeads)) {
+        const refs = this.readLooseRefsRecursively(refsHeads, refsHeads);
+        if (refs.some((r) => r.commitHash.length === 64)) return 'sha256';
+      }
+      const headFile = path.join(commonDir, 'HEAD');
+      if (fs.existsSync(headFile)) {
+        const headContent = fs.readFileSync(headFile, 'utf8').trim();
+        if (/^[0-9a-f]{64}$/i.test(headContent)) return 'sha256';
+      }
+    } catch {}
+    return 'sha1';
+  }
+
+  /**
+   * Detects whether a repository uses Git 2.45+ reftable storage instead of loose refs.
+   */
+  public detectReftable(commonDir: string): {
+    isReftable: boolean;
+    tablesListPath?: string;
+    tablesCount: number;
+  } {
+    const cfg = this.readConfig(commonDir);
+    const tablesListPath = path.join(commonDir, 'reftable', 'tables.list');
+    const hasTablesList = fs.existsSync(tablesListPath);
+    let tablesCount = 0;
+    if (hasTablesList) {
+      try {
+        tablesCount = fs.readFileSync(tablesListPath, 'utf8').trim().split(/\r?\n/).filter(Boolean).length;
+      } catch {}
+    }
+    const isReftable = cfg.refStorage === 'reftable' || hasTablesList;
+    return {
+      isReftable,
+      tablesListPath: hasTablesList ? tablesListPath : undefined,
+      tablesCount,
     };
   }
 
@@ -375,7 +488,7 @@ export class GitFsReader {
         } else if (entry.isFile() && !entry.isSymbolicLink()) {
           try {
             const sha = fs.readFileSync(fullPath, 'utf8').trim();
-            if (/^[0-9a-f]{40}$/i.test(sha)) {
+            if (this.isValidObjectId(sha)) {
               const relName = path.relative(baseDir, fullPath).replace(/\\/g, '/');
               results.push({ name: relName, commitHash: sha });
             }
@@ -547,9 +660,20 @@ export class GitFsReader {
    * Reads .gitmodules and detects active/nested git submodules directly from the filesystem.
    * Runs 100% offline with zero external processes.
    */
-  public readSubmodules(repoPath: string, commonDir: string): OfflineGitSubmodule[] {
+  public readSubmodules(
+    repoPath: string,
+    commonDir: string,
+    depth = 0,
+    maxDepth = 4,
+    visited: Set<string> = new Set()
+  ): OfflineGitSubmodule[] {
     const submodules: OfflineGitSubmodule[] = [];
+    if (depth > maxDepth) return submodules;
     try {
+      const normalizedRoot = path.resolve(repoPath);
+      if (visited.has(normalizedRoot)) return submodules;
+      visited.add(normalizedRoot);
+
       const gitmodulesPath = path.join(repoPath, '.gitmodules');
       if (!fs.existsSync(gitmodulesPath)) {
         // Also check if .git/modules exists even without .gitmodules
@@ -564,12 +688,28 @@ export class GitFsReader {
       const lines = content.split(/\r?\n/);
       let currentSub: { name: string; path?: string; url?: string; branch?: string } | null = null;
 
+      const pushAndRecurse = (sub: { name: string; path: string; url: string; branch?: string }) => {
+        const enriched = this.enrichSubmoduleInfo(repoPath, commonDir, sub);
+        submodules.push(enriched);
+        if (enriched.isInitialized && fs.existsSync(enriched.fullPath)) {
+          const nestedResolved = this.resolveGitDir(enriched.fullPath);
+          if (nestedResolved) {
+            const nested = this.readSubmodules(enriched.fullPath, nestedResolved.commonDir, depth + 1, maxDepth, visited);
+            for (const child of nested) {
+              child.name = `${enriched.name}/${child.name}`;
+              child.path = path.posix.join(enriched.path.replace(/\\/g, '/'), child.path.replace(/\\/g, '/'));
+              submodules.push(child);
+            }
+          }
+        }
+      };
+
       for (const line of lines) {
         const trimmed = line.trim();
         const sectionMatch = trimmed.match(/^\[submodule\s+"(.+)"\]$/i);
         if (sectionMatch) {
           if (currentSub && currentSub.path && currentSub.url) {
-            submodules.push(this.enrichSubmoduleInfo(repoPath, commonDir, currentSub as any));
+            pushAndRecurse(currentSub as { name: string; path: string; url: string; branch?: string });
           }
           currentSub = { name: sectionMatch[1] };
           continue;
@@ -592,7 +732,7 @@ export class GitFsReader {
       }
 
       if (currentSub && currentSub.path && currentSub.url) {
-        submodules.push(this.enrichSubmoduleInfo(repoPath, commonDir, currentSub as any));
+        pushAndRecurse(currentSub as { name: string; path: string; url: string; branch?: string });
       }
     } catch {}
 
@@ -625,18 +765,10 @@ export class GitFsReader {
           headBranch = head.branch;
           isDetached = head.isDetached;
 
-          // Check if index exists or if uncommitted files exist
-          const indexFile = path.join(resolved.gitDir, 'index');
-          if (fs.existsSync(indexFile)) {
-            const indexStat = fs.statSync(indexFile);
-            // If index timestamp differs or unstaged changes, mark dirty check
-            const headFile = path.join(resolved.gitDir, 'HEAD');
-            if (fs.existsSync(headFile)) {
-              const headStat = fs.statSync(headFile);
-              if (Math.abs(indexStat.mtimeMs - headStat.mtimeMs) > 1000) {
-                // Potential working tree difference
-              }
-            }
+          // Check offline working tree cleanliness via .git/index
+          const status = this.computeOfflineWorkingTreeStatus(fullPath, resolved.gitDir, resolved.commonDir);
+          if (status.unstagedModified.length > 0) {
+            isDirty = true;
           }
         }
       }
@@ -835,8 +967,8 @@ export class GitFsReader {
         const header = parts[0];
         const actionAndMsg = parts[1];
 
-        // Format: <old-sha> <new-sha> <name> <<email>> <timestamp> <tz>
-        const match = header.match(/^([0-9a-f]{40})\s+([0-9a-f]{40})\s+([^<]+)<([^>]+)>\s+(\d+)\s+([+\-\d]+)$/);
+        // Format: <old-sha> <new-sha> <name> <<email>> <timestamp> <tz> (SHA-1 40-char or SHA-256 64-char)
+        const match = header.match(/^([0-9a-f]{40}(?:[0-9a-f]{24})?)\s+([0-9a-f]{40}(?:[0-9a-f]{24})?)\s+([^<]+)<([^>]+)>\s+(\d+)\s+([+\-\d]+)$/i);
         if (match) {
           const newSha = match[2];
           const author = match[3].trim();
@@ -860,5 +992,429 @@ export class GitFsReader {
       }
     } catch {}
     return entries;
+  }
+
+  // --------------------------------------------------------------------------
+  // Binary Git Object & Index Readers (Loose Objects, Packfiles, Delta, DIRC)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Reads and decompresses a loose Git object from .git/objects/xx/yyyy...
+   */
+  public readLooseObject(commonDir: string, oid: string): OfflineGitObject | null {
+    const cleanOid = oid.trim().toLowerCase();
+    if (!this.isValidObjectId(cleanOid)) return null;
+
+    try {
+      const objPath = path.join(commonDir, 'objects', cleanOid.slice(0, 2), cleanOid.slice(2));
+      if (!fs.existsSync(objPath)) return null;
+
+      const compressed = fs.readFileSync(objPath);
+      const raw = zlib.inflateSync(compressed);
+      const nullIdx = raw.indexOf(0);
+      if (nullIdx === -1) return null;
+
+      const header = raw.subarray(0, nullIdx).toString('utf8');
+      const spaceIdx = header.indexOf(' ');
+      if (spaceIdx === -1) return null;
+
+      const type = header.slice(0, spaceIdx) as OfflineGitObject['type'];
+      const size = parseInt(header.slice(spaceIdx + 1), 10) || 0;
+      const data = raw.subarray(nullIdx + 1);
+      return { type, size, data };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Decodes Git binary delta stream (OFS_DELTA / REF_DELTA) against base buffer.
+   */
+  public applyGitDelta(base: Buffer, delta: Buffer): Buffer {
+    let pos = 0;
+
+    const readLebVarint = (): number => {
+      let result = 0;
+      let shift = 0;
+      while (pos < delta.length) {
+        const b = delta[pos++];
+        result |= (b & 0x7f) << shift;
+        if ((b & 0x80) === 0) break;
+        shift += 7;
+      }
+      return result >>> 0;
+    };
+
+    const baseSize = readLebVarint();
+    if (base.length !== baseSize) {
+      throw new Error(`Delta base size mismatch: expected ${baseSize}, got ${base.length}`);
+    }
+    const resultSize = readLebVarint();
+    const chunks: Buffer[] = [];
+
+    while (pos < delta.length) {
+      const cmd = delta[pos++];
+      if (cmd & 0x80) {
+        let copyOffset = 0;
+        let copySize = 0;
+        if (cmd & 0x01) copyOffset |= delta[pos++];
+        if (cmd & 0x02) copyOffset |= delta[pos++] << 8;
+        if (cmd & 0x04) copyOffset |= delta[pos++] << 16;
+        if (cmd & 0x08) copyOffset |= delta[pos++] << 24;
+        if (cmd & 0x10) copySize |= delta[pos++];
+        if (cmd & 0x20) copySize |= delta[pos++] << 8;
+        if (cmd & 0x40) copySize |= delta[pos++] << 16;
+        if (copySize === 0) copySize = 0x10000;
+        chunks.push(base.subarray(copyOffset >>> 0, (copyOffset >>> 0) + copySize));
+      } else if (cmd > 0) {
+        chunks.push(delta.subarray(pos, pos + cmd));
+        pos += cmd;
+      } else {
+        throw new Error('Unexpected delta opcode 0x00');
+      }
+    }
+
+    const result = Buffer.concat(chunks);
+    if (result.length !== resultSize) {
+      throw new Error(`Delta result size mismatch: expected ${resultSize}, got ${result.length}`);
+    }
+    return result;
+  }
+
+  /**
+   * Looks up a Git object offset in a v2 packfile index (.idx) using binary search.
+   */
+  public readPackIndexV2(
+    idxBuffer: Buffer,
+    oid: string,
+    hashLenBytes = 20
+  ): { offset: number } | null {
+    const cleanOid = oid.trim().toLowerCase();
+    if (cleanOid.length !== hashLenBytes * 2 || idxBuffer.length < 1032) {
+      return null;
+    }
+
+    // Verify magic 0xff744f63 and version 2
+    if (
+      idxBuffer.readUInt32BE(0) !== 0xff744f63 ||
+      idxBuffer.readUInt32BE(4) !== 2
+    ) {
+      return null;
+    }
+
+    const targetBuf = Buffer.from(cleanOid, 'hex');
+    const firstByte = targetBuf[0];
+    const startIdx = firstByte === 0 ? 0 : idxBuffer.readUInt32BE(8 + (firstByte - 1) * 4);
+    const endIdx = idxBuffer.readUInt32BE(8 + firstByte * 4);
+    if (startIdx >= endIdx) return null;
+
+    const totalObjects = idxBuffer.readUInt32BE(8 + 255 * 4);
+    const oidTableStart = 8 + 256 * 4;
+    const offsetsTableStart = oidTableStart + totalObjects * (hashLenBytes + 4);
+    const largeOffsetsStart = offsetsTableStart + totalObjects * 4;
+
+    let lo = startIdx;
+    let hi = endIdx - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      const entryStart = oidTableStart + mid * hashLenBytes;
+      const cmp = Buffer.compare(targetBuf, idxBuffer.subarray(entryStart, entryStart + hashLenBytes));
+      if (cmp === 0) {
+        const rawOffset = idxBuffer.readUInt32BE(offsetsTableStart + mid * 4);
+        if ((rawOffset & 0x80000000) === 0) {
+          return { offset: rawOffset };
+        }
+        const largeIdx = rawOffset & 0x7fffffff;
+        const hiWord = idxBuffer.readUInt32BE(largeOffsetsStart + largeIdx * 8);
+        const loWord = idxBuffer.readUInt32BE(largeOffsetsStart + largeIdx * 8 + 4);
+        return { offset: hiWord * 0x100000000 + loWord };
+      }
+      if (cmp < 0) hi = mid - 1;
+      else lo = mid + 1;
+    }
+
+    return null;
+  }
+
+  /**
+   * Reads a single object at byte offset inside a Git .pack file (supports OFS_DELTA and REF_DELTA).
+   */
+  public readPackObject(
+    packBuffer: Buffer,
+    offset: number,
+    hashLenBytes = 20,
+    resolveRef?: (oid: string) => OfflineGitObject | null,
+    depth = 0
+  ): OfflineGitObject | null {
+    if (depth > 64 || offset < 12 || offset >= packBuffer.length) return null;
+
+    let pos = offset;
+    let byte = packBuffer[pos++];
+    const typeId = (byte >> 4) & 0x07;
+    let size = byte & 0x0f;
+    let shift = 4;
+    while (byte & 0x80) {
+      byte = packBuffer[pos++];
+      size += (byte & 0x7f) * Math.pow(2, shift);
+      shift += 7;
+    }
+
+    const typeMap: Record<number, OfflineGitObject['type']> = {
+      1: 'commit',
+      2: 'tree',
+      3: 'blob',
+      4: 'tag',
+    };
+
+    try {
+      if (typeMap[typeId]) {
+        const data = zlib.inflateSync(packBuffer.subarray(pos));
+        return { type: typeMap[typeId], size: size || data.length, data };
+      }
+
+      if (typeId === 6) {
+        // OFS_DELTA
+        let ofsByte = packBuffer[pos++];
+        let relOffset = ofsByte & 0x7f;
+        while (ofsByte & 0x80) {
+          ofsByte = packBuffer[pos++];
+          relOffset = ((relOffset + 1) << 7) | (ofsByte & 0x7f);
+        }
+        const deltaData = zlib.inflateSync(packBuffer.subarray(pos));
+        const baseObj = this.readPackObject(packBuffer, offset - relOffset, hashLenBytes, resolveRef, depth + 1);
+        if (!baseObj) return null;
+        const reconstructed = this.applyGitDelta(baseObj.data, deltaData);
+        return { type: baseObj.type, size: reconstructed.length, data: reconstructed };
+      }
+
+      if (typeId === 7) {
+        // REF_DELTA
+        const baseOid = packBuffer.subarray(pos, pos + hashLenBytes).toString('hex');
+        pos += hashLenBytes;
+        const deltaData = zlib.inflateSync(packBuffer.subarray(pos));
+        const baseObj = resolveRef ? resolveRef(baseOid) : null;
+        if (!baseObj) return null;
+        const reconstructed = this.applyGitDelta(baseObj.data, deltaData);
+        return { type: baseObj.type, size: reconstructed.length, data: reconstructed };
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Reads any Git object (loose or packed) by SHA-1 / SHA-256 object ID completely offline.
+   */
+  public readGitObject(commonDir: string, oid: string): OfflineGitObject | null {
+    const loose = this.readLooseObject(commonDir, oid);
+    if (loose) return loose;
+
+    const cleanOid = oid.trim().toLowerCase();
+    if (!this.isValidObjectId(cleanOid)) return null;
+    const hashLenBytes = cleanOid.length / 2;
+
+    try {
+      const packDir = path.join(commonDir, 'objects', 'pack');
+      if (!fs.existsSync(packDir)) return null;
+
+      const idxFiles = fs.readdirSync(packDir).filter((f) => f.endsWith('.idx'));
+      for (const idxFile of idxFiles) {
+        const idxBuf = fs.readFileSync(path.join(packDir, idxFile));
+        const hit = this.readPackIndexV2(idxBuf, cleanOid, hashLenBytes);
+        if (hit) {
+          const packPath = path.join(packDir, idxFile.replace(/\.idx$/i, '.pack'));
+          if (!fs.existsSync(packPath)) continue;
+          const packBuf = fs.readFileSync(packPath);
+          return this.readPackObject(packBuf, hit.offset, hashLenBytes, (refOid) =>
+            this.readGitObject(commonDir, refOid)
+          );
+        }
+      }
+    } catch {}
+
+    return null;
+  }
+
+  /**
+   * Parses raw uncompressed commit object payload into structured commit metadata.
+   */
+  public parseCommitObject(oid: string, raw: Buffer): OfflineCommitObject {
+    const text = raw.toString('utf8');
+    const splitIdx = text.indexOf('\n\n');
+    const headerBlock = splitIdx !== -1 ? text.slice(0, splitIdx) : text;
+    const message = splitIdx !== -1 ? text.slice(splitIdx + 2).trim() : '';
+
+    let tree = '';
+    const parents: string[] = [];
+    let author = '';
+    let committer = '';
+
+    for (const line of headerBlock.split('\n')) {
+      if (line.startsWith('tree ')) tree = line.slice(5).trim();
+      else if (line.startsWith('parent ')) parents.push(line.slice(7).trim());
+      else if (line.startsWith('author ')) author = line.slice(7).trim();
+      else if (line.startsWith('committer ')) committer = line.slice(10).trim();
+    }
+
+    return { hash: oid, tree, parents, author, committer, message };
+  }
+
+  /**
+   * Parses binary Git tree object entries (<mode> <name>\0<hashBytes>).
+   */
+  public parseTreeObject(raw: Buffer, hashLenBytes = 20): OfflineTreeEntry[] {
+    const entries: OfflineTreeEntry[] = [];
+    let pos = 0;
+
+    while (pos < raw.length) {
+      const spaceIdx = raw.indexOf(0x20, pos);
+      const nullIdx = raw.indexOf(0x00, pos);
+      if (spaceIdx === -1 || nullIdx === -1 || nullIdx + 1 + hashLenBytes > raw.length) {
+        break;
+      }
+
+      const mode = raw.subarray(pos, spaceIdx).toString('utf8');
+      const name = raw.subarray(spaceIdx + 1, nullIdx).toString('utf8');
+      const hashStart = nullIdx + 1;
+      const hash = raw.subarray(hashStart, hashStart + hashLenBytes).toString('hex');
+      pos = hashStart + hashLenBytes;
+
+      let type: OfflineTreeEntry['type'] = 'blob';
+      if (mode === '40000' || mode === '040000') type = 'tree';
+      else if (mode === '160000') type = 'commit';
+
+      entries.push({ mode, type, name, hash });
+    }
+
+    return entries;
+  }
+
+  /**
+   * Parses the binary .git/index file (DIRC v2, v3, v4) completely offline.
+   */
+  public readIndexEntries(gitDir: string, commonDir?: string): OfflineGitIndexEntry[] {
+    const entries: OfflineGitIndexEntry[] = [];
+    try {
+      const indexFile = path.join(gitDir, 'index');
+      if (!fs.existsSync(indexFile)) return entries;
+
+      const buf = fs.readFileSync(indexFile);
+      if (buf.length < 12 || buf.subarray(0, 4).toString('ascii') !== 'DIRC') {
+        return entries;
+      }
+
+      const version = buf.readUInt32BE(4);
+      const count = buf.readUInt32BE(8);
+      if (version < 2 || version > 4) return entries;
+
+      const algo = commonDir ? this.detectHashAlgorithm(commonDir) : 'sha1';
+      const hashLenBytes = algo === 'sha256' ? 32 : 20;
+
+      let pos = 12;
+      let prevPath = '';
+
+      for (let i = 0; i < count && pos + 42 + hashLenBytes <= buf.length; i++) {
+        const entryStart = pos;
+        const mtimeSec = buf.readUInt32BE(pos + 8);
+        const mtimeNano = buf.readUInt32BE(pos + 12);
+        const mode = buf.readUInt32BE(pos + 24);
+        const size = buf.readUInt32BE(pos + 36);
+
+        const hashOffset = pos + 40;
+        const sha1 = buf.subarray(hashOffset, hashOffset + hashLenBytes).toString('hex');
+
+        const flags = buf.readUInt16BE(hashOffset + hashLenBytes);
+        const assumeValid = Boolean(flags & 0x8000);
+        const extended = Boolean(flags & 0x4000);
+        const stage = (flags >> 12) & 0x03;
+
+        pos = hashOffset + hashLenBytes + 2;
+        if (version >= 3 && extended && pos + 2 <= buf.length) {
+          pos += 2; // skip extended flags
+        }
+
+        let entryPath = '';
+        if (version === 4) {
+          let varByte = buf[pos++];
+          let stripLen = varByte & 0x7f;
+          while (varByte & 0x80) {
+            varByte = buf[pos++];
+            stripLen = ((stripLen + 1) << 7) | (varByte & 0x7f);
+          }
+          const nullIdx = buf.indexOf(0x00, pos);
+          if (nullIdx === -1) break;
+          const suffix = buf.subarray(pos, nullIdx).toString('utf8');
+          entryPath = prevPath.slice(0, Math.max(0, prevPath.length - stripLen)) + suffix;
+          pos = nullIdx + 1;
+        } else {
+          const nullIdx = buf.indexOf(0x00, pos);
+          if (nullIdx === -1) break;
+          entryPath = buf.subarray(pos, nullIdx).toString('utf8');
+          pos = nullIdx + 1;
+          const rem = (pos - entryStart) % 8;
+          if (rem !== 0) {
+            pos += 8 - rem;
+          }
+        }
+
+        prevPath = entryPath;
+        entries.push({
+          path: entryPath,
+          sha1,
+          size,
+          mtimeMs: mtimeSec * 1000 + Math.floor(mtimeNano / 1_000_000),
+          mode,
+          flags,
+          assumeValid,
+          stage,
+        });
+      }
+    } catch {}
+    return entries;
+  }
+
+  /**
+   * Computes offline working tree status by comparing .git/index entries with disk stats.
+   */
+  public computeOfflineWorkingTreeStatus(
+    repoPath: string,
+    gitDir?: string,
+    commonDir?: string
+  ): OfflineWorkingTreeStatus {
+    const resolved = gitDir && commonDir ? { gitDir, commonDir } : this.resolveGitDir(repoPath);
+    if (!resolved) {
+      return { stagedCount: 0, unstagedModified: [], untracked: [], totalIndexEntries: 0 };
+    }
+
+    const indexEntries = this.readIndexEntries(resolved.gitDir, resolved.commonDir);
+    const unstagedModified: string[] = [];
+    const seen = new Set<string>();
+
+    for (const entry of indexEntries) {
+      if (entry.stage !== 0 || seen.has(entry.path)) continue;
+      seen.add(entry.path);
+      const absPath = path.join(repoPath, entry.path);
+      try {
+        if (!fs.existsSync(absPath)) {
+          unstagedModified.push(entry.path);
+          continue;
+        }
+        const stat = fs.statSync(absPath);
+        if (stat.size !== entry.size || Math.abs(stat.mtimeMs - entry.mtimeMs) > 2000) {
+          unstagedModified.push(entry.path);
+        }
+      } catch {
+        unstagedModified.push(entry.path);
+      }
+    }
+
+    return {
+      stagedCount: indexEntries.filter((e) => e.stage === 0).length,
+      unstagedModified,
+      untracked: [],
+      totalIndexEntries: seen.size,
+    };
   }
 }
