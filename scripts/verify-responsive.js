@@ -5,8 +5,15 @@ const os = require('os');
 
 const edgePath = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
-const cssWebview = fs.readFileSync(path.resolve(__dirname, '..', 'dist', 'webview.css'), 'utf8');
-const cssCodicon = fs.readFileSync(path.resolve(__dirname, '..', 'dist', 'codicon.css'), 'utf8');
+const cssWebviewRaw = fs.readFileSync(path.resolve(__dirname, '..', 'dist', 'webview.css'), 'utf8');
+const cssWebview = cssWebviewRaw.replace(/@import\s+url\(['"]\.\/codicon\.css['"]\);?/g, '');
+const codiconCssPath = path.resolve(__dirname, '..', 'dist', 'codicon.css');
+const codiconTtfPath = path.resolve(__dirname, '..', 'dist', 'codicon.ttf');
+const codiconBase64 = fs.existsSync(codiconTtfPath) ? fs.readFileSync(codiconTtfPath).toString('base64') : '';
+const cssCodiconRaw = fs.existsSync(codiconCssPath) ? fs.readFileSync(codiconCssPath, 'utf8') : '';
+const cssCodicon = codiconBase64
+  ? cssCodiconRaw.replace(/url\(['"]?\.\/codicon\.ttf[^)]*['"]?\)/g, `url("data:font/ttf;base64,${codiconBase64}")`)
+  : cssCodiconRaw;
 
 const themeVariables = {
   dark: `

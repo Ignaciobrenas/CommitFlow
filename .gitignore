@@ -11,4 +11,4 @@ yarn-debug.log*
 yarn-error.log*
 .env
 .env.local
-docs/screenshots/
+docs/screenshots/audit-report.json

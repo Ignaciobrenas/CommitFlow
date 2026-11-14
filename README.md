@@ -65,6 +65,23 @@
 
 ---
 
+## Visual Tour & Interface Showcase
+
+<p align="center">
+  <img src="docs/screenshots/graph_dark_full-1200px.png" alt="CommitFlow Topological Commit Graph, Minimap and Split Inspector (Dark+)" width="100%" />
+</p>
+<p align="center"><em>Topological Commit Graph, Advanced Filter Bar, Interactive Branch Minimap, and Split Commit Inspector Drawer in Dark+ wide view.</em></p>
+
+| Light+ Theme Fidelity (`1200px`) | High Contrast Accessibility (`1200px`) |
+| :---: | :---: |
+| <img src="docs/screenshots/graph_light_full-1200px.png" alt="CommitFlow Light+ Theme" width="100%" /> | <img src="docs/screenshots/graph_high-contrast_full-1200px.png" alt="CommitFlow High Contrast Theme" width="100%" /> |
+
+| Left/Right Sidebar Mode (`360px`) | Split Panel & Commit Drawer (`750px`) |
+| :---: | :---: |
+| <img src="docs/screenshots/graph_dark_sidebar-360px.png" alt="CommitFlow Compact Sidebar 360px" width="320" /> | <img src="docs/screenshots/graph_dark_split-750px.png" alt="CommitFlow Split Dock 750px" width="100%" /> |
+
+---
+
 ## Table of Contents
 
 - [Architectural Overview](#architectural-overview)
@@ -171,6 +188,10 @@ Unlike traditional Git graph extensions that depend exclusively on synchronous c
 - **Integrated Tags and Stashes:** Renders release tags, lightweight tags, and stash revisions inline within the DAG.
 - **Instant Search and Filtering:** Filter commits in real time by author name, email, commit message, branch name, or SHA-1 hash.
 
+<p align="center">
+  <img src="docs/screenshots/commit_drawer_dark_split-750px.png" alt="Commit Inspector Drawer with GPG Signature Verification and File Deltas" width="88%" />
+</p>
+
 ### Direct Filesystem Offline Engine
 
 CommitFlow contains a built-in filesystem parser (`GitFsReader`) that reads the contents of the `.git` directory directly from disk without spawning child processes and without requiring an internet connection.
@@ -239,6 +260,10 @@ A dedicated navigation hub (`Issues`) integrated directly into the extension vie
  - **Lateral Inspector Drawer:** View markdown-rendered descriptions, comment feeds, label chips, and milestone deadlines. Post comments or change status directly from VS Code.
  - **Interactive Hover Cards:** Hovering over `#<id>` in commit messages or file blame annotations displays a hover card with title, author, labels, and state.
 
+<p align="center">
+  <img src="docs/screenshots/issues_hub_dark_full-1200px.png" alt="CommitFlow Multi-Provider Issue Tracker Hub" width="94%" />
+</p>
+
 ### Pull Request and Merge Request Triage
 
 - **Triage Columns:** Classifies active pull requests into four distinct status groups:
@@ -304,11 +329,19 @@ A dedicated navigation hub (`Issues`) integrated directly into the extension vie
 - **Topological DAG Highlighting:** The active probe commit pulses with a distinctive cyan highlight, while confirmed good commits receive emerald tags and confirmed bad commits receive crimson markers.
 - **Offline Direct Filesystem State Inspection:** In air-gapped or process-restricted workspaces, `GitFsReader` inspects `.git/BISECT_START`, `.git/BISECT_EXPECTED_REV`, and `.git/refs/bisect/*` markers to restore state without terminal calls.
 
+<p align="center">
+  <img src="docs/screenshots/bisect_view_dark_full-1200px.png" alt="CommitFlow Visual Git Bisect Regression Hunter" width="94%" />
+</p>
+
 ### Pre-Flight Cherry-Pick Conflict Forecaster
 
 - **In-Memory Three-Way Merge Tree Simulation:** Executes non-destructive `git merge-tree` analysis prior to altering the working directory or staging index.
 - **Collision Risk Warning Modal:** If conflicts are anticipated, CommitFlow interrupts execution and displays the exact conflicting file paths in an advisory dialog.
-- **Safe Force-Apply Mode:** Gives the developer the choice to proceed into standard conflict resolution or abort with zero working directory pollution.
+- **3-Way Visual Conflict Resolution & Conventional Commits Builder:** Resolve conflicted hunks (`Accept Ours`, `Accept Theirs`, `Accept Both`), stage resolution, and craft SemVer-ready Conventional Commits with live `#issue` autocomplete.
+
+<p align="center">
+  <img src="docs/screenshots/conflict_studio_dark_full-1200px.png" alt="CommitFlow 3-Way Conflict Resolution Studio and Conventional Commit Builder" width="94%" />
+</p>
 
 ### Adaptive Universal Responsive Layout Engine
 
@@ -327,12 +360,20 @@ A dedicated navigation hub (`Issues`) integrated directly into the extension vie
   - **Stdio Transport:** Embedded executable (`bin/commitflow-mcp.js`) running frictionless for desktop AI agents.
   - **Authenticated HTTP/SSE Daemon:** Streamable real-time events over local loopback (`127.0.0.1`) protected with bearer tokens and origin verification.
 
+<p align="center">
+  <img src="docs/screenshots/ai_studio_dark_full-1200px.png" alt="CommitFlow AI Studio and MCP 2.0 Key Management" width="94%" />
+</p>
+
 ### Interactive Git Rebase Studio
 
 - **Visual Commit Reordering:** Drag-and-drop or use quick action menus to reorganize commits before rebasing onto base branches.
 - **Action Selection Matrix:** Seamlessly switch actions per commit: `pick`, `reword`, `edit`, `squash`, `fixup`, `drop`.
 - **Pre-Flight Conflict Simulation:** In-memory simulation calculates potential patch collisions before touching the git working copy.
 - **Resolution Assistant:** Step-by-step guidance to `Continue`, `Skip`, or `Abort` during conflict resolution.
+
+<p align="center">
+  <img src="docs/screenshots/rebase_studio_dark_full-1200px.png" alt="CommitFlow Interactive Git Rebase Studio" width="94%" />
+</p>
 
 ### Virtual Scrolling DAG Engine
 

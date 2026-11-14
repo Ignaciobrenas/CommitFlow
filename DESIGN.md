@@ -59,3 +59,24 @@ CommitFlow operates seamlessly across left/right Activity Bar sidebars, bottom t
 7. **Accessibility (WCAG 2.1 AA):**
    - Graph container uses `role="treegrid"` with `role="row"` and `role="gridcell"`, descriptive `aria-label` per commit, and roving `tabindex` (`ArrowUp`, `ArrowDown`, `PageUp`, `PageDown`, `Home`, `End`).
    - All modals trap `Tab`/`Shift+Tab` focus (`trapModalFocus`) and restore focus on close.
+
+---
+
+## 6. Visual Reference Gallery
+
+High-DPI (`2x`) reference captures rendered with VS Code native theme variables and `@vscode/codicons`:
+
+### Core Themes (`1200px` Wide Split Mode)
+| Dark+ (Default) | Light+ | High Contrast |
+| :---: | :---: | :---: |
+| ![CommitFlow Dark+](./docs/screenshots/graph_dark_full-1200px.png) | ![CommitFlow Light+](./docs/screenshots/graph_light_full-1200px.png) | ![CommitFlow High Contrast](./docs/screenshots/graph_high-contrast_full-1200px.png) |
+
+### Responsive Multi-Dock Breakpoints & Specialized Studios
+| Sidebar Compact (`360px`) | Bottom / Split View (`750px`) | Interactive Rebase Studio |
+| :---: | :---: | :---: |
+| ![Sidebar 360px](./docs/screenshots/graph_dark_sidebar-360px.png) | ![Split 750px](./docs/screenshots/graph_dark_split-750px.png) | ![Rebase Studio](./docs/screenshots/rebase_studio_dark_full-1200px.png) |
+
+| 3-Way Conflict Studio & Commit Builder | AI Studio & MCP 2.0 Server | Visual Git Bisect & Issues Hub |
+| :---: | :---: | :---: |
+| ![Conflict Studio](./docs/screenshots/conflict_studio_dark_full-1200px.png) | ![AI Studio](./docs/screenshots/ai_studio_dark_full-1200px.png) | ![Git Bisect](./docs/screenshots/bisect_view_dark_full-1200px.png) |
+

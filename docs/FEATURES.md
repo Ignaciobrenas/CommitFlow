@@ -24,6 +24,9 @@ This document provides a comprehensive operational manual and technical specific
   - Commit SHA-1 full hash or short hash prefix.
   - Branch reference or tag name.
 
+![Topological Commit Graph Dark+](./screenshots/graph_dark_full-1200px.png)
+![Commit Details Inspector Split View](./screenshots/commit_drawer_dark_split-750px.png)
+
 ---
 
 ## 2. Direct .git Filesystem Offline Engine
@@ -111,6 +114,8 @@ This document provides a comprehensive operational manual and technical specific
 - **Inspector Drawer:** Displays Markdown-rendered issue descriptions, team comment threads, status toggles (open/closed), and comment creation forms.
 - **Interactive Blame & Graph Hover:** Hovering over `#<id>` in commit messages or file blame lines displays a preview card with issue details and status.
 
+![Issue Tracker Hub](./screenshots/issues_hub_dark_full-1200px.png)
+
 ---
 
 ## 7. Pull Request & Merge Request Triage
@@ -176,6 +181,8 @@ This document provides a comprehensive operational manual and technical specific
 - Agent prompts:
   - `triage-issue`
   - `review-staged-changes`
+
+![AI Studio & MCP 2.0 Server](./screenshots/ai_studio_dark_full-1200px.png)
 
 ---
 
@@ -255,7 +262,11 @@ This document provides a comprehensive operational manual and technical specific
 
 - **Zero-Mutation Conflict Analysis:** Executes `git merge-tree --write-tree` in memory to test commit applicability before modifying working trees or HEAD.
 - **Conflict Warning Modal:** Proactively warns developers if a cherry-pick will collide, detailing exact conflicting file paths.
-- **Controlled Force Application:** Enables developers to proceed deliberately into merge conflicts or abort cleanly without leaving dirty states.
+- **Visual Git Bisect, Rebase Studio & 3-Way Conflict Resolution:** Visual regression probe highlighting, drag-and-drop commit reordering, dry-run conflict simulation, and interactive 3-way hunk resolution (`Accept Ours`, `Accept Theirs`, `Accept Both`).
+
+![Visual Git Bisect Regression Hunter](./screenshots/bisect_view_dark_full-1200px.png)
+![Interactive Rebase Studio](./screenshots/rebase_studio_dark_full-1200px.png)
+![3-Way Conflict Studio & Conventional Commit Builder](./screenshots/conflict_studio_dark_full-1200px.png)
 
 ---
 
@@ -266,3 +277,7 @@ This document provides a comprehensive operational manual and technical specific
 - **Collapsing Navigation Bar:** On compact sidebars, tab titles collapse smoothly into icon-only pills with hover tooltips, fitting all six modules without horizontal wrapping.
 - **Dual-Pane Bottom Panel Mode:** Bottom terminal panel placement splits the viewport cleanly into a dual-column layout (graph 62%, drawer 38%), eliminating intrusive overlays.
 - **Clamped Overlays:** Popovers and drawers dynamically clamp to viewport boundaries, preventing off-screen overflow.
+
+| Light+ Theme (`1200px`) | High Contrast Accessibility (`1200px`) | Compact Sidebar (`360px`) |
+| :---: | :---: | :---: |
+| ![Light+ Theme](./screenshots/graph_light_full-1200px.png) | ![High Contrast](./screenshots/graph_high-contrast_full-1200px.png) | ![Compact Sidebar](./screenshots/graph_dark_sidebar-360px.png) |
