@@ -20,6 +20,7 @@ import { ApiKeyManager } from '../src/mcp/apiKeyManager';
 import { CommitFlowHttpServer } from '../src/mcp/commitflowHttpServer';
 import { PersistenceManager } from '../src/state/persistenceManager';
 import { GitFsReader } from '../src/git/gitFsReader';
+import { computeClampedPosition, escapeHtml } from '../src/webview/primitives';
 
 console.log('Starting CommitFlow Extended Test Suite...\n');
 
@@ -1296,7 +1297,45 @@ Host *.internal.corp
   }
   console.log('  [PASS] AI Studio, Multi-Client Snippets & Instant Key Revocation E2E tests passed!');
 
-  console.log('\n[PASS] ALL 42 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  console.log('\nTesting Native UI Primitives & Zero Deprecated Toolkit Audit...');
+  {
+    const pkgJson = fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8');
+    assert.ok(!pkgJson.includes('@vscode/webview-ui-toolkit'), 'package.json must NOT depend on deprecated @vscode/webview-ui-toolkit');
+
+    const primitivesSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'primitives.ts'), 'utf8');
+    assert.ok(primitivesSrc.includes('export function CfButton'));
+    assert.ok(primitivesSrc.includes('export function CfBadge'));
+    assert.ok(primitivesSrc.includes('export function CfDrawer'));
+    assert.ok(primitivesSrc.includes('export function CfTabs'));
+    assert.ok(primitivesSrc.includes('export class CfToast'));
+    assert.ok(primitivesSrc.includes('export function CfSkeleton'));
+
+    assert.ok(fs.existsSync(path.join(__dirname, '..', 'DESIGN.md')), 'DESIGN.md must exist');
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '.claude', 'skills', 'commitflow-ui-design', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '.claude', 'skills', 'commitflow-canvas-dag', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '.claude', 'skills', 'commitflow-qa-testing', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '.claude', 'skills', 'commitflow-issue-workflow', 'SKILL.md')));
+
+    assert.ok(cssContent.includes('.cf-btn-primary'));
+    assert.ok(cssContent.includes('.cf-skeleton'));
+    assert.ok(cssContent.includes('prefers-reduced-motion: reduce'));
+    assert.ok(cssContent.includes('tabular-nums'));
+
+    const clamped = computeClampedPosition(
+      { left: 210, right: 235, top: 680, bottom: 700, width: 25, height: 20 },
+      300,
+      130,
+      240,
+      720,
+      8
+    );
+    assert.ok(clamped.left >= 8 && clamped.left + clamped.maxWidth <= 240);
+    assert.ok(clamped.top < 680, 'Popover near bottom should flip upward');
+    assert.strictEqual(escapeHtml('<script>"x"</script>'), '&lt;script&gt;&quot;x&quot;&lt;/script&gt;');
+  }
+  console.log('  [PASS] Native UI Primitives & Zero Deprecated Toolkit Audit tests passed!');
+
+  console.log('\n[PASS] ALL 43 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);
