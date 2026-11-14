@@ -24,6 +24,20 @@ import {
   UserPersonalStats,
 } from '../git/types';
 import { t, Language } from '../i18n/locales';
+import { DagWorkerEngine } from '../graph/dagWorkerClient';
+import {
+  CfButton,
+  CfBadge,
+  CfDrawer,
+  CfTabs,
+  CfToast,
+  CfSkeleton,
+  clampPopoverToViewport,
+  escapeHtml,
+} from './primitives';
+
+// Expose native UI primitives for modular feature modules
+export { CfButton, CfBadge, CfDrawer, CfTabs, CfToast, CfSkeleton, escapeHtml };
 
 declare function acquireVsCodeApi(): {
   postMessage(msg: any): void;
@@ -352,6 +366,7 @@ window.addEventListener('message', (event) => {
 
       bisectStatus = message.payload.bisectStatus || null;
       updateBisectBanner();
+      updateConflictBanner(message.payload.conflictedFiles || []);
 
       if (activeTab === 'tab-worktrees') renderWorktrees();
       if (activeTab === 'tab-prs') renderPullRequests();
@@ -429,6 +444,45 @@ window.addEventListener('message', (event) => {
 
     case 'aiKeyGenerated':
       handleAiKeyGenerated(message.payload);
+      break;
+
+    case 'conflictedFilesData':
+      updateConflictBanner(message.payload?.files || []);
+      renderConflictStudioFiles(message.payload?.files || []);
+      break;
+
+    case 'commitTemplateData':
+      handleCommitTemplateData(message.payload);
+      break;
+
+    case 'commitCreated':
+      closeCommitBuilderModal();
+      break;
+
+    case 'prCommentsData':
+      if (message.payload?.prNumber) {
+        renderPrComments(message.payload.prNumber, message.payload.comments || []);
+      }
+      break;
+
+    case 'prCommentAdded':
+      if (message.payload?.prNumber && activePrModalNumber === Number(message.payload.prNumber)) {
+        vscode.postMessage({ command: 'requestPrComments', payload: { prNumber: activePrModalNumber } });
+      }
+      break;
+
+    case 'prApproved':
+      if (activePrModalNumber) {
+        vscode.postMessage({ command: 'requestPullRequests' });
+      }
+      break;
+
+    case 'rebaseCommitsData':
+      handleRebaseCommitsData(message.payload);
+      break;
+
+    case 'rebaseSimulationData':
+      handleRebaseSimulationData(message.payload);
       break;
 
     case 'switchTab':
@@ -670,9 +724,180 @@ function parseSearchQuery(query: string): {
   return result;
 }
 
+let advFilterFirstParent = false;
+let advFilterHideRemotes = false;
+let advFilterSince = '';
+let advFilterUntil = '';
+let advFilterFilePath = '';
+
+interface DagDragPayload {
+  kind: 'branch' | 'commit';
+  branchName?: string;
+  sourceHash: string;
+  shortHash?: string;
+}
+
+let activeDagDragPayload: DagDragPayload | null = null;
+let pendingDndConfirmAction: {
+  command: 'dndResetBranchToCommit' | 'dndCherryPickToBranch' | 'dndRebaseOntoCommit';
+  payload: any;
+} | null = null;
+
+function createRefPillElement(
+  ref: { type: string; name: string; isHead: boolean },
+  node: GraphNode
+): HTMLElement {
+  const pill = document.createElement('span');
+  pill.className = `ref-pill ${ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'}`;
+  const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
+  pill.innerHTML = `<i class="codicon ${icon}" aria-hidden="true" style="font-size:10px;"></i> ${
+    ref.isHead ? `HEAD -> ${escapeHtml(ref.name)}` : escapeHtml(ref.name)
+  }`;
+  pill.title = ref.name;
+
+  if (ref.type !== 'tag' && ref.type !== 'remote-branch') {
+    pill.draggable = true;
+    pill.addEventListener('dragstart', (e) => {
+      e.stopPropagation();
+      activeDagDragPayload = {
+        kind: 'branch',
+        branchName: ref.name,
+        sourceHash: node.commit.hash,
+        shortHash: node.commit.shortHash,
+      };
+      pill.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('application/x-commitflow-dag', JSON.stringify(activeDagDragPayload));
+      }
+    });
+    pill.addEventListener('dragend', () => {
+      activeDagDragPayload = null;
+      pill.classList.remove('dragging');
+    });
+  }
+
+  pill.addEventListener('mouseenter', (e) => {
+    e.stopPropagation();
+    highlightBranchPath(node.commit.hash);
+  });
+  pill.addEventListener('mouseleave', () => {
+    clearBranchPathHighlight();
+  });
+  return pill;
+}
+
+function openDndConfirmModal(dragData: DagDragPayload, targetNode: GraphNode): void {
+  const modal = document.getElementById('dnd-confirm-modal');
+  const summary = document.getElementById('dnd-modal-summary');
+  const actionSelect = document.getElementById('dnd-action-select') as HTMLSelectElement | null;
+  if (!modal || !summary || !actionSelect) return;
+
+  actionSelect.innerHTML = '';
+  const targetShort = targetNode.commit.shortHash || targetNode.commit.hash.slice(0, 7);
+  const targetBranch = targetNode.commit.refs.find((r) => r.type === 'branch' || r.type === 'head')?.name;
+
+  if (dragData.kind === 'branch' && dragData.branchName) {
+    summary.innerHTML = `Arrastraste la rama <code>${escapeHtml(dragData.branchName)}</code> sobre el commit <code>${escapeHtml(targetShort)}</code>.`;
+    [
+      { value: 'reset-mixed', label: `Mover / Reset '${dragData.branchName}' a ${targetShort} (--mixed)` },
+      { value: 'reset-soft', label: `Reset suave '${dragData.branchName}' a ${targetShort} (--soft)` },
+      { value: 'reset-hard', label: `Reset duro '${dragData.branchName}' a ${targetShort} (--hard)` },
+      { value: 'rebase', label: `Rebase '${dragData.branchName}' sobre ${targetShort}` },
+    ].forEach((opt) => {
+      const o = document.createElement('option');
+      o.value = opt.value;
+      o.textContent = opt.label;
+      actionSelect.appendChild(o);
+    });
+  } else {
+    const srcShort = dragData.shortHash || dragData.sourceHash.slice(0, 7);
+    summary.innerHTML = `Arrastraste el commit <code>${escapeHtml(srcShort)}</code> sobre <code>${escapeHtml(targetBranch || targetShort)}</code>.`;
+    [
+      {
+        value: 'cherry-pick',
+        label: targetBranch ? `Cherry-pick ${srcShort} en '${targetBranch}'` : `Cherry-pick ${srcShort} en HEAD`,
+      },
+      { value: 'rebase-onto', label: `Rebase HEAD sobre ${targetShort}` },
+    ].forEach((opt) => {
+      const o = document.createElement('option');
+      o.value = opt.value;
+      o.textContent = opt.label;
+      actionSelect.appendChild(o);
+    });
+  }
+
+  const updatePendingAction = () => {
+    const val = actionSelect.value;
+    if (dragData.kind === 'branch' && dragData.branchName) {
+      if (val === 'rebase') {
+        pendingDndConfirmAction = {
+          command: 'dndRebaseOntoCommit',
+          payload: { sourceBranch: dragData.branchName, targetHash: targetNode.commit.hash },
+        };
+      } else {
+        const mode = val === 'reset-soft' ? 'soft' : val === 'reset-hard' ? 'hard' : 'mixed';
+        pendingDndConfirmAction = {
+          command: 'dndResetBranchToCommit',
+          payload: { branchName: dragData.branchName, targetHash: targetNode.commit.hash, mode },
+        };
+      }
+    } else if (val === 'rebase-onto') {
+      pendingDndConfirmAction = {
+        command: 'dndRebaseOntoCommit',
+        payload: { targetHash: targetNode.commit.hash },
+      };
+    } else {
+      pendingDndConfirmAction = {
+        command: 'dndCherryPickToBranch',
+        payload: { commitHash: dragData.sourceHash, targetBranch },
+      };
+    }
+  };
+
+  actionSelect.onchange = updatePendingAction;
+  updatePendingAction();
+  modal.classList.add('open');
+  trapModalFocus(modal);
+}
+
+function updateDagMinimap(): void {
+  const minimapCanvas = document.getElementById('dag-minimap-canvas') as HTMLCanvasElement | null;
+  if (!minimapCanvas || filteredNodes.length === 0) return;
+
+  const rowHeight = getRowHeight();
+  const totalHeight = Math.max(1, filteredNodes.length * rowHeight);
+  const startRatio = Math.max(0, Math.min(1, tableContainer.scrollTop / totalHeight));
+  const endRatio = Math.max(startRatio, Math.min(1, (tableContainer.scrollTop + (tableContainer.clientHeight || 600)) / totalHeight));
+  const selectedIndex = selectedNode ? filteredNodes.indexOf(selectedNode) : -1;
+
+  dagWorkerEngine.renderMinimap(filteredNodes, minimapCanvas, {
+    width: minimapCanvas.clientWidth || 76,
+    height: minimapCanvas.clientHeight || 480,
+    selectedIndex,
+    viewportStartRatio: startRatio,
+    viewportEndRatio: endRatio,
+  });
+}
+
 function applyFilters(): void {
   filteredNodes = allNodes.filter((node) => {
     const commit = node.commit;
+    if (advFilterHideRemotes && commit.refs.length > 0 && commit.refs.every((r) => r.type === 'remote-branch')) {
+      return false;
+    }
+    if (advFilterSince) {
+      const sinceMs = Date.parse(advFilterSince);
+      if (!Number.isNaN(sinceMs) && new Date(commit.author.date).getTime() < sinceMs) {
+        return false;
+      }
+    }
+    if (advFilterUntil) {
+      const untilMs = Date.parse(advFilterUntil);
+      if (!Number.isNaN(untilMs) && new Date(commit.author.date).getTime() > untilMs + 86_399_999) {
+        return false;
+      }
+    }
     if (searchQuery) {
       const parsed = parseSearchQuery(searchQuery);
 
@@ -741,12 +966,13 @@ function applyFilters(): void {
 }
 
 function renderLoading(): void {
-  tableContainer.innerHTML = `
-    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
-      <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
-      <div>${tr('graph.loading')}</div>
-    </div>
-  `;
+  tableContainer.innerHTML = '';
+  const skeleton = CfSkeleton({ rows: 10, variant: 'graph' });
+  const label = document.createElement('div');
+  label.style.cssText = 'text-align:center; font-size:var(--font-size-xs); color:var(--text-muted); padding:6px;';
+  label.textContent = tr('graph.loading');
+  tableContainer.appendChild(label);
+  tableContainer.appendChild(skeleton);
 }
 
 function renderError(err: string): void {
@@ -857,6 +1083,9 @@ function clearBranchPathHighlight(): void {
 let virtualSpacer: HTMLElement | null = null;
 let virtualViewport: HTMLElement | null = null;
 let isScrollBound = false;
+const recycledRowPool = new Map<string, HTMLElement>();
+const MAX_RECYCLED_ROWS = 120;
+const dagWorkerEngine = DagWorkerEngine.getInstance();
 
 function renderCommitRow(
   node: GraphNode,
@@ -887,6 +1116,31 @@ function renderCommitRow(
         node.commit.hash.startsWith(bisectStatus.badCommit))
   );
   const bisectClass = isBisectCurrent ? 'row-bisect-current' : '';
+  const refNames = node.commit.refs.map((r) => r.name).join(', ');
+  const bisectLabel = isBisectCurrent
+    ? '[Bisect Current Probe]'
+    : isBisectGood
+    ? '[Bisect Good]'
+    : isBisectBad
+    ? '[Bisect Bad]'
+    : '';
+  const sigLabel =
+    node.commit.signatureStatus === 'valid'
+      ? `Signed (${node.commit.signer || 'Verified'})`
+      : '';
+  const ariaLabel = [
+    node.commit.shortHash,
+    refNames ? `[${refNames}]` : '',
+    node.commit.subject,
+    `by ${node.commit.author.name} (${node.commit.author.relativeTime})`,
+    sigLabel,
+    bisectLabel,
+  ]
+    .filter(Boolean)
+    .join(' — ');
+  row.tabIndex = 0;
+  row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+  row.setAttribute('aria-label', ariaLabel);
   row.style.height = `${rowHeight}px`;
 
   // 1. Canvas Column with High-DPI support
@@ -934,23 +1188,7 @@ function renderCommitRow(
     }
 
     node.commit.refs.forEach((ref) => {
-      const pill = document.createElement('span');
-      pill.className = `ref-pill ${
-        ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
-      }`;
-      const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
-      pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
-        ref.isHead ? `HEAD -> ${ref.name}` : ref.name
-      }`;
-      pill.title = ref.name;
-      pill.addEventListener('mouseenter', (e) => {
-        e.stopPropagation();
-        highlightBranchPath(node.commit.hash);
-      });
-      pill.addEventListener('mouseleave', () => {
-        clearBranchPathHighlight();
-      });
-      cardTop.appendChild(pill);
+      cardTop.appendChild(createRefPillElement(ref, node));
     });
 
     const subjectSpan = document.createElement('span');
@@ -1041,23 +1279,7 @@ function renderCommitRow(
     }
 
     node.commit.refs.forEach((ref) => {
-      const pill = document.createElement('span');
-      pill.className = `ref-pill ${
-        ref.isHead ? 'head' : ref.type === 'tag' ? 'tag' : 'branch'
-      }`;
-      const icon = ref.type === 'tag' ? 'codicon-tag' : 'codicon-git-branch';
-      pill.innerHTML = `<i class="codicon ${icon}" style="font-size:10px;"></i> ${
-        ref.isHead ? `HEAD -> ${ref.name}` : ref.name
-      }`;
-      pill.title = ref.name;
-      pill.addEventListener('mouseenter', (e) => {
-        e.stopPropagation();
-        highlightBranchPath(node.commit.hash);
-      });
-      pill.addEventListener('mouseleave', () => {
-        clearBranchPathHighlight();
-      });
-      infoCol.appendChild(pill);
+      infoCol.appendChild(createRefPillElement(ref, node));
     });
 
     const subjectSpan = document.createElement('span');
@@ -1170,10 +1392,20 @@ function renderCommitRow(
       openTagModal(node.commit.hash);
     });
 
+    const btnRebaseRow = document.createElement('button');
+    btnRebaseRow.className = 'btn-row-action';
+    btnRebaseRow.title = 'Rebase Interactivo desde aquí';
+    btnRebaseRow.innerHTML = `<i class="codicon codicon-git-pull-request-go-to-changes"></i>`;
+    btnRebaseRow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openRebaseStudio(node.commit.hash);
+    });
+
     rowActions.appendChild(btnCopySha);
     rowActions.appendChild(btnCopyMsg);
     rowActions.appendChild(btnCheckoutRow);
     rowActions.appendChild(btnCherryPick);
+    rowActions.appendChild(btnRebaseRow);
     rowActions.appendChild(btnCreateTag);
     rowActions.appendChild(btnInspect);
 
@@ -1184,8 +1416,49 @@ function renderCommitRow(
     row.appendChild(rowActions);
   }
 
-  // Row Click & Hover handlers
+  // Row Click, Context Menu, Drag-and-Drop & Hover handlers
+  row.draggable = true;
+  row.addEventListener('dragstart', (e) => {
+    if ((e.target as HTMLElement)?.closest('.ref-pill')) return;
+    activeDagDragPayload = {
+      kind: 'commit',
+      sourceHash: node.commit.hash,
+      shortHash: node.commit.shortHash,
+    };
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copyMove';
+      e.dataTransfer.setData('application/x-commitflow-dag', JSON.stringify(activeDagDragPayload));
+    }
+  });
+  row.addEventListener('dragover', (e) => {
+    if (!activeDagDragPayload || activeDagDragPayload.sourceHash === node.commit.hash) return;
+    e.preventDefault();
+    row.classList.add('dag-drop-target');
+  });
+  row.addEventListener('dragleave', () => {
+    row.classList.remove('dag-drop-target');
+  });
+  row.addEventListener('drop', (e) => {
+    e.preventDefault();
+    row.classList.remove('dag-drop-target');
+    const rawJson = e.dataTransfer?.getData('application/x-commitflow-dag');
+    let dragData = activeDagDragPayload;
+    if (!dragData && rawJson) {
+      try {
+        dragData = JSON.parse(rawJson);
+      } catch {}
+    }
+    activeDagDragPayload = null;
+    if (dragData && dragData.sourceHash !== node.commit.hash) {
+      openDndConfirmModal(dragData, node);
+    }
+  });
   row.addEventListener('click', () => selectCommit(node));
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    selectCommit(node);
+    openRebaseStudio(node.commit.hash);
+  });
   row.addEventListener('mouseenter', (e) => {
     showHoverPopover(e, node);
     highlightBranchPath(node.commit.hash);
@@ -1209,11 +1482,12 @@ function updateVirtualWindow(): void {
   const clientHeight = tableContainer.clientHeight || 600;
   const buffer = 10;
   const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - buffer);
-  const endIndex = Math.min(filteredNodes.length, Math.ceil((scrollTop + clientHeight) / rowHeight) + buffer);
+  const rawEndIndex = Math.min(filteredNodes.length, Math.ceil((scrollTop + clientHeight) / rowHeight) + buffer);
+  // Guarantee mounted rows stay strictly under 150 even on ultra-tall screens
+  const endIndex = Math.min(rawEndIndex, startIndex + 120);
   const offsetY = startIndex * rowHeight;
 
   virtualViewport.style.transform = `translateY(${offsetY}px)`;
-  virtualViewport.innerHTML = '';
 
   const fragment = document.createDocumentFragment();
   const isCompact = isCompactLayout;
@@ -1239,11 +1513,30 @@ function updateVirtualWindow(): void {
 
   for (let i = startIndex; i < endIndex; i++) {
     const node = filteredNodes[i];
-    const row = renderCommitRow(node, i, isCompact, canvasCssWidth, rowHeight, dpr);
+    const isSel = selectedNode?.commit.hash === node.commit.hash ? '1' : '0';
+    const bisectHash = bisectStatus?.isActive ? `${bisectStatus.currentCommit || ''}:${bisectStatus.badCommit || ''}:${bisectStatus.goodCommits.length}` : '0';
+    const renderKey = `${node.commit.hash}|${i}|${isCompact ? 'c' : 'f'}|${canvasCssWidth}|${rowHeight}|${isSel}|${bisectHash}`;
+
+    let row = recycledRowPool.get(renderKey);
+    if (!row) {
+      row = renderCommitRow(node, i, isCompact, canvasCssWidth, rowHeight, dpr);
+      row.id = `commit-row-${node.commit.shortHash}-${i}`;
+      row.setAttribute('data-render-key', renderKey);
+      recycledRowPool.set(renderKey, row);
+      if (recycledRowPool.size > MAX_RECYCLED_ROWS) {
+        const oldestKey = recycledRowPool.keys().next().value;
+        if (oldestKey) recycledRowPool.delete(oldestKey);
+      }
+    } else {
+      recycledRowPool.delete(renderKey);
+      recycledRowPool.set(renderKey, row);
+    }
     fragment.appendChild(row);
   }
 
+  virtualViewport.innerHTML = '';
   virtualViewport.appendChild(fragment);
+  updateDagMinimap();
 }
 
 function jumpToCommitIndex(index: number): void {
@@ -1257,20 +1550,33 @@ function jumpToCommitIndex(index: number): void {
   const targetScroll = Math.max(0, clamped * rowHeight - Math.floor(tableContainer.clientHeight / 2));
   tableContainer.scrollTop = targetScroll;
   updateVirtualWindow();
+  tableContainer.setAttribute('aria-activedescendant', `commit-row-${targetNode?.commit.shortHash || ''}-${clamped}`);
 }
 
 function renderGraph(): void {
+  recycledRowPool.clear();
   tableContainer.setAttribute('role', 'treegrid');
   tableContainer.setAttribute('aria-label', 'CommitFlow Interactive Git Graph');
 
   if (allNodes.length === 0) {
     tableContainer.innerHTML = `
-      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; padding:20px; text-align:center;">
-        <i class="codicon codicon-repo" style="font-size:36px; color:var(--text-muted);"></i>
+      <div class="dag-empty-onboarding" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:10px; padding:24px; text-align:center;">
+        <svg width="48" height="48" viewBox="0 0 48 48" aria-hidden="true" style="opacity:0.85;">
+          <circle cx="16" cy="12" r="5" fill="none" stroke="var(--accent-cyan)" stroke-width="2.5"/>
+          <circle cx="32" cy="24" r="5" fill="none" stroke="var(--accent-purple)" stroke-width="2.5"/>
+          <circle cx="16" cy="36" r="5" fill="none" stroke="var(--accent-emerald)" stroke-width="2.5"/>
+          <path d="M16 17v14M16 17c8 0 16 1 16 7M32 29c0 6-8 7-16 7" fill="none" stroke="var(--text-muted)" stroke-width="2"/>
+        </svg>
         <div style="font-weight:600; font-size:var(--font-size-base); color:var(--text-primary);">${tr('graph.emptyRepo')}</div>
-        <div style="max-width:320px; font-size:var(--font-size-sm); color:var(--text-muted);">${tr('graph.emptyRepoDesc')}</div>
+        <div style="max-width:340px; font-size:var(--font-size-sm); color:var(--text-muted);">${tr('graph.emptyRepoDesc')}</div>
+        <button id="btn-empty-refresh" class="cf-btn cf-btn-primary" style="margin-top:4px;">
+          <i class="codicon codicon-refresh" aria-hidden="true"></i> ${tr('action.refresh')}
+        </button>
       </div>
     `;
+    document.getElementById('btn-empty-refresh')?.addEventListener('click', () => {
+      vscode.postMessage({ command: 'requestData' });
+    });
     return;
   }
 
@@ -1418,20 +1724,20 @@ function showHoverPopover(e: MouseEvent, node: GraphNode): void {
 
   hoverPopover.innerHTML = `
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <img src="${commit.author.avatarUrl}" style="width:24px; height:24px; border-radius:50%;" />
+      <img src="${escapeHtml(commit.author.avatarUrl)}" alt="" style="width:24px; height:24px; border-radius:50%;" />
       <div>
-        <div style="font-weight:600; font-size:var(--font-size-sm);">${commit.author.name}</div>
-        <div style="font-size:var(--font-size-xs); color:var(--text-muted);">${commit.author.relativeTime} &bull; \`${commit.shortHash}\`</div>
+        <div style="font-weight:600; font-size:var(--font-size-sm);">${escapeHtml(commit.author.name)}</div>
+        <div class="tabular-nums" style="font-size:var(--font-size-xs); color:var(--text-muted);">${escapeHtml(commit.author.relativeTime)} &bull; <code>${escapeHtml(commit.shortHash)}</code></div>
       </div>
     </div>
-    <div style="font-size:var(--font-size-sm); color:var(--text-primary); margin-bottom:6px;">${commit.subject}</div>
+    <div style="font-size:var(--font-size-sm); color:var(--text-primary); margin-bottom:6px;">${escapeHtml(commit.subject)}</div>
     ${
       commit.refs.length > 0
         ? `<div style="display:flex; gap:4px; flex-wrap:wrap;">
             ${commit.refs
               .map(
                 (r) =>
-                  `<span class="ref-pill ${r.isHead ? 'head' : 'branch'}"><i class="codicon codicon-git-branch" style="font-size:9px;"></i> ${r.name}</span>`
+                  `<span class="ref-pill ${r.isHead ? 'head' : 'branch'}"><i class="codicon codicon-git-branch" aria-hidden="true" style="font-size:9px;"></i> ${escapeHtml(r.name)}</span>`
               )
               .join('')}
            </div>`
@@ -1439,26 +1745,9 @@ function showHoverPopover(e: MouseEvent, node: GraphNode): void {
     }
   `;
 
-  const popoverWidth = Math.min(300, window.innerWidth - 20);
-  const popoverHeight = 130;
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-
-  // Clamp top position: if bottom doesn't fit, flip to top
-  let top = rect.bottom + 4;
-  if (top + popoverHeight > window.innerHeight) {
-    top = Math.max(8, rect.top - popoverHeight - 4);
-  }
-
-  // Clamp left position: ensure at least 8px from left and right viewport edges
-  let left = rect.left + 40;
-  if (left + popoverWidth > window.innerWidth - 8) {
-    left = Math.max(8, window.innerWidth - popoverWidth - 8);
-  }
-
-  hoverPopover.style.top = `${Math.round(top)}px`;
-  hoverPopover.style.left = `${Math.round(left)}px`;
-  hoverPopover.style.maxWidth = `${popoverWidth}px`;
   hoverPopover.classList.add('visible');
+  clampPopoverToViewport(hoverPopover, rect, 8);
 }
 
 function hideHoverPopover(): void {
@@ -1509,7 +1798,7 @@ function selectCommit(node: GraphNode): void {
         : ''
     }
 
-    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+    <div class="drawer-action-buttons">
       <button class="btn-icon" id="btn-copy-sha">
         <i class="codicon codicon-copy"></i> ${tr('drawer.copySha')} (${commit.shortHash})
       </button>
@@ -1527,6 +1816,9 @@ function selectCommit(node: GraphNode): void {
       </button>
       <button class="btn-icon" id="btn-drawer-revert" title="${tr('drawer.revert')}">
         <i class="codicon codicon-history"></i> ${tr('drawer.revert')}
+      </button>
+      <button class="btn-icon" id="btn-drawer-rebase" title="Interactive Rebase desde este commit">
+        <i class="codicon codicon-git-pull-request-go-to-changes"></i> Rebase Interactivo
       </button>
       <button class="btn-icon" id="btn-drawer-create-tag" title="${tr('drawer.createTag')}">
         <i class="codicon codicon-tag"></i> ${tr('drawer.createTag')}
@@ -1595,6 +1887,10 @@ function selectCommit(node: GraphNode): void {
     if (confirm(tr('drawer.confirmRevert', { hash: commit.shortHash }))) {
       vscode.postMessage({ command: 'revertCommit', payload: { hash: commit.hash } });
     }
+  });
+
+  document.getElementById('btn-drawer-rebase')?.addEventListener('click', () => {
+    openRebaseStudio(commit.hash);
   });
 
   document.getElementById('btn-drawer-create-tag')?.addEventListener('click', () => {
@@ -2370,6 +2666,10 @@ function renderComparisonModal(comparison: CommitComparisonResult): void {
 
 // Git Bisect Assistant
 function updateBisectBanner(): void {
+  const probeJumpBtn = document.getElementById('btn-jump-bisect-probe');
+  if (probeJumpBtn) {
+    probeJumpBtn.style.display = bisectStatus?.isActive ? 'inline-flex' : 'none';
+  }
   if (!bisectBanner) return;
   if (bisectStatus?.isActive) {
     bisectBanner.style.display = 'block';
@@ -2733,6 +3033,12 @@ function renderPullRequests(): void {
             <button class="btn-sm btn-pr-checkout" data-pr="${pr.number}" data-branch="${pr.sourceBranch}" title="${tr('pr.checkoutActionTitle')}">
               <i class="codicon codicon-arrow-swap"></i> ${tr('pr.checkoutAction')}
             </button>
+            <button class="btn-sm btn-pr-comments" data-pr="${pr.number}" data-title="${escapeHtml(pr.title || '')}" title="View and add PR comments">
+              <i class="codicon codicon-comment"></i> ${pr.commentsCount || 0}
+            </button>
+            <button class="btn-sm btn-pr-approve" data-pr="${pr.number}" title="Approve Pull Request">
+              <i class="codicon codicon-check-all"></i> Approve
+            </button>
             ${
               pr.url
                 ? `<button class="btn-sm btn-pr-open" data-url="${pr.url}" title="${tr('pr.viewWebActionTitle')}">
@@ -2754,6 +3060,28 @@ function renderPullRequests(): void {
         vscode.postMessage({
           command: 'checkoutPullRequest',
           payload: { prNumber, branchName },
+        });
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-pr-comments').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const prNumber = parseInt(btn.getAttribute('data-pr') || '0', 10);
+      const prTitle = btn.getAttribute('data-title') || `PR #${prNumber}`;
+      if (prNumber) {
+        openPrDetailModal(prNumber, prTitle);
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-pr-approve').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const prNumber = parseInt(btn.getAttribute('data-pr') || '0', 10);
+      if (prNumber) {
+        vscode.postMessage({
+          command: 'approvePullRequest',
+          payload: { prNumber },
         });
       }
     });
@@ -2832,15 +3160,6 @@ function renderWorktrees(): void {
       }
     });
   });
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }
 
 function renderCloudPatches(): void {
@@ -3065,6 +3384,7 @@ function closeAllModals(): void {
   closeComparisonModal();
   closeBisectModal();
   cherryPickForecastModal?.classList.remove('open');
+  closeRebaseStudioModal();
   document.querySelectorAll<HTMLElement>('.modal-overlay.open').forEach((m) => m.classList.remove('open'));
 }
 
@@ -3102,6 +3422,20 @@ window.addEventListener('keydown', (e) => {
       if (targetNode) {
         jumpToCommitIndex(prevIdx);
       }
+    } else if (e.key === 'PageDown') {
+      e.preventDefault();
+      const currentIdx = selectedNode ? filteredNodes.indexOf(selectedNode) : 0;
+      jumpToCommitIndex(Math.min(filteredNodes.length - 1, currentIdx + 15));
+    } else if (e.key === 'PageUp') {
+      e.preventDefault();
+      const currentIdx = selectedNode ? filteredNodes.indexOf(selectedNode) : 0;
+      jumpToCommitIndex(Math.max(0, currentIdx - 15));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      jumpToCommitIndex(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      jumpToCommitIndex(filteredNodes.length - 1);
     } else if (e.key === 'Enter') {
       if (selectedNode) {
         drawer.classList.add('open');
@@ -4054,7 +4388,224 @@ function handleAiKeysData(payload: { keys: any[] }): void {
   });
 }
 
-// Rebase Resolution Banner & Rebase Studio Modal Hooks
+// --------------------------------------------------------------------------
+// Interactive Rebase Resolution Banner & Rebase Studio Engine
+// --------------------------------------------------------------------------
+interface RebaseTodoItem {
+  action: 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
+  hash: string;
+  shortHash: string;
+  author: string;
+  subject: string;
+}
+
+let currentRebaseBaseHash = '';
+let currentRebaseTodoList: RebaseTodoItem[] = [];
+let draggedRebaseIndex: number | null = null;
+
+const rebaseStudioModal = document.getElementById('rebase-studio-modal') as HTMLElement | null;
+
+function openRebaseStudio(baseHash: string): void {
+  currentRebaseBaseHash = baseHash;
+  vscode.postMessage({
+    command: 'requestRebaseCommits',
+    payload: { baseHash },
+  });
+}
+
+function closeRebaseStudioModal(): void {
+  rebaseStudioModal?.classList.remove('open');
+}
+
+function handleRebaseCommitsData(payload: { baseHash: string; commits: RebaseTodoItem[] }): void {
+  currentRebaseBaseHash = payload.baseHash;
+  currentRebaseTodoList = (payload.commits || []).map((c) => ({
+    ...c,
+    action: c.action || 'pick',
+  }));
+  renderRebaseStudio();
+  rebaseStudioModal?.classList.add('open');
+  if (rebaseStudioModal) trapModalFocus(rebaseStudioModal);
+}
+
+function handleRebaseSimulationData(payload: {
+  canRebaseCleanly: boolean;
+  potentialConflicts: string[];
+  reorderedCount?: number;
+  squashedCount?: number;
+  droppedCount?: number;
+  reorderedCommitsCount?: number;
+  squashCount?: number;
+  dropCount?: number;
+}): void {
+  const fb = document.getElementById('rebase-simulation-feedback');
+  if (!fb) return;
+  const reordered = payload.reorderedCommitsCount ?? payload.reorderedCount ?? 0;
+  const squashed = payload.squashCount ?? payload.squashedCount ?? 0;
+  const dropped = payload.dropCount ?? payload.droppedCount ?? 0;
+  fb.style.display = 'block';
+  if (payload.canRebaseCleanly && (!payload.potentialConflicts || payload.potentialConflicts.length === 0)) {
+    fb.style.background = 'rgba(16, 185, 129, 0.15)';
+    fb.style.color = '#10b981';
+    fb.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+    fb.innerHTML = `<i class="codicon codicon-pass"></i> Simulación previa completada: 0 conflictos previstos. Se aplicarán ${currentRebaseTodoList.length} commits (${reordered} reordenados, ${squashed} squashes/fixups, ${dropped} descartados).`;
+  } else {
+    fb.style.background = 'rgba(239, 68, 68, 0.15)';
+    fb.style.color = '#ef4444';
+    fb.style.border = '1px solid rgba(239, 68, 68, 0.35)';
+    const conflicts = (payload.potentialConflicts || []).map((c) => `<code>${escapeHtml(c)}</code>`).join(', ');
+    fb.innerHTML = `<i class="codicon codicon-warning"></i> Posibles conflictos detectados: ${conflicts || 'archivos en conflicto'}. Resuelve los conflictos durante el rebase.`;
+  }
+}
+
+function renderRebaseStudio(): void {
+  const container = document.getElementById('rebase-todo-container');
+  const countEl = document.getElementById('rebase-commits-count');
+  const feedbackEl = document.getElementById('rebase-simulation-feedback');
+  if (feedbackEl) feedbackEl.style.display = 'none';
+  if (countEl) countEl.textContent = `${currentRebaseTodoList.length} commit(s)`;
+  if (!container) return;
+
+  if (currentRebaseTodoList.length === 0) {
+    container.innerHTML = `
+      <div style="padding:16px; text-align:center; color:var(--text-muted); font-size:var(--font-size-sm);">
+        <i class="codicon codicon-info" style="font-size:20px; margin-bottom:4px; display:block;"></i>
+        No hay commits pendientes de rebase entre este commit y HEAD.
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  currentRebaseTodoList.forEach((item, index) => {
+    const itemEl = document.createElement('div');
+    itemEl.className = `rebase-todo-item action-${item.action}`;
+    itemEl.setAttribute('data-index', String(index));
+    itemEl.draggable = true;
+
+    itemEl.addEventListener('dragstart', (e) => {
+      draggedRebaseIndex = index;
+      itemEl.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(index));
+      }
+    });
+
+    itemEl.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      if (draggedRebaseIndex !== index) {
+        itemEl.classList.add('drag-over');
+      }
+    });
+
+    itemEl.addEventListener('dragleave', () => {
+      itemEl.classList.remove('drag-over');
+    });
+
+    itemEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      itemEl.classList.remove('drag-over');
+      const rawIdx = e.dataTransfer?.getData('text/plain');
+      const fromIndex = draggedRebaseIndex !== null ? draggedRebaseIndex : Number(rawIdx);
+      draggedRebaseIndex = null;
+      if (
+        Number.isInteger(fromIndex) &&
+        fromIndex !== index &&
+        fromIndex >= 0 &&
+        fromIndex < currentRebaseTodoList.length
+      ) {
+        const [moved] = currentRebaseTodoList.splice(fromIndex, 1);
+        currentRebaseTodoList.splice(index, 0, moved);
+        renderRebaseStudio();
+      }
+    });
+
+    itemEl.addEventListener('dragend', () => {
+      draggedRebaseIndex = null;
+      container.querySelectorAll('.rebase-todo-item').forEach((el) => {
+        el.classList.remove('dragging', 'drag-over');
+      });
+    });
+
+    const handle = document.createElement('i');
+    handle.className = 'codicon codicon-grabber rebase-item-handle';
+    handle.style.cursor = 'grab';
+    handle.title = 'Arrastrar para reordenar';
+
+    const select = document.createElement('select');
+    select.className = 'rebase-action-select';
+    ['pick', 'reword', 'edit', 'squash', 'fixup', 'drop'].forEach((act) => {
+      const opt = document.createElement('option');
+      opt.value = act;
+      opt.textContent = act;
+      if (item.action === act) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.addEventListener('change', (e) => {
+      item.action = (e.target as HTMLSelectElement).value as any;
+      itemEl.className = `rebase-todo-item action-${item.action}`;
+    });
+
+    const sha = document.createElement('span');
+    sha.className = 'rebase-item-sha';
+    sha.textContent = item.shortHash || item.hash.slice(0, 7);
+
+    const subject = document.createElement('span');
+    subject.className = 'rebase-item-subject';
+    subject.textContent = item.subject;
+    subject.title = item.subject;
+
+    const author = document.createElement('span');
+    author.className = 'rebase-item-author';
+    author.textContent = item.author || '';
+
+    const controls = document.createElement('div');
+    controls.className = 'rebase-item-controls';
+
+    const btnUp = document.createElement('button');
+    btnUp.className = 'btn-sm';
+    btnUp.title = 'Mover arriba';
+    btnUp.disabled = index === 0;
+    btnUp.innerHTML = '<i class="codicon codicon-arrow-up"></i>';
+    btnUp.addEventListener('click', () => {
+      if (index > 0) {
+        const temp = currentRebaseTodoList[index - 1];
+        currentRebaseTodoList[index - 1] = currentRebaseTodoList[index];
+        currentRebaseTodoList[index] = temp;
+        renderRebaseStudio();
+      }
+    });
+
+    const btnDown = document.createElement('button');
+    btnDown.className = 'btn-sm';
+    btnDown.title = 'Mover abajo';
+    btnDown.disabled = index === currentRebaseTodoList.length - 1;
+    btnDown.innerHTML = '<i class="codicon codicon-arrow-down"></i>';
+    btnDown.addEventListener('click', () => {
+      if (index < currentRebaseTodoList.length - 1) {
+        const temp = currentRebaseTodoList[index + 1];
+        currentRebaseTodoList[index + 1] = currentRebaseTodoList[index];
+        currentRebaseTodoList[index] = temp;
+        renderRebaseStudio();
+      }
+    });
+
+    controls.appendChild(btnUp);
+    controls.appendChild(btnDown);
+
+    itemEl.appendChild(handle);
+    itemEl.appendChild(select);
+    itemEl.appendChild(sha);
+    itemEl.appendChild(subject);
+    itemEl.appendChild(author);
+    itemEl.appendChild(controls);
+
+    container.appendChild(itemEl);
+  });
+}
+
+// Banner controls
 document.getElementById('btn-rebase-continue')?.addEventListener('click', () => {
   vscode.postMessage({ command: 'continueRebase' });
 });
@@ -4065,10 +4616,479 @@ document.getElementById('btn-rebase-abort')?.addEventListener('click', () => {
   vscode.postMessage({ command: 'abortRebase' });
 });
 
-const rebaseStudioModal = document.getElementById('rebase-studio-modal');
-document.getElementById('rebase-studio-modal-close')?.addEventListener('click', () => {
-  rebaseStudioModal?.classList.remove('open');
+// Modal controls
+document.getElementById('rebase-studio-modal-close')?.addEventListener('click', closeRebaseStudioModal);
+document.getElementById('btn-rebase-cancel')?.addEventListener('click', closeRebaseStudioModal);
+
+document.getElementById('btn-rebase-dryrun')?.addEventListener('click', () => {
+  if (currentRebaseBaseHash && currentRebaseTodoList.length > 0) {
+    vscode.postMessage({
+      command: 'simulateRebase',
+      payload: {
+        baseHash: currentRebaseBaseHash,
+        todoList: currentRebaseTodoList,
+      },
+    });
+  }
 });
-document.getElementById('btn-rebase-cancel')?.addEventListener('click', () => {
-  rebaseStudioModal?.classList.remove('open');
+
+document.getElementById('btn-rebase-execute')?.addEventListener('click', () => {
+  if (currentRebaseBaseHash && currentRebaseTodoList.length > 0) {
+    vscode.postMessage({
+      command: 'startInteractiveRebase',
+      payload: {
+        baseHash: currentRebaseBaseHash,
+        todoList: currentRebaseTodoList,
+      },
+    });
+    closeRebaseStudioModal();
+  }
+});
+
+// Active branch badge click behavior
+document.getElementById('active-branch-pill')?.addEventListener('click', () => {
+  if (branchSelect) {
+    branchSelect.focus();
+  }
+});
+
+// Advanced DAG Filters & Quick Jumps (Issue #8)
+function dispatchDagFilters(): void {
+  advFilterSince = (document.getElementById('filter-date-since') as HTMLInputElement | null)?.value || '';
+  advFilterUntil = (document.getElementById('filter-date-until') as HTMLInputElement | null)?.value || '';
+  advFilterFilePath = (document.getElementById('filter-file-path') as HTMLInputElement | null)?.value.trim() || '';
+  vscode.postMessage({
+    command: 'applyDagFilters',
+    payload: {
+      firstParent: advFilterFirstParent,
+      hideRemotes: advFilterHideRemotes,
+      since: advFilterSince || undefined,
+      until: advFilterUntil || undefined,
+      filePath: advFilterFilePath || undefined,
+    },
+  });
+  applyFilters();
+}
+
+document.getElementById('btn-filter-first-parent')?.addEventListener('click', (e) => {
+  advFilterFirstParent = !advFilterFirstParent;
+  const btn = e.currentTarget as HTMLElement;
+  btn.classList.toggle('active', advFilterFirstParent);
+  btn.setAttribute('aria-pressed', String(advFilterFirstParent));
+  dispatchDagFilters();
+});
+
+document.getElementById('btn-filter-hide-remotes')?.addEventListener('click', (e) => {
+  advFilterHideRemotes = !advFilterHideRemotes;
+  const btn = e.currentTarget as HTMLElement;
+  btn.classList.toggle('active', advFilterHideRemotes);
+  btn.setAttribute('aria-pressed', String(advFilterHideRemotes));
+  dispatchDagFilters();
+});
+
+document.getElementById('btn-filter-apply')?.addEventListener('click', dispatchDagFilters);
+
+document.getElementById('btn-filter-reset')?.addEventListener('click', () => {
+  advFilterFirstParent = false;
+  advFilterHideRemotes = false;
+  advFilterSince = '';
+  advFilterUntil = '';
+  advFilterFilePath = '';
+  ['btn-filter-first-parent', 'btn-filter-hide-remotes'].forEach((id) => {
+    const el = document.getElementById(id);
+    el?.classList.remove('active');
+    el?.setAttribute('aria-pressed', 'false');
+  });
+  ['filter-date-since', 'filter-date-until', 'filter-file-path'].forEach((id) => {
+    const inp = document.getElementById(id) as HTMLInputElement | null;
+    if (inp) inp.value = '';
+  });
+  dispatchDagFilters();
+});
+
+document.getElementById('btn-jump-head')?.addEventListener('click', () => {
+  const headIdx = filteredNodes.findIndex((n) => n.commit.refs.some((r) => r.isHead));
+  if (headIdx >= 0) jumpToCommitIndex(headIdx);
+  else if (filteredNodes.length > 0) jumpToCommitIndex(0);
+});
+
+document.getElementById('btn-jump-bisect-probe')?.addEventListener('click', () => {
+  if (!bisectStatus?.isActive) return;
+  const probeIdx = filteredNodes.findIndex(
+    (n) =>
+      n.commit.hash === bisectStatus?.currentCommit ||
+      n.commit.shortHash === bisectStatus?.currentShortCommit
+  );
+  if (probeIdx >= 0) jumpToCommitIndex(probeIdx);
+});
+
+// Interactive Minimap Scrubbing (Issue #8)
+(() => {
+  const minimapCanvas = document.getElementById('dag-minimap-canvas') as HTMLCanvasElement | null;
+  if (!minimapCanvas) return;
+  let isScrubbing = false;
+
+  const jumpFromPointer = (clientY: number) => {
+    if (filteredNodes.length === 0) return;
+    const rect = minimapCanvas.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientY - rect.top) / Math.max(1, rect.height)));
+    jumpToCommitIndex(Math.min(filteredNodes.length - 1, Math.floor(ratio * filteredNodes.length)));
+  };
+
+  minimapCanvas.addEventListener('pointerdown', (e) => {
+    isScrubbing = true;
+    minimapCanvas.setPointerCapture?.(e.pointerId);
+    jumpFromPointer(e.clientY);
+  });
+  minimapCanvas.addEventListener('pointermove', (e) => {
+    if (isScrubbing) jumpFromPointer(e.clientY);
+  });
+  minimapCanvas.addEventListener('pointerup', () => {
+    isScrubbing = false;
+  });
+})();
+
+// DAG Drag-and-Drop Confirmation Modal controls (Issue #9)
+function closeDndConfirmModal(): void {
+  document.getElementById('dnd-confirm-modal')?.classList.remove('open');
+  pendingDndConfirmAction = null;
+}
+
+document.getElementById('dnd-modal-close')?.addEventListener('click', closeDndConfirmModal);
+document.getElementById('btn-dnd-cancel')?.addEventListener('click', closeDndConfirmModal);
+document.getElementById('btn-dnd-confirm')?.addEventListener('click', () => {
+  if (pendingDndConfirmAction) {
+    vscode.postMessage(pendingDndConfirmAction);
+  }
+  closeDndConfirmModal();
+});
+
+// Conflict Resolution Studio (Issue #14)
+let currentConflictedFiles: any[] = [];
+
+function updateConflictBanner(files: any[]): void {
+  currentConflictedFiles = Array.isArray(files) ? files : [];
+  const banner = document.getElementById('rebase-resolution-banner');
+  const countBadge = document.getElementById('conflict-count-badge');
+  if (countBadge) {
+    countBadge.textContent = String(currentConflictedFiles.length);
+  }
+  if (banner) {
+    banner.style.display = currentConflictedFiles.length > 0 ? 'flex' : 'none';
+  }
+}
+
+function renderConflictStudioFiles(files: any[]): void {
+  const listEl = document.getElementById('conflict-studio-list');
+  if (!listEl) return;
+
+  if (!files || files.length === 0) {
+    listEl.innerHTML = `<div class="empty-state" style="padding:18px;">
+      <i class="codicon codicon-check" style="color:#10b981; font-size:20px;"></i>
+      <div>No active merge or rebase conflicts detected.</div>
+    </div>`;
+    return;
+  }
+
+  listEl.innerHTML = files
+    .map((file) => {
+      const previewText = Array.isArray(file.previewLines) ? file.previewLines.slice(0, 6).join('\n') : '';
+      return `
+        <div class="conflict-file-card" data-path="${escapeHtml(file.filePath)}">
+          <div class="conflict-file-header">
+            <span class="mono-num" style="font-weight:600;">${escapeHtml(file.filePath)}</span>
+            <span class="cf-badge cf-badge-danger mono-num">${file.hunksCount || 0} hunks</span>
+          </div>
+          ${previewText ? `<pre class="conflict-preview-pre">${escapeHtml(previewText)}</pre>` : ''}
+          <div class="conflict-file-actions">
+            <button class="cf-btn cf-btn-ghost btn-resolve-ours" data-path="${escapeHtml(file.filePath)}">
+              Accept Ours${file.oursLabel ? ` (${escapeHtml(file.oursLabel)})` : ''}
+            </button>
+            <button class="cf-btn cf-btn-ghost btn-resolve-theirs" data-path="${escapeHtml(file.filePath)}">
+              Accept Theirs${file.theirsLabel ? ` (${escapeHtml(file.theirsLabel)})` : ''}
+            </button>
+            <button class="cf-btn cf-btn-primary btn-open-merge-editor" data-path="${escapeHtml(file.filePath)}">
+              <i class="codicon codicon-split-horizontal" aria-hidden="true"></i> 3-Way Merge Editor
+            </button>
+            <button class="cf-btn cf-btn-ghost btn-mark-resolved" data-path="${escapeHtml(file.filePath)}">
+              <i class="codicon codicon-check" aria-hidden="true"></i> Mark Resolved
+            </button>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  const bindResolve = (selector: string, strategy: 'ours' | 'theirs' | 'mark-resolved') => {
+    listEl.querySelectorAll(selector).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const filePath = btn.getAttribute('data-path');
+        if (filePath) {
+          vscode.postMessage({
+            command: 'resolveConflictFile',
+            payload: { filePath, strategy },
+          });
+        }
+      });
+    });
+  };
+
+  bindResolve('.btn-resolve-ours', 'ours');
+  bindResolve('.btn-resolve-theirs', 'theirs');
+  bindResolve('.btn-mark-resolved', 'mark-resolved');
+
+  listEl.querySelectorAll('.btn-open-merge-editor').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const filePath = btn.getAttribute('data-path');
+      if (filePath) {
+        vscode.postMessage({
+          command: 'openMergeEditor',
+          payload: { filePath },
+        });
+      }
+    });
+  });
+}
+
+function openConflictStudioModal(): void {
+  const modal = document.getElementById('conflict-studio-modal');
+  if (!modal) return;
+  modal.classList.add('open');
+  renderConflictStudioFiles(currentConflictedFiles);
+  vscode.postMessage({ command: 'requestConflictedFiles' });
+}
+
+function closeConflictStudioModal(): void {
+  document.getElementById('conflict-studio-modal')?.classList.remove('open');
+}
+
+document.getElementById('btn-open-conflict-studio')?.addEventListener('click', openConflictStudioModal);
+document.getElementById('conflict-studio-close')?.addEventListener('click', closeConflictStudioModal);
+document.getElementById('btn-conflict-studio-done')?.addEventListener('click', closeConflictStudioModal);
+document.getElementById('btn-conflict-abort-merge')?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'abortMerge' });
+  closeConflictStudioModal();
+});
+document.getElementById('btn-conflict-continue-rebase')?.addEventListener('click', () => {
+  vscode.postMessage({ command: 'continueRebase' });
+  closeConflictStudioModal();
+});
+
+// Conventional Commits Builder & #issue Autocomplete (Issue #15)
+let activeCommitAutocompleteInput: HTMLInputElement | HTMLTextAreaElement | null = null;
+
+function formatConventionalCommitPreview(): string {
+  const typeEl = document.getElementById('cb-type') as HTMLSelectElement | null;
+  const scopeEl = document.getElementById('cb-scope') as HTMLInputElement | null;
+  const subjectEl = document.getElementById('cb-subject') as HTMLInputElement | null;
+  const bodyEl = document.getElementById('cb-body') as HTMLTextAreaElement | null;
+  const breakingEl = document.getElementById('cb-breaking') as HTMLInputElement | null;
+  const previewEl = document.getElementById('cb-preview');
+  const countEl = document.getElementById('cb-subject-count');
+
+  const type = (typeEl?.value || 'feat').trim();
+  const scope = (scopeEl?.value || '').trim().replace(/[()\r\n]/g, '');
+  const subject = (subjectEl?.value || '').trim();
+  const body = (bodyEl?.value || '').trim();
+  const breaking = Boolean(breakingEl?.checked);
+
+  if (countEl) {
+    const len = subject.length;
+    countEl.textContent = `${len}/72`;
+    countEl.style.color = len > 72 ? '#ef4444' : 'var(--text-muted)';
+  }
+
+  const header = `${type}${scope ? `(${scope})` : ''}${breaking ? '!' : ''}: ${subject || '<description>'}`;
+  const sections = [header];
+  if (body) sections.push(body);
+  if (breaking && !/BREAKING CHANGE:/i.test(body)) {
+    sections.push(`BREAKING CHANGE: ${subject || 'introduces breaking changes'}`);
+  }
+  const full = sections.join('\n\n');
+  if (previewEl) previewEl.textContent = full;
+  return subject ? full : '';
+}
+
+function hideCommitIssueAutocomplete(): void {
+  const box = document.getElementById('commit-issue-autocomplete');
+  if (box) box.style.display = 'none';
+  activeCommitAutocompleteInput = null;
+}
+
+function updateCommitIssueAutocomplete(target: HTMLInputElement | HTMLTextAreaElement): void {
+  const box = document.getElementById('commit-issue-autocomplete');
+  if (!box) return;
+  const cursor = target.selectionStart ?? target.value.length;
+  const beforeCursor = target.value.slice(0, cursor);
+  const hashMatch = beforeCursor.match(/(?:^|\s)#([a-zA-Z0-9_-]*)$/);
+  if (!hashMatch) {
+    box.style.display = 'none';
+    return;
+  }
+
+  const q = (hashMatch[1] || '').toLowerCase();
+  const matches = (issuesHubData.allIssues || [])
+    .filter((i: any) => !q || String(i.number).includes(q) || (i.title || '').toLowerCase().includes(q))
+    .slice(0, 6);
+
+  if (matches.length === 0) {
+    box.style.display = 'none';
+    return;
+  }
+
+  activeCommitAutocompleteInput = target;
+  box.innerHTML = matches
+    .map(
+      (i: any) => `
+      <button type="button" class="commit-issue-option" data-num="${i.number}">
+        <span class="mono-num" style="font-weight:700; color:var(--accent-cyan);">#${i.number}</span>
+        <span>${escapeHtml(i.title || '')}</span>
+      </button>
+    `
+    )
+    .join('');
+  box.style.display = 'flex';
+
+  box.querySelectorAll('.commit-issue-option').forEach((opt) => {
+    opt.addEventListener('click', () => {
+      const num = opt.getAttribute('data-num');
+      if (!num || !activeCommitAutocompleteInput) return;
+      const inp = activeCommitAutocompleteInput;
+      const pos = inp.selectionStart ?? inp.value.length;
+      const left = inp.value.slice(0, pos);
+      const right = inp.value.slice(pos);
+      const replacedLeft = left.replace(/#([a-zA-Z0-9_-]*)$/, `#${num} `);
+      inp.value = replacedLeft + right;
+      inp.focus();
+      formatConventionalCommitPreview();
+      hideCommitIssueAutocomplete();
+    });
+  });
+}
+
+function handleCommitTemplateData(payload: { template?: string | null; changesCount?: number }): void {
+  const infoEl = document.getElementById('cb-changes-info');
+  const bodyEl = document.getElementById('cb-body') as HTMLTextAreaElement | null;
+  if (infoEl) {
+    const cnt = payload?.changesCount || 0;
+    infoEl.textContent = `${cnt} modified file${cnt === 1 ? '' : 's'} detected`;
+  }
+  if (bodyEl && !bodyEl.value.trim() && payload?.template) {
+    bodyEl.value = payload.template;
+  }
+  formatConventionalCommitPreview();
+}
+
+function openCommitBuilderModal(): void {
+  const modal = document.getElementById('commit-builder-modal');
+  if (!modal) return;
+  modal.classList.add('open');
+  formatConventionalCommitPreview();
+  vscode.postMessage({ command: 'requestCommitTemplate' });
+  if ((issuesHubData.allIssues || []).length === 0) {
+    vscode.postMessage({ command: 'requestIssues' });
+  }
+}
+
+function closeCommitBuilderModal(): void {
+  document.getElementById('commit-builder-modal')?.classList.remove('open');
+  hideCommitIssueAutocomplete();
+}
+
+document.getElementById('btn-commit-builder')?.addEventListener('click', openCommitBuilderModal);
+document.getElementById('commit-builder-close')?.addEventListener('click', closeCommitBuilderModal);
+document.getElementById('btn-cb-cancel')?.addEventListener('click', closeCommitBuilderModal);
+
+['cb-type', 'cb-scope', 'cb-breaking'].forEach((id) => {
+  document.getElementById(id)?.addEventListener('change', formatConventionalCommitPreview);
+  document.getElementById(id)?.addEventListener('input', formatConventionalCommitPreview);
+});
+
+['cb-subject', 'cb-body'].forEach((id) => {
+  const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+  el?.addEventListener('input', () => {
+    formatConventionalCommitPreview();
+    updateCommitIssueAutocomplete(el);
+  });
+});
+
+document.getElementById('btn-cb-submit')?.addEventListener('click', () => {
+  const message = formatConventionalCommitPreview();
+  if (!message) {
+    (document.getElementById('cb-subject') as HTMLInputElement | null)?.focus();
+    return;
+  }
+  const stageAll = Boolean((document.getElementById('cb-stage-all') as HTMLInputElement | null)?.checked);
+  vscode.postMessage({
+    command: 'commitStagedChanges',
+    payload: { message, stageAll },
+  });
+});
+
+// PR Comments & Approval Modal (Issue #16)
+let activePrModalNumber: number | null = null;
+
+function openPrDetailModal(prNumber: number, prTitle: string): void {
+  activePrModalNumber = prNumber;
+  const modal = document.getElementById('pr-detail-modal');
+  const titleEl = document.getElementById('pr-detail-title');
+  const listEl = document.getElementById('pr-comments-list');
+  if (titleEl) {
+    titleEl.textContent = `PR #${prNumber}: ${prTitle}`;
+  }
+  if (listEl) {
+    listEl.innerHTML = '<div style="color:var(--text-muted); font-size:var(--font-size-xs);">Loading comments...</div>';
+  }
+  modal?.classList.add('open');
+  vscode.postMessage({ command: 'requestPrComments', payload: { prNumber } });
+}
+
+function renderPrComments(prNumber: number, comments: any[]): void {
+  if (activePrModalNumber !== prNumber) return;
+  const listEl = document.getElementById('pr-comments-list');
+  if (!listEl) return;
+  if (!comments || comments.length === 0) {
+    listEl.innerHTML = '<div style="color:var(--text-muted); font-size:var(--font-size-xs);">No comments on this Pull Request yet.</div>';
+    return;
+  }
+  listEl.innerHTML = comments
+    .map(
+      (c) => `
+      <div class="pr-comment-card">
+        <div class="pr-comment-meta">
+          <strong>${escapeHtml(c.author?.name || 'User')}</strong>
+          <span>${escapeHtml(c.author?.relativeTime || c.createdAt || '')}</span>
+        </div>
+        <div class="pr-comment-body">${escapeHtml(c.body || '').replace(/\n/g, '<br/>')}</div>
+      </div>
+    `
+    )
+    .join('');
+}
+
+function closePrDetailModal(): void {
+  document.getElementById('pr-detail-modal')?.classList.remove('open');
+  activePrModalNumber = null;
+}
+
+document.getElementById('pr-detail-close')?.addEventListener('click', closePrDetailModal);
+document.getElementById('btn-pr-modal-close')?.addEventListener('click', closePrDetailModal);
+document.getElementById('btn-pr-modal-comment')?.addEventListener('click', () => {
+  const input = document.getElementById('pr-comment-input') as HTMLTextAreaElement | null;
+  const body = input?.value.trim() || '';
+  if (activePrModalNumber && body) {
+    vscode.postMessage({
+      command: 'addPrComment',
+      payload: { prNumber: activePrModalNumber, body },
+    });
+    if (input) input.value = '';
+  }
+});
+document.getElementById('btn-pr-modal-approve')?.addEventListener('click', () => {
+  if (activePrModalNumber) {
+    vscode.postMessage({
+      command: 'approvePullRequest',
+      payload: { prNumber: activePrModalNumber },
+    });
+  }
 });

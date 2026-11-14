@@ -1,0 +1,23 @@
+name: Staging PR & Issue Link Gate
+
+on:
+  pull_request:
+    branches: [ staging, main ]
+
+jobs:
+  verify-issue-link:
+    name: Verify Issue Reference in PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR references an Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const text = `${pr.title}\n${pr.body || ''}`;
+            const hasIssueRef = /#\d+/.test(text);
+            if (!hasIssueRef) {
+              core.setFailed('El PR debe referenciar al menos un Issue (ej: "Refs #6" o "Closes #6").');
+            } else {
+              core.info(`PR #${pr.number} references issue(s) cleanly.`);
+            }

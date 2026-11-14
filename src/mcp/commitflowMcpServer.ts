@@ -6,6 +6,8 @@ import { RemoteManager } from '../remotes/remoteManager';
 import { ApiKeyMetadata } from './apiKeyManager';
 import { CloudPatch } from '../git/types';
 
+import { sharedMcpAuditLog } from './mcpAuditLog';
+
 export class CommitFlowMcpServer {
   private readonly gitClient = GitClient.getInstance();
   private readonly issueService = IssueService.getInstance();
@@ -18,7 +20,20 @@ export class CommitFlowMcpServer {
   }
 
   public async processDirectRequest(req: any, clientKey?: ApiKeyMetadata): Promise<any> {
-    return this.handleJsonRpc(req, clientKey);
+    const startMs = Date.now();
+    const res = await this.handleJsonRpc(req, clientKey);
+    if (!clientKey) {
+      sharedMcpAuditLog.record({
+        timestamp: new Date().toISOString(),
+        transport: 'stdio',
+        method: 'RPC',
+        path: 'stdio://json-rpc',
+        status: res?.error ? 400 : 200,
+        rpcMethod: req?.method,
+        durationMs: Math.max(0, Date.now() - startMs),
+      });
+    }
+    return res;
   }
 
   public async start(): Promise<void> {
@@ -79,7 +94,7 @@ export class CommitFlowMcpServer {
             protocolVersion: '2024-11-05',
             serverInfo: {
               name: 'commitflow-mcp',
-              version: '0.4.7',
+              version: '1.0.0',
             },
             capabilities: {
               tools: {},
@@ -527,6 +542,12 @@ export class CommitFlowMcpServer {
                 uri: 'commitflow://bisect/status',
                 name: 'Active Git Bisect State',
                 description: 'Real-time bisect status, current testing probe commit, remaining steps, and good/bad hashes.',
+                mimeType: 'application/json',
+              },
+              {
+                uri: 'commitflow://mcp/audit-log',
+                name: 'MCP Security & Request Audit Log',
+                description: 'Structured ring-buffer audit trail of recent MCP HTTP and stdio requests including rate-limit and auth rejections.',
                 mimeType: 'application/json',
               },
             ],
@@ -1049,6 +1070,16 @@ export class CommitFlowMcpServer {
       } else if (uri === 'commitflow://bisect/status') {
         const bisectStatus = await this.gitClient.getBisectStatus(this.repoRoot);
         contentText = JSON.stringify(bisectStatus, null, 2);
+        mimeType = 'application/json';
+      } else if (uri === 'commitflow://mcp/audit-log') {
+        contentText = JSON.stringify(
+          {
+            count: sharedMcpAuditLog.getAll().length,
+            entries: sharedMcpAuditLog.getAll(),
+          },
+          null,
+          2
+        );
         mimeType = 'application/json';
       } else {
         return {

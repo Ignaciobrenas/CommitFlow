@@ -3,7 +3,9 @@ import * as vscode from 'vscode';
 export class PersistenceManager {
   private static instance: PersistenceManager;
   private secretStorage?: vscode.SecretStorage;
+  private workspaceState?: vscode.Memento;
   private inMemorySecrets: Map<string, string> = new Map();
+  private inMemoryActiveRepo?: string;
 
   private constructor() {}
 
@@ -16,6 +18,7 @@ export class PersistenceManager {
 
   public init(context: vscode.ExtensionContext): void {
     this.secretStorage = context.secrets;
+    this.workspaceState = context.workspaceState;
   }
 
   /**
@@ -135,5 +138,21 @@ export class PersistenceManager {
   // --- Fork Integration Setting ---
   public isForkIntegrationEnabled(): boolean {
     return this.getSetting<boolean>('integrations.enableForkButton', true);
+  }
+
+  // --- Active Repository Workspace Persistence ---
+  public getActiveRepository(): string | undefined {
+    try {
+      const saved = this.workspaceState?.get<string>('commitflow.activeRepository');
+      if (saved) return saved;
+    } catch {}
+    return this.inMemoryActiveRepo;
+  }
+
+  public async setActiveRepository(repoPath: string): Promise<void> {
+    this.inMemoryActiveRepo = repoPath;
+    try {
+      await this.workspaceState?.update('commitflow.activeRepository', repoPath);
+    } catch {}
   }
 }

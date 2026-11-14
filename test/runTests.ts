@@ -1,6 +1,8 @@
 import assert from 'assert';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
+import * as cp from 'child_process';
 import { AvatarService } from '../src/avatars/avatarService';
 import { GitParser } from '../src/git/gitParser';
 import { GraphLayout, THEME_LANE_COLORS } from '../src/graph/graphLayout';
@@ -20,6 +22,24 @@ import { ApiKeyManager } from '../src/mcp/apiKeyManager';
 import { CommitFlowHttpServer } from '../src/mcp/commitflowHttpServer';
 import { PersistenceManager } from '../src/state/persistenceManager';
 import { GitFsReader } from '../src/git/gitFsReader';
+import { computeClampedPosition, escapeHtml } from '../src/webview/primitives';
+import { runFuzzTestSuite } from './fuzzTests';
+import { runMcpE2eTestSuite } from './mcpE2eTests';
+import { DagWorkerEngine } from '../src/graph/dagWorkerClient';
+import { AdaptiveDebouncer } from '../src/git/branchWatcher';
+import { GraphWebviewProvider } from '../src/graph/graphWebviewProvider';
+import {
+  CONVENTIONAL_COMMIT_TYPES,
+  filterIssueSuggestions,
+  formatConventionalCommit,
+  parseConventionalCommit,
+  readGitMessageTemplate,
+  stripGitTemplateComments,
+} from '../src/git/conventionalCommits';
+import { GitHubProvider } from '../src/remotes/githubProvider';
+import { GitLabProvider } from '../src/remotes/gitlabProvider';
+import { IpcSchemaValidator } from '../src/utils/ipcValidator';
+import { sharedMcpAuditLog } from '../src/mcp/mcpAuditLog';
 
 console.log('Starting CommitFlow Extended Test Suite...\n');
 
@@ -312,7 +332,7 @@ const initResponse = mcpServer['handleJsonRpc']({
 });
 initResponse.then((res: any) => {
   assert.strictEqual(res.result.serverInfo.name, 'commitflow-mcp');
-  assert.strictEqual(res.result.serverInfo.version, '0.4.7');
+  assert.strictEqual(res.result.serverInfo.version, '1.0.0');
 });
 
 // Test tools/list method
@@ -1296,7 +1316,720 @@ Host *.internal.corp
   }
   console.log('  [PASS] AI Studio, Multi-Client Snippets & Instant Key Revocation E2E tests passed!');
 
-  console.log('\n[PASS] ALL 42 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  console.log('\nTesting Native UI Primitives & Zero Deprecated Toolkit Audit...');
+  {
+    const pkgJson = fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8');
+    assert.ok(!pkgJson.includes('@vscode/webview-ui-toolkit'), 'package.json must NOT depend on deprecated @vscode/webview-ui-toolkit');
+
+    const primitivesSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'primitives.ts'), 'utf8');
+    assert.ok(primitivesSrc.includes('export function CfButton'));
+    assert.ok(primitivesSrc.includes('export function CfBadge'));
+    assert.ok(primitivesSrc.includes('export function CfDrawer'));
+    assert.ok(primitivesSrc.includes('export function CfTabs'));
+    assert.ok(primitivesSrc.includes('export class CfToast'));
+    assert.ok(primitivesSrc.includes('export function CfSkeleton'));
+
+    assert.ok(fs.existsSync(path.join(__dirname, '..', 'DESIGN.md')), 'DESIGN.md must exist');
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '.claude', 'skills', 'commitflow-ui-design', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '.claude', 'skills', 'commitflow-canvas-dag', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '.claude', 'skills', 'commitflow-qa-testing', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(__dirname, '..', '.claude', 'skills', 'commitflow-issue-workflow', 'SKILL.md')));
+
+    assert.ok(cssContent.includes('.cf-btn-primary'));
+    assert.ok(cssContent.includes('.cf-skeleton'));
+    assert.ok(cssContent.includes('prefers-reduced-motion: reduce'));
+    assert.ok(cssContent.includes('tabular-nums'));
+
+    const clamped = computeClampedPosition(
+      { left: 210, right: 235, top: 680, bottom: 700, width: 25, height: 20 },
+      300,
+      130,
+      240,
+      720,
+      8
+    );
+    assert.ok(clamped.left >= 8 && clamped.left + clamped.maxWidth <= 240);
+    assert.ok(clamped.top < 680, 'Popover near bottom should flip upward');
+    assert.strictEqual(escapeHtml('<script>"x"</script>'), '&lt;script&gt;&quot;x&quot;&lt;/script&gt;');
+  }
+  console.log('  [PASS] Native UI Primitives & Zero Deprecated Toolkit Audit tests passed!');
+
+  console.log('\nTesting Interactive Rebase Studio...');
+  {
+    const webviewSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'main.ts'), 'utf8');
+    assert.ok(webviewSrc.includes("'fixup'"), 'Rebase Studio dropdown must support fixup action');
+    assert.ok(webviewSrc.includes('itemEl.draggable = true'), 'Rebase todo rows must support drag-and-drop reordering');
+    assert.ok(webviewSrc.includes("addEventListener('dragstart'") && webviewSrc.includes("addEventListener('drop'"));
+    assert.ok(webviewSrc.includes("addEventListener('contextmenu'") && webviewSrc.includes('openRebaseStudio('));
+    assert.ok(webviewSrc.includes("command: 'simulateRebase'") && webviewSrc.includes("command: 'startInteractiveRebase'"));
+    assert.ok(cssContent.includes('.rebase-todo-item.action-fixup'));
+    assert.ok(cssContent.includes('.rebase-todo-item.dragging'));
+    assert.ok(cssContent.includes('.rebase-todo-item.drag-over'));
+
+    const rebaseGitClient = new GitClient();
+    const osMod = await import('os');
+    const cpMod = await import('child_process');
+    const tmpRebaseRepo = fs.mkdtempSync(path.join(osMod.tmpdir(), 'commitflow-rebase-test-'));
+    try {
+      cpMod.execFileSync('git', ['init'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['config', 'user.email', 'test@commitflow.dev'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['config', 'user.name', 'CommitFlow Test'], { cwd: tmpRebaseRepo });
+      fs.writeFileSync(path.join(tmpRebaseRepo, 'a.txt'), 'v1\n', 'utf8');
+      cpMod.execFileSync('git', ['add', '.'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'base commit'], { cwd: tmpRebaseRepo });
+      fs.writeFileSync(path.join(tmpRebaseRepo, 'a.txt'), 'v2\n', 'utf8');
+      cpMod.execFileSync('git', ['add', '.'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'second commit'], { cwd: tmpRebaseRepo });
+      fs.writeFileSync(path.join(tmpRebaseRepo, 'b.txt'), 'v1\n', 'utf8');
+      cpMod.execFileSync('git', ['add', '.'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'third commit'], { cwd: tmpRebaseRepo });
+
+      const commits = await rebaseGitClient.getRebaseCommits(tmpRebaseRepo, 'HEAD~2');
+      assert.strictEqual(commits.length, 2, 'getRebaseCommits(HEAD~2) should return 2 linear commits');
+      const sim = await rebaseGitClient.simulateRebase(tmpRebaseRepo, 'HEAD~2', [
+        { ...commits[0], action: 'pick' },
+        { ...commits[1], action: 'fixup' },
+      ]);
+      assert.strictEqual(sim.squashCount, 1, 'simulateRebase should count fixup under squashCount');
+      assert.strictEqual(sim.dropCount, 0);
+      assert.strictEqual(sim.canRebaseCleanly, true);
+    } finally {
+      fs.rmSync(tmpRebaseRepo, { recursive: true, force: true });
+    }
+  }
+  console.log('  [PASS] Interactive Rebase Studio tests passed!');
+
+  console.log('\nTesting GitFsReader Binary Objects, Packfiles, .git/index, SHA-256 & Reftable...');
+  {
+    const osMod = await import('os');
+    const cpMod = await import('child_process');
+    const reader = GitFsReader.getInstance();
+
+    // 1. Real packed Git repo test (loose objects, .git/index, pack v2 + delta, offline status)
+    const tmpBinRepo = fs.mkdtempSync(path.join(osMod.tmpdir(), 'commitflow-bin-repo-'));
+    try {
+      cpMod.execFileSync('git', ['init'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['config', 'user.email', 'bin@commitflow.dev'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['config', 'user.name', 'Binary Tester'], { cwd: tmpBinRepo });
+      fs.writeFileSync(path.join(tmpBinRepo, 'hello.txt'), 'A'.repeat(200) + '\n', 'utf8');
+      fs.mkdirSync(path.join(tmpBinRepo, 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(tmpBinRepo, 'nested', 'sub.txt'), 'nested file content\n', 'utf8');
+      cpMod.execFileSync('git', ['add', '.'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'initial binary commit'], { cwd: tmpBinRepo });
+
+      const resolved = reader.resolveGitDir(tmpBinRepo)!;
+      assert.ok(resolved);
+      const offline = reader.readOfflineRepoState(tmpBinRepo)!;
+      assert.strictEqual(offline.objectFormat, 'sha1');
+      assert.strictEqual(offline.refStorage, 'files');
+      const headSha = offline.head.commitHash;
+      assert.ok(reader.isValidObjectId(headSha));
+
+      // Loose object + commit/tree parsing
+      const looseCommit = reader.readLooseObject(resolved.commonDir, headSha);
+      assert.ok(looseCommit && looseCommit.type === 'commit');
+      const parsedCommit = reader.parseCommitObject(headSha, looseCommit!.data);
+      assert.strictEqual(parsedCommit.message, 'initial binary commit');
+      assert.ok(reader.isValidObjectId(parsedCommit.tree));
+
+      const treeObj = reader.readGitObject(resolved.commonDir, parsedCommit.tree);
+      assert.ok(treeObj && treeObj.type === 'tree');
+      const treeEntries = reader.parseTreeObject(treeObj!.data);
+      const helloEntry = treeEntries.find((e) => e.name === 'hello.txt');
+      assert.ok(helloEntry && helloEntry.type === 'blob');
+
+      const blobObj = reader.readGitObject(resolved.commonDir, helloEntry!.hash);
+      assert.ok(blobObj && blobObj.data.toString('utf8') === 'A'.repeat(200) + '\n');
+
+      // .git/index parser & offline working tree status
+      const idxEntries = reader.readIndexEntries(resolved.gitDir, resolved.commonDir);
+      assert.ok(idxEntries.some((e) => e.path === 'hello.txt'));
+      assert.ok(idxEntries.some((e) => e.path === 'nested/sub.txt'));
+      const cleanStatus = reader.computeOfflineWorkingTreeStatus(tmpBinRepo, resolved.gitDir, resolved.commonDir);
+      assert.strictEqual(cleanStatus.unstagedModified.length, 0);
+
+      fs.writeFileSync(path.join(tmpBinRepo, 'hello.txt'), 'A'.repeat(200) + '\nMODIFIED LINE\n', 'utf8');
+      const dirtyStatus = reader.computeOfflineWorkingTreeStatus(tmpBinRepo, resolved.gitDir, resolved.commonDir);
+      assert.ok(dirtyStatus.unstagedModified.includes('hello.txt'));
+
+      // Commit modification & repack into packfile v2 with deltas
+      cpMod.execFileSync('git', ['add', 'hello.txt'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'second commit for pack'], { cwd: tmpBinRepo });
+      cpMod.execFileSync('git', ['repack', '-a', '-d'], { cwd: tmpBinRepo });
+      const newHeadSha = cpMod.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tmpBinRepo, encoding: 'utf8' }).trim();
+      assert.strictEqual(reader.readLooseObject(resolved.commonDir, newHeadSha), null, 'repacked object should not be loose');
+      const packedCommit = reader.readGitObject(resolved.commonDir, newHeadSha);
+      assert.ok(packedCommit && packedCommit.type === 'commit', 'Should read packed commit from .pack/.idx');
+      const packedParsed = reader.parseCommitObject(newHeadSha, packedCommit!.data);
+      assert.strictEqual(packedParsed.message, 'second commit for pack');
+    } finally {
+      fs.rmSync(tmpBinRepo, { recursive: true, force: true });
+    }
+
+    // 2. applyGitDelta copy + insert opcodes
+    const deltaOut = reader.applyGitDelta(
+      Buffer.from('Hello World!'),
+      Buffer.from([
+        12, // baseSize = 12
+        16, // resultSize = 16
+        0x90 | 0x01, 0, 6, // copy offset=0, size=6 ("Hello ")
+        10, ...Buffer.from('CommitFlow'), // insert 10 bytes ("CommitFlow")
+      ])
+    );
+    assert.strictEqual(deltaOut.toString('utf8'), 'Hello CommitFlow');
+
+    // 3. SHA-256 & Reftable & nested submodules offline detection
+    const tmpSha256Repo = fs.mkdtempSync(path.join(osMod.tmpdir(), 'commitflow-sha256-'));
+    try {
+      const fakeGit = path.join(tmpSha256Repo, '.git');
+      fs.mkdirSync(path.join(fakeGit, 'refs', 'heads'), { recursive: true });
+      fs.mkdirSync(path.join(fakeGit, 'reftable'), { recursive: true });
+      const sha256Hex = 'a'.repeat(64);
+      fs.writeFileSync(path.join(fakeGit, 'HEAD'), 'ref: refs/heads/main\n', 'utf8');
+      fs.writeFileSync(path.join(fakeGit, 'refs', 'heads', 'main'), sha256Hex + '\n', 'utf8');
+      fs.writeFileSync(
+        path.join(fakeGit, 'config'),
+        '[core]\n\trepositoryformatversion = 1\n[extensions]\n\tobjectformat = sha256\n\trefstorage = reftable\n',
+        'utf8'
+      );
+      fs.writeFileSync(path.join(fakeGit, 'reftable', 'tables.list'), 'table1.ref\ntable2.ref\n', 'utf8');
+      assert.strictEqual(reader.detectHashAlgorithm(fakeGit), 'sha256');
+      const rt = reader.detectReftable(fakeGit);
+      assert.strictEqual(rt.isReftable, true);
+      assert.strictEqual(rt.tablesCount, 2);
+      const sha256State = reader.readOfflineRepoState(tmpSha256Repo)!;
+      assert.strictEqual(sha256State.head.commitHash, sha256Hex);
+      assert.strictEqual(sha256State.objectFormat, 'sha256');
+      assert.strictEqual(sha256State.refStorage, 'reftable');
+
+      // Nested submodules via .gitmodules + gitdir: file
+      fs.writeFileSync(path.join(tmpSha256Repo, '.gitmodules'), '[submodule "subA"]\n\tpath = libs/subA\n\turl = https://example.com/subA.git\n', 'utf8');
+      const subAPath = path.join(tmpSha256Repo, 'libs', 'subA');
+      const subAModuleGit = path.join(fakeGit, 'modules', 'subA');
+      const childGit = path.join(subAModuleGit, 'modules', 'subB');
+      fs.mkdirSync(subAPath, { recursive: true });
+      fs.mkdirSync(path.join(subAModuleGit, 'refs', 'heads'), { recursive: true });
+      fs.mkdirSync(path.join(childGit, 'refs', 'heads'), { recursive: true });
+      fs.writeFileSync(path.join(subAPath, '.git'), 'gitdir: ../../.git/modules/subA\n', 'utf8');
+      fs.writeFileSync(path.join(subAModuleGit, 'HEAD'), sha256Hex + '\n', 'utf8');
+      fs.writeFileSync(path.join(subAPath, '.gitmodules'), '[submodule "subB"]\n\tpath = nested/subB\n\turl = https://example.com/subB.git\n', 'utf8');
+      const subBPath = path.join(subAPath, 'nested', 'subB');
+      fs.mkdirSync(subBPath, { recursive: true });
+      fs.writeFileSync(path.join(subBPath, '.git'), 'gitdir: ../../../../.git/modules/subA/modules/subB\n', 'utf8');
+      fs.writeFileSync(path.join(childGit, 'HEAD'), sha256Hex + '\n', 'utf8');
+      const discoveredSubs = reader.readSubmodules(tmpSha256Repo, fakeGit);
+      assert.ok(discoveredSubs.some((s) => s.name === 'subA'), 'Top-level submodule discovered');
+      assert.ok(discoveredSubs.some((s) => s.name === 'subA/subB'), 'Nested submodule discovered recursively');
+    } finally {
+      fs.rmSync(tmpSha256Repo, { recursive: true, force: true });
+    }
+
+    // 4. PersistenceManager active repository session persistence
+    const pm = PersistenceManager.getInstance();
+    await pm.setActiveRepository('C:/repos/sample-root');
+    assert.strictEqual(pm.getActiveRepository(), 'C:/repos/sample-root');
+  }
+  console.log('  [PASS] GitFsReader Binary Objects, Packfiles, .git/index, SHA-256 & Reftable tests passed!');
+
+  console.log('\nTesting DAG Worker Engine, DOM Recycling, AdaptiveDebouncer & IPC Batching...');
+  {
+    const engine = DagWorkerEngine.getInstance();
+    const now = new Date();
+    const author = { name: 'Test', email: 't@example.com', date: now, relativeTime: 'now', avatarUrl: '' };
+    const sampleCommits: GitCommit[] = [
+      {
+        hash: '1111111111111111111111111111111111111111',
+        shortHash: '1111111',
+        parentHashes: ['0000000000000000000000000000000000000000'],
+        author,
+        committer: author,
+        subject: 'feat: worker tip',
+        body: '',
+        refs: [{ name: 'main', type: 'head', isHead: true }],
+      },
+      {
+        hash: '0000000000000000000000000000000000000000',
+        shortHash: '0000000',
+        parentHashes: [],
+        author,
+        committer: author,
+        subject: 'root',
+        body: '',
+        refs: [],
+      },
+    ];
+    const workerNodes = await engine.computeLayoutAsync(sampleCommits, 'cyberpunk');
+    const directNodes = GraphLayout.compute(sampleCommits, 'cyberpunk');
+    assert.strictEqual(workerNodes.length, directNodes.length);
+    assert.strictEqual(workerNodes[0].color, directNodes[0].color);
+
+    let arcCount = 0;
+    let rectCount = 0;
+    const mockCanvas: any = {
+      width: 80,
+      height: 120,
+      getContext: () => ({
+        clearRect: () => {},
+        beginPath: () => {},
+        arc: () => { arcCount++; },
+        fill: () => {},
+        stroke: () => {},
+        fillRect: () => { rectCount++; },
+        strokeRect: () => {},
+        fillStyle: '',
+        strokeStyle: '',
+        lineWidth: 1,
+      }),
+    };
+    engine.renderMinimap(workerNodes, mockCanvas, {
+      width: 80,
+      height: 120,
+      selectedIndex: 0,
+      viewportStartRatio: 0,
+      viewportEndRatio: 0.5,
+    });
+    assert.ok(arcCount >= 2, 'renderMinimap should draw commit dots for every node');
+    assert.ok(rectCount >= 2, 'renderMinimap should draw viewport window and selected marker');
+
+    // AdaptiveDebouncer burst scaling
+    let triggerCount = 0;
+    const debouncer = new AdaptiveDebouncer(() => {
+      triggerCount++;
+    }, { minDelayMs: 150, maxDelayMs: 1000, burstWindowMs: 600, burstThreshold: 3 });
+    debouncer.trigger(1000);
+    assert.strictEqual(debouncer.getCurrentDelayMs(), 150);
+    debouncer.trigger(1010);
+    debouncer.trigger(1020);
+    debouncer.trigger(1030);
+    assert.ok(debouncer.getCurrentDelayMs() > 150 && debouncer.getCurrentDelayMs() <= 1000);
+    debouncer.flush();
+    assert.strictEqual(triggerCount, 1);
+    debouncer.dispose();
+
+    // IPC batch queue deduplication
+    const posted: any[] = [];
+    const mockWebview: any = { postMessage: (m: any) => posted.push(m) };
+    const provider = new GraphWebviewProvider({ scheme: 'file', fsPath: __dirname, path: __dirname } as any);
+    provider.enqueueWebviewMessage(mockWebview, { command: 'toast', payload: { message: 'first' } } as any);
+    provider.enqueueWebviewMessage(mockWebview, { command: 'toast', payload: { message: 'second' } } as any);
+    const flushed = provider.flushWebviewMessages();
+    assert.strictEqual(flushed, 1, 'Duplicate command messages in batch window should coalesce to 1');
+    assert.strictEqual(posted[0].payload.message, 'second');
+    provider.dispose();
+
+    const webviewSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'main.ts'), 'utf8');
+    assert.ok(webviewSrc.includes('recycledRowPool') && webviewSrc.includes('MAX_RECYCLED_ROWS'));
+    assert.ok(webviewSrc.includes("'PageDown'") && webviewSrc.includes("'PageUp'") && webviewSrc.includes("'Home'") && webviewSrc.includes("'End'"));
+    assert.ok(webviewSrc.includes('aria-activedescendant'));
+  }
+  console.log('  [PASS] DAG Worker Engine, DOM Recycling, AdaptiveDebouncer & IPC Batching tests passed!');
+
+  console.log('\nTesting DAG Minimap, Advanced Filters, Interactive Drag-and-Drop & Onboarding...');
+  {
+    const providerSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'graph', 'graphWebviewProvider.ts'), 'utf8');
+    const webviewSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'main.ts'), 'utf8');
+
+    assert.ok(providerSrc.includes('id="dag-advanced-filters-bar"'));
+    assert.ok(providerSrc.includes('id="dag-minimap-canvas"'));
+    assert.ok(providerSrc.includes('id="btn-jump-head"') && providerSrc.includes('id="btn-jump-bisect-probe"'));
+    assert.ok(providerSrc.includes('id="dnd-confirm-modal"'));
+    assert.ok(webviewSrc.includes('createRefPillElement') && webviewSrc.includes('openDndConfirmModal'));
+    assert.ok(webviewSrc.includes('updateDagMinimap') && webviewSrc.includes('dag-empty-onboarding'));
+    assert.ok(cssContent.includes('.dag-advanced-filters-bar') && cssContent.includes('.dag-minimap-container'));
+    assert.ok(cssContent.includes('.commit-row.dag-drop-target'));
+
+    // Real git filter & resetBranchToCommit test
+    const osMod = await import('os');
+    const cpMod = await import('child_process');
+    const tmpFilterRepo = fs.mkdtempSync(path.join(osMod.tmpdir(), 'commitflow-filter-dnd-'));
+    try {
+      cpMod.execFileSync('git', ['init'], { cwd: tmpFilterRepo });
+      cpMod.execFileSync('git', ['config', 'user.email', 'f@commitflow.dev'], { cwd: tmpFilterRepo });
+      cpMod.execFileSync('git', ['config', 'user.name', 'Filter Test'], { cwd: tmpFilterRepo });
+      fs.writeFileSync(path.join(tmpFilterRepo, 'app.ts'), 'const x = 1;\n', 'utf8');
+      cpMod.execFileSync('git', ['add', 'app.ts'], { cwd: tmpFilterRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'c1: add app.ts'], { cwd: tmpFilterRepo });
+      const baseSha = cpMod.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: tmpFilterRepo, encoding: 'utf8' }).trim();
+
+      fs.writeFileSync(path.join(tmpFilterRepo, 'readme.md'), '# doc\n', 'utf8');
+      cpMod.execFileSync('git', ['add', 'readme.md'], { cwd: tmpFilterRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'c2: add readme.md'], { cwd: tmpFilterRepo });
+
+      const gc = new GitClient();
+      const allCommits = await gc.getCommits(tmpFilterRepo, 50, 0);
+      assert.strictEqual(allCommits.length, 2);
+
+      const pathCommits = await gc.getCommits(tmpFilterRepo, 50, 0, { filePath: 'app.ts', firstParent: true });
+      assert.strictEqual(pathCommits.length, 1);
+      assert.strictEqual(pathCommits[0].subject, 'c1: add app.ts');
+
+      cpMod.execFileSync('git', ['branch', 'feature/dnd-test', 'HEAD'], { cwd: tmpFilterRepo });
+      await gc.resetBranchToCommit(tmpFilterRepo, 'feature/dnd-test', baseSha, 'mixed');
+      const movedSha = cpMod.execFileSync('git', ['rev-parse', 'feature/dnd-test'], { cwd: tmpFilterRepo, encoding: 'utf8' }).trim();
+      assert.strictEqual(movedSha, baseSha, 'resetBranchToCommit should move non-current branch to baseSha');
+    } finally {
+      fs.rmSync(tmpFilterRepo, { recursive: true, force: true });
+    }
+  }
+  console.log('  [PASS] DAG Minimap, Advanced Filters, Interactive Drag-and-Drop & Onboarding tests passed!');
+
+  // 48. Test Conflict Resolution Studio, Conventional Commits Builder & Provider Parity (Issues #14, #15, #16)
+  console.log('▶ Testing Conflict Studio, Conventional Commits & GitHub/GitLab Parity...');
+  assert.ok(CONVENTIONAL_COMMIT_TYPES.includes('feat'));
+  assert.ok(CONVENTIONAL_COMMIT_TYPES.includes('fix'));
+  const formattedCommit = formatConventionalCommit({
+    type: 'feat',
+    scope: 'dag',
+    breaking: true,
+    subject: 'drop legacy layout (#15)',
+    body: 'Switches rendering pipeline to worker layout.\nCloses #15',
+  });
+  assert.ok(formattedCommit.startsWith('feat(dag)!: drop legacy layout (#15)'));
+  assert.ok(formattedCommit.includes('BREAKING CHANGE:'));
+  const parsedCommit = parseConventionalCommit(formattedCommit);
+  assert.strictEqual(parsedCommit?.type, 'feat');
+  assert.strictEqual(parsedCommit?.scope, 'dag');
+  assert.strictEqual(parsedCommit?.breaking, true);
+  assert.strictEqual(parsedCommit?.subject, 'drop legacy layout (#15)');
+
+  const cleanedTemplate = stripGitTemplateComments('# Comment header\n\nFixes #\n# Footer');
+  assert.strictEqual(cleanedTemplate, 'Fixes #');
+
+  const suggestions = filterIssueSuggestions(
+    [
+      { number: 12, title: 'Closed old bug', state: 'closed' },
+      { number: 14, title: 'Conflict Studio 3-way editor', state: 'open' },
+      { number: 15, title: 'Conventional Commit Builder', state: 'open' },
+    ],
+    'conv'
+  );
+  assert.strictEqual(suggestions.length, 1);
+  assert.strictEqual(suggestions[0].number, 15);
+
+  const tmpConflictRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'commitflow-conflict-test-'));
+  try {
+    const execGit = (args: string[]) => cp.execFileSync('git', args, { cwd: tmpConflictRepo, encoding: 'utf8' });
+    execGit(['init']);
+    execGit(['config', 'user.name', 'CommitFlow Test']);
+    execGit(['config', 'user.email', 'test@commitflow.local']);
+    fs.writeFileSync(path.join(tmpConflictRepo, '.gitmessage'), '# Enter commit message\n\nRefs #\n', 'utf8');
+    assert.strictEqual(readGitMessageTemplate(tmpConflictRepo), 'Refs #');
+
+    fs.writeFileSync(path.join(tmpConflictRepo, 'conflict.txt'), 'line 1\nbase line\n', 'utf8');
+    execGit(['add', '.']);
+    execGit(['commit', '-m', 'chore: initial base']);
+    const defaultBranch = execGit(['rev-parse', '--abbrev-ref', 'HEAD']).trim();
+
+    execGit(['checkout', '-b', 'feat-branch']);
+    fs.writeFileSync(path.join(tmpConflictRepo, 'conflict.txt'), 'line 1\ntheirs change\n', 'utf8');
+    execGit(['add', 'conflict.txt']);
+    execGit(['commit', '-m', 'feat: incoming change']);
+
+    execGit(['checkout', defaultBranch]);
+    fs.writeFileSync(path.join(tmpConflictRepo, 'conflict.txt'), 'line 1\nours change\n', 'utf8');
+    execGit(['add', 'conflict.txt']);
+    execGit(['commit', '-m', 'fix: current branch change']);
+
+    let mergeConflicted = false;
+    try {
+      execGit(['merge', 'feat-branch']);
+    } catch {
+      mergeConflicted = true;
+    }
+    assert.strictEqual(mergeConflicted, true, 'Merge should enter conflict state');
+
+    const conflictClient = GitClient.getInstance();
+    const detectedConflicts = await conflictClient.getConflictedFiles(tmpConflictRepo);
+    assert.strictEqual(detectedConflicts.length, 1);
+    assert.strictEqual(detectedConflicts[0].filePath, 'conflict.txt');
+    assert.ok(detectedConflicts[0].hunksCount >= 1);
+
+    let traversalBlocked = false;
+    try {
+      await conflictClient.resolveConflictFile(tmpConflictRepo, '../outside.txt', 'ours');
+    } catch {
+      traversalBlocked = true;
+    }
+    assert.strictEqual(traversalBlocked, true, 'Path traversal should be rejected by resolveConflictFile');
+
+    await conflictClient.resolveConflictFile(tmpConflictRepo, 'conflict.txt', 'theirs');
+    const afterResolve = await conflictClient.getConflictedFiles(tmpConflictRepo);
+    assert.strictEqual(afterResolve.length, 0);
+    assert.ok(fs.readFileSync(path.join(tmpConflictRepo, 'conflict.txt'), 'utf8').includes('theirs change'));
+
+    const createdCommit = await conflictClient.commitStagedChanges(tmpConflictRepo, 'fix(merge): resolve conflict #14');
+    assert.ok(createdCommit.hash.length >= 7);
+    assert.strictEqual(createdCommit.subject, 'fix(merge): resolve conflict #14');
+
+    let emptyCommitBlocked = false;
+    try {
+      await conflictClient.commitStagedChanges(tmpConflictRepo, 'chore: empty', false);
+    } catch {
+      emptyCommitBlocked = true;
+    }
+    assert.strictEqual(emptyCommitBlocked, true, 'Clean index commit should reject when stageAllIfEmpty is false');
+  } finally {
+    fs.rmSync(tmpConflictRepo, { recursive: true, force: true });
+  }
+
+  // Provider parity & HTTP mocking for GitHub + GitLab
+  const ghProv = new GitHubProvider();
+  const glProv = new GitLabProvider();
+  const fgProv = new ForgejoProvider();
+  assert.strictEqual(typeof ghProv.getCommitStatuses, 'function');
+  assert.strictEqual(typeof ghProv.getPullRequestComments, 'function');
+  assert.strictEqual(typeof ghProv.createPullRequestComment, 'function');
+  assert.strictEqual(typeof ghProv.approvePullRequest, 'function');
+  assert.strictEqual(typeof glProv.createIssueComment, 'function');
+  assert.strictEqual(typeof glProv.setIssueState, 'function');
+  assert.strictEqual(typeof glProv.getCommitStatuses, 'function');
+  assert.strictEqual(typeof glProv.getPullRequestComments, 'function');
+  assert.strictEqual(typeof glProv.createPullRequestComment, 'function');
+  assert.strictEqual(typeof glProv.approvePullRequest, 'function');
+  assert.strictEqual(typeof fgProv.getPullRequestComments, 'function');
+  assert.strictEqual(typeof fgProv.approvePullRequest, 'function');
+
+  const originalFetch = globalThis.fetch;
+  const fetchedUrls: string[] = [];
+  try {
+    (globalThis as any).fetch = async (url: string, init?: any) => {
+      fetchedUrls.push(`${init?.method || 'GET'} ${url}`);
+      if (url.includes('/pulls') && url.includes('/reviews')) {
+        return { ok: true, status: 200, json: async () => ({ id: 99 }) };
+      }
+      if (url.includes('/pulls')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              id: 1,
+              number: 42,
+              title: 'Enterprise GH PR',
+              draft: false,
+              mergeable: true,
+              user: { login: 'octo' },
+              head: { ref: 'feat/x' },
+              base: { ref: 'staging' },
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ],
+        };
+      }
+      if (url.includes('/merge_requests/') && url.endsWith('/approve')) {
+        return { ok: true, status: 201, json: async () => ({ approved: true }) };
+      }
+      if (url.includes('/merge_requests')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              id: 2,
+              iid: 77,
+              title: 'Self-hosted GL MR',
+              draft: false,
+              has_conflicts: true,
+              head_pipeline: { status: 'failed' },
+              author: { username: 'gluser' },
+              source_branch: 'fix/y',
+              target_branch: 'staging',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ],
+        };
+      }
+      if (url.includes('/commits/') && url.endsWith('/status')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ statuses: [{ context: 'ci/build', state: 'success' }] }),
+        };
+      }
+      if (url.includes('/issues/42/comments')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => (init?.method === 'POST' ? { id: 501, body: 'LGTM', user: { login: 'me' } } : []),
+        };
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    };
+
+    const gheRepo = {
+      provider: 'github' as const,
+      host: 'github.corp.local',
+      owner: 'org',
+      repo: 'app',
+      webUrl: 'https://github.corp.local/org/app',
+      isPrivate: true,
+      authConnected: true,
+    };
+    const ghePrs = await ghProv.getPullRequests(gheRepo, 'ready');
+    assert.strictEqual(ghePrs.length, 1);
+    assert.strictEqual(ghePrs[0].number, 42);
+    assert.ok(fetchedUrls.some((u) => u.includes('https://github.corp.local/api/v3/repos/org/app/pulls')));
+    const gheStatus = await ghProv.getCommitStatuses(gheRepo, 'abc1234');
+    assert.strictEqual(gheStatus[0].state, 'success');
+    await ghProv.approvePullRequest(gheRepo, 42);
+    assert.ok(fetchedUrls.some((u) => u.includes('POST https://github.corp.local/api/v3/repos/org/app/pulls/42/reviews')));
+
+    const glRepo = {
+      provider: 'gitlab' as const,
+      host: 'gitlab.corp.local',
+      owner: 'group',
+      repo: 'service',
+      webUrl: 'https://gitlab.corp.local/group/service',
+      isPrivate: true,
+      authConnected: true,
+    };
+    const glBlocked = await glProv.getPullRequests(glRepo, 'blocked');
+    assert.strictEqual(glBlocked.length, 1);
+    assert.strictEqual(glBlocked[0].ciStatus, 'failure');
+    await glProv.approvePullRequest(glRepo, 77);
+    assert.ok(fetchedUrls.some((u) => u.includes('POST https://gitlab.corp.local/api/v4/projects/group%2Fservice/merge_requests/77/approve')));
+
+    // Verify LRU cached fallback when fetch throws
+    (globalThis as any).fetch = async () => {
+      throw new Error('Offline');
+    };
+    const cachedGhePrs = await ghProv.getPullRequests(gheRepo, 'ready');
+    assert.strictEqual(cachedGhePrs.length, 1);
+    const cachedGlMrs = await glProv.getPullRequests(glRepo, 'blocked');
+    assert.strictEqual(cachedGlMrs.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  console.log('  [PASS] Conflict Studio, Conventional Commits & GitHub/GitLab Parity tests passed!');
+
+  // 49. Test Security Hardening: IPC Schema Validator, MCP Rate Limiting & Audit Log Resource (Issue #17)
+  console.log('▶ Testing IPC Schema Validator, MCP Rate Limiter & Audit Log Resource...');
+  assert.strictEqual(IpcSchemaValidator.validateWebviewMessage({ command: 'requestData' }).valid, true);
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'resolveConflictFile',
+      payload: { filePath: 'src/index.ts', strategy: 'ours' },
+    }).valid,
+    true
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'openExternal',
+      payload: 'https://github.com/Ignaciobrenas/CommitFlow',
+    }).valid,
+    true
+  );
+
+  // Disallowed / malicious IPC payloads
+  assert.strictEqual(IpcSchemaValidator.validateWebviewMessage(null).valid, false);
+  assert.strictEqual(IpcSchemaValidator.validateWebviewMessage(['array']).valid, false);
+  assert.strictEqual(IpcSchemaValidator.validateWebviewMessage({ command: 'execArbitraryCommand' }).valid, false);
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'openFile',
+      payload: { filePath: '../../etc/passwd' },
+    }).valid,
+    false
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'openFile',
+      payload: { filePath: 'src/file.ts\0.png' },
+    }).valid,
+    false
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'openExternal',
+      payload: 'javascript:alert(1)',
+    }).valid,
+    false
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage(
+      JSON.parse('{"command":"filter","payload":{"__proto__":{"isAdmin":true}}}')
+    ).valid,
+    false
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'dndResetBranchToCommit',
+      payload: { branchName: '--upload-pack=evil', targetHash: 'deadbeef' },
+    }).valid,
+    false
+  );
+
+  // HTTP server rate limit (429) & audit log ring buffer
+  sharedMcpAuditLog.clear();
+  const secKeyMgr = ApiKeyManager.getInstance();
+  const { plaintextKey: secToken, metadata: secKeyMeta } = await secKeyMgr.generateKey('Rate Limit Audit Key', ['read']);
+  const secHttp = new CommitFlowHttpServer({
+    port: 0,
+    repoRoot: process.cwd(),
+    rateLimitMax: 2,
+    rateLimitWindowMs: 10_000,
+  });
+
+  try {
+    const started = await secHttp.start();
+    const baseUrl = `http://${started.host}:${started.port}`;
+
+    // Request 1 & 2 succeed
+    const r1 = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'resources/list' }),
+    });
+    assert.strictEqual(r1.status, 200);
+    const listJson: any = await r1.json();
+    assert.ok(
+      listJson.result.resources.some((r: any) => r.uri === 'commitflow://mcp/audit-log'),
+      'MCP server should list commitflow://mcp/audit-log resource'
+    );
+
+    const r2 = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'resources/read',
+        params: { uri: 'commitflow://mcp/audit-log' },
+      }),
+    });
+    assert.strictEqual(r2.status, 200);
+
+    // Request 3 hits sliding-window rate limit -> 429
+    const r3 = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'ping' }),
+    });
+    assert.strictEqual(r3.status, 429);
+    assert.ok(r3.headers.get('retry-after'), '429 response should include Retry-After header');
+
+    const logs = secHttp.getAuditLogs();
+    assert.ok(logs.some((e) => e.status === 200 && e.rpcMethod === 'resources/list'));
+    assert.ok(logs.some((e) => e.status === 429 && e.reason === 'rate_limit_exceeded'));
+  } finally {
+    await secHttp.stop();
+    await secKeyMgr.revokeKey(secKeyMeta.id);
+  }
+
+  console.log('  [PASS] IPC Schema Validator, MCP Rate Limiter & Audit Log Resource tests passed!');
+
+  // =========================================================================
+  // Suite 50: Deterministic Fuzzing (1050 iterations) & MCP E2E Integration
+  // =========================================================================
+  console.log('\n[Test 50/50] Running Deterministic Fuzzing & Real Repo MCP E2E Suite...');
+  await runFuzzTestSuite();
+  await runMcpE2eTestSuite();
+  console.log('  [PASS] Deterministic Fuzzing (1,050 iterations) & Real-Repo MCP E2E Suite passed!');
+
+  console.log('\n[PASS] ALL 50 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);

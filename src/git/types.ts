@@ -346,8 +346,31 @@ export interface WebviewToExtensionMessage {
     | 'skipRebase'
     | 'requestAiKeys'
     | 'generateAiKey'
-    | 'revokeAiKey';
+    | 'revokeAiKey'
+    // Advanced DAG Filters & Drag-and-Drop:
+    | 'applyDagFilters'
+    | 'dndResetBranchToCommit'
+    | 'dndCherryPickToBranch'
+    | 'dndRebaseOntoCommit'
+    // Conflict Resolution Studio, Conventional Commits & PR Actions:
+    | 'requestConflictedFiles'
+    | 'resolveConflictFile'
+    | 'openMergeEditor'
+    | 'abortMerge'
+    | 'requestCommitTemplate'
+    | 'commitStagedChanges'
+    | 'requestPrComments'
+    | 'addPrComment'
+    | 'approvePullRequest';
   payload?: any;
+}
+
+export interface DagQueryFilters {
+  firstParent?: boolean;
+  hideRemotes?: boolean;
+  since?: string;
+  until?: string;
+  filePath?: string;
 }
 
 export interface ExtensionToWebviewMessage {
@@ -382,6 +405,12 @@ export interface ExtensionToWebviewMessage {
     | 'aiKeysData'
     | 'aiKeyGenerated'
     | 'aiKeyRevoked'
+    | 'conflictedFilesData'
+    | 'commitTemplateData'
+    | 'commitCreated'
+    | 'prCommentsData'
+    | 'prCommentAdded'
+    | 'prApproved'
     | 'error'
     | 'loading';
   payload?: any;
@@ -481,5 +510,13 @@ export interface RebaseSimulationResult {
   reorderedCommitsCount: number;
   squashCount: number;
   dropCount: number;
+}
+
+export interface ConflictedFileInfo {
+  filePath: string;
+  hunksCount: number;
+  oursLabel?: string;
+  theirsLabel?: string;
+  previewLines?: string[];
 }
 

@@ -9,6 +9,7 @@ import {
   CloudPatch,
   CommitComparisonResult,
   ContributorStat,
+  DagQueryFilters,
   FileCommitRevision,
   GitAuthor,
   GitBisectStatus,
@@ -25,6 +26,7 @@ import {
   RebaseSimulationResult,
   RemoteRepoInfo,
   RepoHealthMetrics,
+  ConflictedFileInfo,
   RepositoryOption,
   RepoStats,
   UserPersonalStats,
@@ -202,20 +204,35 @@ export class GitClient {
   public async getCommits(
     cwd: string,
     limit = 300,
-    skip = 0
+    skip = 0,
+    filters?: DagQueryFilters
   ): Promise<GitCommit[]> {
     const format =
       '%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%ct%x1f%D%x1f%s%x1f%b%x1f%G?%x1f%GS%x1f%GK%x1e';
-    const args = [
-      'log',
-      '--all',
+    const args = ['log', filters?.hideRemotes ? '--branches' : '--all'];
+    if (filters?.hideRemotes) {
+      args.push('--tags');
+    }
+    if (filters?.firstParent) {
+      args.push('--first-parent');
+    }
+    args.push(
       '--topo-order',
       '--parents',
       `--format=${format}`,
-      `-n`,
+      '-n',
       limit.toString(),
-      `--skip=${skip}`,
-    ];
+      `--skip=${skip}`
+    );
+    if (filters?.since) {
+      args.push(`--since=${filters.since}`);
+    }
+    if (filters?.until) {
+      args.push(`--until=${filters.until}`);
+    }
+    if (filters?.filePath && !filters.filePath.includes('..') && !filters.filePath.startsWith('-')) {
+      args.push('--', filters.filePath);
+    }
 
     try {
       const raw = await this.execute(args, cwd);
@@ -1154,6 +1171,19 @@ export class GitClient {
     const remoteInfo = await this.getRemoteRepoInfo(cwd);
     const userIdentity = await this.getUserIdentity(cwd);
     const pullRequests: PullRequestInfo[] = [];
+
+    // 0. Prefer native RemoteProvider REST integration (GitHub Enterprise / GitLab / Forgejo) when available
+    if (remoteInfo) {
+      try {
+        const provider = RemoteManager.getInstance().getProvider(remoteInfo.provider);
+        if (provider?.getPullRequests) {
+          const providerPrs = await provider.getPullRequests(remoteInfo, 'all');
+          if (providerPrs.length > 0) {
+            return providerPrs;
+          }
+        }
+      } catch {}
+    }
 
     // 1. Try GitHub CLI (`gh pr list`) if remote is GitHub
     if (remoteInfo?.provider === 'github') {
@@ -2097,6 +2127,24 @@ export class GitClient {
   }
 
   /**
+   * Moves or resets a branch pointer to a target commit hash (supports soft/mixed/hard for active branch).
+   */
+  public async resetBranchToCommit(
+    cwd: string,
+    branchName: string,
+    targetHash: string,
+    mode: 'soft' | 'mixed' | 'hard' = 'mixed'
+  ): Promise<void> {
+    const cleanBranch = branchName.replace(/^HEAD\s*->\s*/, '').trim();
+    const current = await this.getCurrentBranch(cwd).catch(() => '');
+    if (current && current === cleanBranch) {
+      await this.execute(['reset', `--${mode}`, targetHash], cwd);
+    } else {
+      await this.execute(['branch', '-f', cleanBranch, targetHash], cwd);
+    }
+  }
+
+  /**
    * Discovers all submodules in the repository completely offline via GitFsReader
    */
   public async getSubmodules(cwd: string): Promise<GitSubmodule[]> {
@@ -2342,5 +2390,131 @@ export class GitClient {
    */
   public async skipRebase(cwd: string): Promise<string> {
     return await this.execute(['rebase', '--skip'], cwd);
+  }
+
+  /**
+   * Aborts an in-flight merge operation
+   */
+  public async abortMerge(cwd: string): Promise<string> {
+    return await this.execute(['merge', '--abort'], cwd);
+  }
+
+  /**
+   * Returns unmerged conflicted files with conflict hunk counts and header preview lines.
+   */
+  public async getConflictedFiles(cwd: string): Promise<ConflictedFileInfo[]> {
+    let raw = '';
+    try {
+      raw = await this.execute(['diff', '--name-only', '--diff-filter=U'], cwd);
+    } catch {
+      return [];
+    }
+
+    const relPaths = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const rootResolved = path.resolve(cwd);
+    const results: ConflictedFileInfo[] = [];
+
+    for (const relPath of relPaths) {
+      const absPath = path.resolve(cwd, relPath);
+      if (absPath !== rootResolved && !absPath.startsWith(rootResolved + path.sep)) {
+        continue;
+      }
+
+      let hunksCount = 0;
+      let oursLabel: string | undefined;
+      let theirsLabel: string | undefined;
+      const previewLines: string[] = [];
+
+      try {
+        if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+          const content = fs.readFileSync(absPath, 'utf8');
+          const lines = content.split(/\r?\n/);
+          for (const line of lines) {
+            if (line.startsWith('<<<<<<<')) {
+              hunksCount++;
+              if (!oursLabel) oursLabel = line.slice(7).trim() || 'HEAD';
+            } else if (line.startsWith('>>>>>>>') && !theirsLabel) {
+              theirsLabel = line.slice(7).trim() || 'incoming';
+            }
+            if (previewLines.length < 12) {
+              previewLines.push(line);
+            }
+          }
+        }
+      } catch {
+        // Binary or unreadable conflicted file; keep metadata entry
+      }
+
+      results.push({
+        filePath: relPath.replace(/\\/g, '/'),
+        hunksCount,
+        oursLabel,
+        theirsLabel,
+        previewLines,
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Resolves a conflicted file using 'ours', 'theirs', or staging manually edited content.
+   */
+  public async resolveConflictFile(
+    cwd: string,
+    filePath: string,
+    strategy: 'ours' | 'theirs' | 'mark-resolved'
+  ): Promise<void> {
+    const cleanPath = (filePath || '').trim();
+    if (!cleanPath) {
+      throw new Error('File path is required to resolve conflict.');
+    }
+
+    const rootResolved = path.resolve(cwd);
+    const absPath = path.resolve(cwd, cleanPath);
+    if (absPath !== rootResolved && !absPath.startsWith(rootResolved + path.sep)) {
+      throw new Error('Invalid conflict path outside repository root.');
+    }
+
+    if (strategy === 'ours') {
+      await this.execute(['checkout', '--ours', '--', cleanPath], cwd);
+    } else if (strategy === 'theirs') {
+      await this.execute(['checkout', '--theirs', '--', cleanPath], cwd);
+    }
+
+    await this.execute(['add', '--', cleanPath], cwd);
+  }
+
+  /**
+   * Commits staged changes (optionally staging all tracked/untracked changes when index is empty).
+   */
+  public async commitStagedChanges(
+    cwd: string,
+    message: string,
+    stageAllIfEmpty = false
+  ): Promise<{ hash: string; subject: string }> {
+    const cleanMessage = (message || '').trim();
+    if (!cleanMessage) {
+      throw new Error('Commit message cannot be empty.');
+    }
+
+    let staged = (await this.execute(['diff', '--cached', '--name-only'], cwd)).trim();
+    if (!staged && stageAllIfEmpty) {
+      await this.execute(['add', '-A'], cwd);
+      staged = (await this.execute(['diff', '--cached', '--name-only'], cwd)).trim();
+    }
+
+    if (!staged) {
+      throw new Error('No staged changes found. Stage files or enable Stage All Changes.');
+    }
+
+    await this.execute(['commit', '-m', cleanMessage], cwd);
+    const hash = (await this.execute(['rev-parse', 'HEAD'], cwd)).trim();
+    const subject = cleanMessage.split(/\r?\n/)[0].trim();
+    return { hash, subject };
   }
 }
