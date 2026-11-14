@@ -24,6 +24,19 @@ import {
   UserPersonalStats,
 } from '../git/types';
 import { t, Language } from '../i18n/locales';
+import {
+  CfButton,
+  CfBadge,
+  CfDrawer,
+  CfTabs,
+  CfToast,
+  CfSkeleton,
+  clampPopoverToViewport,
+  escapeHtml,
+} from './primitives';
+
+// Expose native UI primitives for modular feature modules
+export { CfButton, CfBadge, CfDrawer, CfTabs, CfToast, CfSkeleton, escapeHtml };
 
 declare function acquireVsCodeApi(): {
   postMessage(msg: any): void;
@@ -741,12 +754,13 @@ function applyFilters(): void {
 }
 
 function renderLoading(): void {
-  tableContainer.innerHTML = `
-    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--text-muted);">
-      <i class="codicon codicon-loading codicon-modifier-spin" style="font-size:24px; color:var(--accent-cyan);"></i>
-      <div>${tr('graph.loading')}</div>
-    </div>
-  `;
+  tableContainer.innerHTML = '';
+  const skeleton = CfSkeleton({ rows: 10, variant: 'graph' });
+  const label = document.createElement('div');
+  label.style.cssText = 'text-align:center; font-size:var(--font-size-xs); color:var(--text-muted); padding:6px;';
+  label.textContent = tr('graph.loading');
+  tableContainer.appendChild(label);
+  tableContainer.appendChild(skeleton);
 }
 
 function renderError(err: string): void {
@@ -1418,20 +1432,20 @@ function showHoverPopover(e: MouseEvent, node: GraphNode): void {
 
   hoverPopover.innerHTML = `
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <img src="${commit.author.avatarUrl}" style="width:24px; height:24px; border-radius:50%;" />
+      <img src="${escapeHtml(commit.author.avatarUrl)}" alt="" style="width:24px; height:24px; border-radius:50%;" />
       <div>
-        <div style="font-weight:600; font-size:var(--font-size-sm);">${commit.author.name}</div>
-        <div style="font-size:var(--font-size-xs); color:var(--text-muted);">${commit.author.relativeTime} &bull; \`${commit.shortHash}\`</div>
+        <div style="font-weight:600; font-size:var(--font-size-sm);">${escapeHtml(commit.author.name)}</div>
+        <div class="tabular-nums" style="font-size:var(--font-size-xs); color:var(--text-muted);">${escapeHtml(commit.author.relativeTime)} &bull; <code>${escapeHtml(commit.shortHash)}</code></div>
       </div>
     </div>
-    <div style="font-size:var(--font-size-sm); color:var(--text-primary); margin-bottom:6px;">${commit.subject}</div>
+    <div style="font-size:var(--font-size-sm); color:var(--text-primary); margin-bottom:6px;">${escapeHtml(commit.subject)}</div>
     ${
       commit.refs.length > 0
         ? `<div style="display:flex; gap:4px; flex-wrap:wrap;">
             ${commit.refs
               .map(
                 (r) =>
-                  `<span class="ref-pill ${r.isHead ? 'head' : 'branch'}"><i class="codicon codicon-git-branch" style="font-size:9px;"></i> ${r.name}</span>`
+                  `<span class="ref-pill ${r.isHead ? 'head' : 'branch'}"><i class="codicon codicon-git-branch" aria-hidden="true" style="font-size:9px;"></i> ${escapeHtml(r.name)}</span>`
               )
               .join('')}
            </div>`
@@ -1439,26 +1453,9 @@ function showHoverPopover(e: MouseEvent, node: GraphNode): void {
     }
   `;
 
-  const popoverWidth = Math.min(300, window.innerWidth - 20);
-  const popoverHeight = 130;
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-
-  // Clamp top position: if bottom doesn't fit, flip to top
-  let top = rect.bottom + 4;
-  if (top + popoverHeight > window.innerHeight) {
-    top = Math.max(8, rect.top - popoverHeight - 4);
-  }
-
-  // Clamp left position: ensure at least 8px from left and right viewport edges
-  let left = rect.left + 40;
-  if (left + popoverWidth > window.innerWidth - 8) {
-    left = Math.max(8, window.innerWidth - popoverWidth - 8);
-  }
-
-  hoverPopover.style.top = `${Math.round(top)}px`;
-  hoverPopover.style.left = `${Math.round(left)}px`;
-  hoverPopover.style.maxWidth = `${popoverWidth}px`;
   hoverPopover.classList.add('visible');
+  clampPopoverToViewport(hoverPopover, rect, 8);
 }
 
 function hideHoverPopover(): void {
@@ -2832,15 +2829,6 @@ function renderWorktrees(): void {
       }
     });
   });
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }
 
 function renderCloudPatches(): void {
