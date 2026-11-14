@@ -5485,3 +5485,92 @@ button:focus-visible,
     display: none !important;
   }
 }
+
+/* ==========================================================================
+   Advanced DAG Filters, Minimap & Drag-and-Drop (Issues #8 & #9)
+   ========================================================================== */
+.dag-advanced-filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  box-sizing: border-box;
+}
+
+.filter-toggle-pill.active {
+  background: rgba(6, 182, 212, 0.16);
+  color: var(--accent-cyan);
+  border-color: rgba(6, 182, 212, 0.45);
+}
+
+.dag-filter-date {
+  width: 122px;
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: var(--font-size-xs);
+}
+
+.dag-filter-path {
+  width: 130px;
+  min-width: 80px;
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+}
+
+.dag-jump-group {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dag-workspace-row {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.dag-workspace-row .graph-table-container {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dag-minimap-container {
+  width: 76px;
+  flex: 0 0 76px;
+  border-left: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+#dag-minimap-canvas {
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  display: block;
+}
+
+.commit-row.dag-drop-target {
+  outline: 2px dashed var(--accent-cyan);
+  outline-offset: -2px;
+  background: rgba(6, 182, 212, 0.12) !important;
+}
+
+@media (max-width: 440px) {
+  .dag-minimap-container {
+    display: none;
+  }
+  .dag-filter-date,
+  .dag-filter-path {
+    flex: 1 1 100px;
+    width: auto;
+  }
+}
