@@ -13,6 +13,7 @@ import { ApiKeyManager } from '../mcp/apiKeyManager';
 import { AdaptiveDebouncer } from '../git/branchWatcher';
 import { readGitMessageTemplate } from '../git/conventionalCommits';
 import { RemoteManager } from '../remotes/remoteManager';
+import { IpcSchemaValidator } from '../utils/ipcValidator';
 import {
   CommitFlowSettings,
   DagQueryFilters,
@@ -397,6 +398,12 @@ export class GraphWebviewProvider
 
   private setupMessageListener(webview: vscode.Webview): void {
     webview.onDidReceiveMessage(async (msg: WebviewToExtensionMessage) => {
+      const validation = IpcSchemaValidator.validateWebviewMessage(msg);
+      if (!validation.valid) {
+        console.warn(`[CommitFlow IPC] Rejected message: ${validation.reason}`);
+        return;
+      }
+
       const root = await this.getEffectiveRepoRoot();
 
       switch (msg.command) {
