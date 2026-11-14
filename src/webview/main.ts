@@ -444,6 +444,14 @@ window.addEventListener('message', (event) => {
       handleAiKeyGenerated(message.payload);
       break;
 
+    case 'rebaseCommitsData':
+      handleRebaseCommitsData(message.payload);
+      break;
+
+    case 'rebaseSimulationData':
+      handleRebaseSimulationData(message.payload);
+      break;
+
     case 'switchTab':
       if (message.payload) {
         switchTab(message.payload);
@@ -1184,10 +1192,20 @@ function renderCommitRow(
       openTagModal(node.commit.hash);
     });
 
+    const btnRebaseRow = document.createElement('button');
+    btnRebaseRow.className = 'btn-row-action';
+    btnRebaseRow.title = 'Rebase Interactivo desde aquí';
+    btnRebaseRow.innerHTML = `<i class="codicon codicon-git-pull-request-go-to-changes"></i>`;
+    btnRebaseRow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openRebaseStudio(node.commit.hash);
+    });
+
     rowActions.appendChild(btnCopySha);
     rowActions.appendChild(btnCopyMsg);
     rowActions.appendChild(btnCheckoutRow);
     rowActions.appendChild(btnCherryPick);
+    rowActions.appendChild(btnRebaseRow);
     rowActions.appendChild(btnCreateTag);
     rowActions.appendChild(btnInspect);
 
@@ -1198,8 +1216,13 @@ function renderCommitRow(
     row.appendChild(rowActions);
   }
 
-  // Row Click & Hover handlers
+  // Row Click, Context Menu & Hover handlers
   row.addEventListener('click', () => selectCommit(node));
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    selectCommit(node);
+    openRebaseStudio(node.commit.hash);
+  });
   row.addEventListener('mouseenter', (e) => {
     showHoverPopover(e, node);
     highlightBranchPath(node.commit.hash);
@@ -1506,7 +1529,7 @@ function selectCommit(node: GraphNode): void {
         : ''
     }
 
-    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+    <div class="drawer-action-buttons">
       <button class="btn-icon" id="btn-copy-sha">
         <i class="codicon codicon-copy"></i> ${tr('drawer.copySha')} (${commit.shortHash})
       </button>
@@ -1524,6 +1547,9 @@ function selectCommit(node: GraphNode): void {
       </button>
       <button class="btn-icon" id="btn-drawer-revert" title="${tr('drawer.revert')}">
         <i class="codicon codicon-history"></i> ${tr('drawer.revert')}
+      </button>
+      <button class="btn-icon" id="btn-drawer-rebase" title="Interactive Rebase desde este commit">
+        <i class="codicon codicon-git-pull-request-go-to-changes"></i> Rebase Interactivo
       </button>
       <button class="btn-icon" id="btn-drawer-create-tag" title="${tr('drawer.createTag')}">
         <i class="codicon codicon-tag"></i> ${tr('drawer.createTag')}
@@ -1592,6 +1618,10 @@ function selectCommit(node: GraphNode): void {
     if (confirm(tr('drawer.confirmRevert', { hash: commit.shortHash }))) {
       vscode.postMessage({ command: 'revertCommit', payload: { hash: commit.hash } });
     }
+  });
+
+  document.getElementById('btn-drawer-rebase')?.addEventListener('click', () => {
+    openRebaseStudio(commit.hash);
   });
 
   document.getElementById('btn-drawer-create-tag')?.addEventListener('click', () => {
@@ -3053,6 +3083,7 @@ function closeAllModals(): void {
   closeComparisonModal();
   closeBisectModal();
   cherryPickForecastModal?.classList.remove('open');
+  closeRebaseStudioModal();
   document.querySelectorAll<HTMLElement>('.modal-overlay.open').forEach((m) => m.classList.remove('open'));
 }
 
@@ -4042,7 +4073,224 @@ function handleAiKeysData(payload: { keys: any[] }): void {
   });
 }
 
-// Rebase Resolution Banner & Rebase Studio Modal Hooks
+// --------------------------------------------------------------------------
+// Interactive Rebase Resolution Banner & Rebase Studio Engine
+// --------------------------------------------------------------------------
+interface RebaseTodoItem {
+  action: 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
+  hash: string;
+  shortHash: string;
+  author: string;
+  subject: string;
+}
+
+let currentRebaseBaseHash = '';
+let currentRebaseTodoList: RebaseTodoItem[] = [];
+let draggedRebaseIndex: number | null = null;
+
+const rebaseStudioModal = document.getElementById('rebase-studio-modal') as HTMLElement | null;
+
+function openRebaseStudio(baseHash: string): void {
+  currentRebaseBaseHash = baseHash;
+  vscode.postMessage({
+    command: 'requestRebaseCommits',
+    payload: { baseHash },
+  });
+}
+
+function closeRebaseStudioModal(): void {
+  rebaseStudioModal?.classList.remove('open');
+}
+
+function handleRebaseCommitsData(payload: { baseHash: string; commits: RebaseTodoItem[] }): void {
+  currentRebaseBaseHash = payload.baseHash;
+  currentRebaseTodoList = (payload.commits || []).map((c) => ({
+    ...c,
+    action: c.action || 'pick',
+  }));
+  renderRebaseStudio();
+  rebaseStudioModal?.classList.add('open');
+  if (rebaseStudioModal) trapModalFocus(rebaseStudioModal);
+}
+
+function handleRebaseSimulationData(payload: {
+  canRebaseCleanly: boolean;
+  potentialConflicts: string[];
+  reorderedCount?: number;
+  squashedCount?: number;
+  droppedCount?: number;
+  reorderedCommitsCount?: number;
+  squashCount?: number;
+  dropCount?: number;
+}): void {
+  const fb = document.getElementById('rebase-simulation-feedback');
+  if (!fb) return;
+  const reordered = payload.reorderedCommitsCount ?? payload.reorderedCount ?? 0;
+  const squashed = payload.squashCount ?? payload.squashedCount ?? 0;
+  const dropped = payload.dropCount ?? payload.droppedCount ?? 0;
+  fb.style.display = 'block';
+  if (payload.canRebaseCleanly && (!payload.potentialConflicts || payload.potentialConflicts.length === 0)) {
+    fb.style.background = 'rgba(16, 185, 129, 0.15)';
+    fb.style.color = '#10b981';
+    fb.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+    fb.innerHTML = `<i class="codicon codicon-pass"></i> Simulación previa completada: 0 conflictos previstos. Se aplicarán ${currentRebaseTodoList.length} commits (${reordered} reordenados, ${squashed} squashes/fixups, ${dropped} descartados).`;
+  } else {
+    fb.style.background = 'rgba(239, 68, 68, 0.15)';
+    fb.style.color = '#ef4444';
+    fb.style.border = '1px solid rgba(239, 68, 68, 0.35)';
+    const conflicts = (payload.potentialConflicts || []).map((c) => `<code>${escapeHtml(c)}</code>`).join(', ');
+    fb.innerHTML = `<i class="codicon codicon-warning"></i> Posibles conflictos detectados: ${conflicts || 'archivos en conflicto'}. Resuelve los conflictos durante el rebase.`;
+  }
+}
+
+function renderRebaseStudio(): void {
+  const container = document.getElementById('rebase-todo-container');
+  const countEl = document.getElementById('rebase-commits-count');
+  const feedbackEl = document.getElementById('rebase-simulation-feedback');
+  if (feedbackEl) feedbackEl.style.display = 'none';
+  if (countEl) countEl.textContent = `${currentRebaseTodoList.length} commit(s)`;
+  if (!container) return;
+
+  if (currentRebaseTodoList.length === 0) {
+    container.innerHTML = `
+      <div style="padding:16px; text-align:center; color:var(--text-muted); font-size:var(--font-size-sm);">
+        <i class="codicon codicon-info" style="font-size:20px; margin-bottom:4px; display:block;"></i>
+        No hay commits pendientes de rebase entre este commit y HEAD.
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  currentRebaseTodoList.forEach((item, index) => {
+    const itemEl = document.createElement('div');
+    itemEl.className = `rebase-todo-item action-${item.action}`;
+    itemEl.setAttribute('data-index', String(index));
+    itemEl.draggable = true;
+
+    itemEl.addEventListener('dragstart', (e) => {
+      draggedRebaseIndex = index;
+      itemEl.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(index));
+      }
+    });
+
+    itemEl.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      if (draggedRebaseIndex !== index) {
+        itemEl.classList.add('drag-over');
+      }
+    });
+
+    itemEl.addEventListener('dragleave', () => {
+      itemEl.classList.remove('drag-over');
+    });
+
+    itemEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      itemEl.classList.remove('drag-over');
+      const rawIdx = e.dataTransfer?.getData('text/plain');
+      const fromIndex = draggedRebaseIndex !== null ? draggedRebaseIndex : Number(rawIdx);
+      draggedRebaseIndex = null;
+      if (
+        Number.isInteger(fromIndex) &&
+        fromIndex !== index &&
+        fromIndex >= 0 &&
+        fromIndex < currentRebaseTodoList.length
+      ) {
+        const [moved] = currentRebaseTodoList.splice(fromIndex, 1);
+        currentRebaseTodoList.splice(index, 0, moved);
+        renderRebaseStudio();
+      }
+    });
+
+    itemEl.addEventListener('dragend', () => {
+      draggedRebaseIndex = null;
+      container.querySelectorAll('.rebase-todo-item').forEach((el) => {
+        el.classList.remove('dragging', 'drag-over');
+      });
+    });
+
+    const handle = document.createElement('i');
+    handle.className = 'codicon codicon-grabber rebase-item-handle';
+    handle.style.cursor = 'grab';
+    handle.title = 'Arrastrar para reordenar';
+
+    const select = document.createElement('select');
+    select.className = 'rebase-action-select';
+    ['pick', 'reword', 'edit', 'squash', 'fixup', 'drop'].forEach((act) => {
+      const opt = document.createElement('option');
+      opt.value = act;
+      opt.textContent = act;
+      if (item.action === act) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.addEventListener('change', (e) => {
+      item.action = (e.target as HTMLSelectElement).value as any;
+      itemEl.className = `rebase-todo-item action-${item.action}`;
+    });
+
+    const sha = document.createElement('span');
+    sha.className = 'rebase-item-sha';
+    sha.textContent = item.shortHash || item.hash.slice(0, 7);
+
+    const subject = document.createElement('span');
+    subject.className = 'rebase-item-subject';
+    subject.textContent = item.subject;
+    subject.title = item.subject;
+
+    const author = document.createElement('span');
+    author.className = 'rebase-item-author';
+    author.textContent = item.author || '';
+
+    const controls = document.createElement('div');
+    controls.className = 'rebase-item-controls';
+
+    const btnUp = document.createElement('button');
+    btnUp.className = 'btn-sm';
+    btnUp.title = 'Mover arriba';
+    btnUp.disabled = index === 0;
+    btnUp.innerHTML = '<i class="codicon codicon-arrow-up"></i>';
+    btnUp.addEventListener('click', () => {
+      if (index > 0) {
+        const temp = currentRebaseTodoList[index - 1];
+        currentRebaseTodoList[index - 1] = currentRebaseTodoList[index];
+        currentRebaseTodoList[index] = temp;
+        renderRebaseStudio();
+      }
+    });
+
+    const btnDown = document.createElement('button');
+    btnDown.className = 'btn-sm';
+    btnDown.title = 'Mover abajo';
+    btnDown.disabled = index === currentRebaseTodoList.length - 1;
+    btnDown.innerHTML = '<i class="codicon codicon-arrow-down"></i>';
+    btnDown.addEventListener('click', () => {
+      if (index < currentRebaseTodoList.length - 1) {
+        const temp = currentRebaseTodoList[index + 1];
+        currentRebaseTodoList[index + 1] = currentRebaseTodoList[index];
+        currentRebaseTodoList[index] = temp;
+        renderRebaseStudio();
+      }
+    });
+
+    controls.appendChild(btnUp);
+    controls.appendChild(btnDown);
+
+    itemEl.appendChild(handle);
+    itemEl.appendChild(select);
+    itemEl.appendChild(sha);
+    itemEl.appendChild(subject);
+    itemEl.appendChild(author);
+    itemEl.appendChild(controls);
+
+    container.appendChild(itemEl);
+  });
+}
+
+// Banner controls
 document.getElementById('btn-rebase-continue')?.addEventListener('click', () => {
   vscode.postMessage({ command: 'continueRebase' });
 });
@@ -4053,10 +4301,38 @@ document.getElementById('btn-rebase-abort')?.addEventListener('click', () => {
   vscode.postMessage({ command: 'abortRebase' });
 });
 
-const rebaseStudioModal = document.getElementById('rebase-studio-modal');
-document.getElementById('rebase-studio-modal-close')?.addEventListener('click', () => {
-  rebaseStudioModal?.classList.remove('open');
+// Modal controls
+document.getElementById('rebase-studio-modal-close')?.addEventListener('click', closeRebaseStudioModal);
+document.getElementById('btn-rebase-cancel')?.addEventListener('click', closeRebaseStudioModal);
+
+document.getElementById('btn-rebase-dryrun')?.addEventListener('click', () => {
+  if (currentRebaseBaseHash && currentRebaseTodoList.length > 0) {
+    vscode.postMessage({
+      command: 'simulateRebase',
+      payload: {
+        baseHash: currentRebaseBaseHash,
+        todoList: currentRebaseTodoList,
+      },
+    });
+  }
 });
-document.getElementById('btn-rebase-cancel')?.addEventListener('click', () => {
-  rebaseStudioModal?.classList.remove('open');
+
+document.getElementById('btn-rebase-execute')?.addEventListener('click', () => {
+  if (currentRebaseBaseHash && currentRebaseTodoList.length > 0) {
+    vscode.postMessage({
+      command: 'startInteractiveRebase',
+      payload: {
+        baseHash: currentRebaseBaseHash,
+        todoList: currentRebaseTodoList,
+      },
+    });
+    closeRebaseStudioModal();
+  }
+});
+
+// Active branch badge click behavior
+document.getElementById('active-branch-pill')?.addEventListener('click', () => {
+  if (branchSelect) {
+    branchSelect.focus();
+  }
 });

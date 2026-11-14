@@ -1335,7 +1335,52 @@ Host *.internal.corp
   }
   console.log('  [PASS] Native UI Primitives & Zero Deprecated Toolkit Audit tests passed!');
 
-  console.log('\n[PASS] ALL 43 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  console.log('\nTesting Interactive Rebase Studio...');
+  {
+    const webviewSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'main.ts'), 'utf8');
+    assert.ok(webviewSrc.includes("'fixup'"), 'Rebase Studio dropdown must support fixup action');
+    assert.ok(webviewSrc.includes('itemEl.draggable = true'), 'Rebase todo rows must support drag-and-drop reordering');
+    assert.ok(webviewSrc.includes("addEventListener('dragstart'") && webviewSrc.includes("addEventListener('drop'"));
+    assert.ok(webviewSrc.includes("addEventListener('contextmenu'") && webviewSrc.includes('openRebaseStudio('));
+    assert.ok(webviewSrc.includes("command: 'simulateRebase'") && webviewSrc.includes("command: 'startInteractiveRebase'"));
+    assert.ok(cssContent.includes('.rebase-todo-item.action-fixup'));
+    assert.ok(cssContent.includes('.rebase-todo-item.dragging'));
+    assert.ok(cssContent.includes('.rebase-todo-item.drag-over'));
+
+    const rebaseGitClient = new GitClient();
+    const osMod = await import('os');
+    const cpMod = await import('child_process');
+    const tmpRebaseRepo = fs.mkdtempSync(path.join(osMod.tmpdir(), 'commitflow-rebase-test-'));
+    try {
+      cpMod.execFileSync('git', ['init'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['config', 'user.email', 'test@commitflow.dev'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['config', 'user.name', 'CommitFlow Test'], { cwd: tmpRebaseRepo });
+      fs.writeFileSync(path.join(tmpRebaseRepo, 'a.txt'), 'v1\n', 'utf8');
+      cpMod.execFileSync('git', ['add', '.'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'base commit'], { cwd: tmpRebaseRepo });
+      fs.writeFileSync(path.join(tmpRebaseRepo, 'a.txt'), 'v2\n', 'utf8');
+      cpMod.execFileSync('git', ['add', '.'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'second commit'], { cwd: tmpRebaseRepo });
+      fs.writeFileSync(path.join(tmpRebaseRepo, 'b.txt'), 'v1\n', 'utf8');
+      cpMod.execFileSync('git', ['add', '.'], { cwd: tmpRebaseRepo });
+      cpMod.execFileSync('git', ['commit', '-m', 'third commit'], { cwd: tmpRebaseRepo });
+
+      const commits = await rebaseGitClient.getRebaseCommits(tmpRebaseRepo, 'HEAD~2');
+      assert.strictEqual(commits.length, 2, 'getRebaseCommits(HEAD~2) should return 2 linear commits');
+      const sim = await rebaseGitClient.simulateRebase(tmpRebaseRepo, 'HEAD~2', [
+        { ...commits[0], action: 'pick' },
+        { ...commits[1], action: 'fixup' },
+      ]);
+      assert.strictEqual(sim.squashCount, 1, 'simulateRebase should count fixup under squashCount');
+      assert.strictEqual(sim.dropCount, 0);
+      assert.strictEqual(sim.canRebaseCleanly, true);
+    } finally {
+      fs.rmSync(tmpRebaseRepo, { recursive: true, force: true });
+    }
+  }
+  console.log('  [PASS] Interactive Rebase Studio tests passed!');
+
+  console.log('\n[PASS] ALL 44 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);

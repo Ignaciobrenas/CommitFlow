@@ -2184,7 +2184,7 @@ Always check repo state and active branch before making modifications.</code></p
 
     <!-- Git Reflog Time Machine Modal -->
     <div id="reflog-modal" class="modal-overlay">
-      <div class="modal-card" style="width: min(720px, calc(100vw - 20px));">
+      <div class="modal-card" style="width: min(720px, 100%);">
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-history" style="font-size:16px; color:var(--accent-cyan);"></i>
@@ -2198,7 +2198,7 @@ Always check repo state and active branch before making modifications.</code></p
 
     <!-- Repository Health & Storage Diagnostics Modal -->
     <div id="repo-health-modal" class="modal-overlay">
-      <div class="modal-card" style="width: min(640px, calc(100vw - 20px));">
+      <div class="modal-card" style="width: min(640px, 100%);">
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-pulse" style="font-size:16px; color:var(--accent-emerald);"></i>
@@ -2212,7 +2212,7 @@ Always check repo state and active branch before making modifications.</code></p
 
     <!-- Multi-Commit Diff Comparison Modal -->
     <div id="comparison-modal" class="modal-overlay">
-      <div class="modal-card" style="width: min(780px, calc(100vw - 20px));">
+      <div class="modal-card" style="width: min(780px, 100%);">
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-diff" style="font-size:16px; color:var(--accent-purple);"></i>
@@ -2226,7 +2226,7 @@ Always check repo state and active branch before making modifications.</code></p
 
     <!-- Git Bisect Launcher Modal -->
     <div id="bisect-modal" class="modal-overlay">
-      <div class="modal-card" style="width: min(560px, calc(100vw - 20px));">
+      <div class="modal-card" style="width: min(560px, 100%);">
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-search" style="font-size:16px; color:var(--accent-cyan);"></i>
@@ -2258,7 +2258,7 @@ Always check repo state and active branch before making modifications.</code></p
 
     <!-- Pre-Flight Cherry-Pick Conflict Forecaster Modal -->
     <div id="cherry-pick-forecast-modal" class="modal-overlay">
-      <div class="modal-card" style="width: min(600px, calc(100vw - 20px));">
+      <div class="modal-card" style="width: min(600px, 100%);">
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-warning" style="font-size:16px; color:var(--accent-amber);"></i>
@@ -2272,7 +2272,7 @@ Always check repo state and active branch before making modifications.</code></p
 
     <!-- Interactive Rebase Studio Modal -->
     <div id="rebase-studio-modal" class="modal-overlay">
-      <div class="modal-card" style="width: min(850px, calc(100vw - 20px)); max-height: min(80vh, 750px); display: flex; flex-direction: column;">
+      <div class="modal-card" style="width: min(850px, 100%); max-height: min(80vh, 750px); display: flex; flex-direction: column;">
         <div class="modal-header">
           <div style="display:flex; align-items:center; gap:8px;">
             <i class="codicon codicon-git-pull-request-go-to-changes" style="font-size:16px; color:var(--accent-purple);"></i>
@@ -2280,7 +2280,7 @@ Always check repo state and active branch before making modifications.</code></p
           </div>
           <button id="rebase-studio-modal-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
         </div>
-        <div class="modal-body" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:12px; padding:12px;">
+        <div class="modal-body" style="overflow-y:auto; overflow-x:hidden; box-sizing:border-box; flex:1; display:flex; flex-direction:column; gap:12px; padding:12px;">
           <div style="font-size:var(--font-size-sm); color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
             <span>Reordena los commits arrastrando o usando los botones. Selecciona la acción para cada commit:</span>
             <span id="rebase-commits-count" style="font-weight:600; color:var(--text-primary);">0 commits</span>
