@@ -2,14 +2,93 @@ import * as vscode from 'vscode';
 import { GitClient } from './gitClient';
 import { t, Language } from '../i18n/locales';
 
+export interface AdaptiveDebouncerOptions {
+  minDelayMs?: number;
+  maxDelayMs?: number;
+  burstWindowMs?: number;
+  burstThreshold?: number;
+}
+
+/**
+ * Adaptive event debouncer that scales delay from minDelayMs (150ms) up to
+ * maxDelayMs (1000ms) when rapid filesystem bursts (e.g. git rebase/gc) occur.
+ */
+export class AdaptiveDebouncer {
+  private readonly minDelayMs: number;
+  private readonly maxDelayMs: number;
+  private readonly burstWindowMs: number;
+  private readonly burstThreshold: number;
+  private timer: NodeJS.Timeout | null = null;
+  private timestamps: number[] = [];
+  private currentDelayMs: number;
+
+  constructor(
+    private readonly callback: () => void | Promise<void>,
+    options: AdaptiveDebouncerOptions = {}
+  ) {
+    this.minDelayMs = options.minDelayMs ?? 150;
+    this.maxDelayMs = options.maxDelayMs ?? 1000;
+    this.burstWindowMs = options.burstWindowMs ?? 600;
+    this.burstThreshold = options.burstThreshold ?? 3;
+    this.currentDelayMs = this.minDelayMs;
+  }
+
+  public getCurrentDelayMs(): number {
+    return this.currentDelayMs;
+  }
+
+  public trigger(now = Date.now()): void {
+    this.timestamps = this.timestamps.filter((ts) => now - ts <= this.burstWindowMs);
+    this.timestamps.push(now);
+
+    if (this.timestamps.length >= this.burstThreshold) {
+      const exponent = this.timestamps.length - this.burstThreshold + 1;
+      this.currentDelayMs = Math.min(this.maxDelayMs, this.minDelayMs * Math.pow(2, exponent));
+    } else {
+      this.currentDelayMs = this.minDelayMs;
+    }
+
+    if (this.timer) {
+      clearTimeout(this.timer);
+    }
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.currentDelayMs = this.minDelayMs;
+      void this.callback();
+    }, this.currentDelayMs);
+  }
+
+  public flush(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.currentDelayMs = this.minDelayMs;
+    void this.callback();
+  }
+
+  public dispose(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.timestamps = [];
+  }
+}
+
 export class BranchWatcherService implements vscode.Disposable {
   private readonly gitClient = GitClient.getInstance();
   private readonly disposables: vscode.Disposable[] = [];
   private fetchTimer: NodeJS.Timeout | null = null;
   private lastAlertedState: string | null = null;
   private isChecking = false;
+  private readonly refDebouncer: AdaptiveDebouncer;
 
   constructor(private readonly onRefreshRequired: () => void) {
+    this.refDebouncer = new AdaptiveDebouncer(() => this.onGitRefChanged(), {
+      minDelayMs: 150,
+      maxDelayMs: 1000,
+    });
     this.setupFileWatcher();
     this.setupAutoFetchTimer();
 
@@ -31,8 +110,9 @@ export class BranchWatcherService implements vscode.Disposable {
       '**/.git/{refs/heads/**,refs/remotes/**,FETCH_HEAD,HEAD}'
     );
 
-    watcher.onDidChange(() => this.onGitRefChanged(), this, this.disposables);
-    watcher.onDidCreate(() => this.onGitRefChanged(), this, this.disposables);
+    watcher.onDidChange(() => this.refDebouncer.trigger(), this, this.disposables);
+    watcher.onDidCreate(() => this.refDebouncer.trigger(), this, this.disposables);
+    watcher.onDidDelete(() => this.refDebouncer.trigger(), this, this.disposables);
     this.disposables.push(watcher);
   }
 
@@ -241,6 +321,7 @@ export class BranchWatcherService implements vscode.Disposable {
   }
 
   public dispose(): void {
+    this.refDebouncer.dispose();
     if (this.fetchTimer) {
       clearInterval(this.fetchTimer);
       this.fetchTimer = null;

@@ -21,6 +21,9 @@ import { CommitFlowHttpServer } from '../src/mcp/commitflowHttpServer';
 import { PersistenceManager } from '../src/state/persistenceManager';
 import { GitFsReader } from '../src/git/gitFsReader';
 import { computeClampedPosition, escapeHtml } from '../src/webview/primitives';
+import { DagWorkerEngine } from '../src/graph/dagWorkerClient';
+import { AdaptiveDebouncer } from '../src/git/branchWatcher';
+import { GraphWebviewProvider } from '../src/graph/graphWebviewProvider';
 
 console.log('Starting CommitFlow Extended Test Suite...\n');
 
@@ -1512,7 +1515,100 @@ Host *.internal.corp
   }
   console.log('  [PASS] GitFsReader Binary Objects, Packfiles, .git/index, SHA-256 & Reftable tests passed!');
 
-  console.log('\n[PASS] ALL 45 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  console.log('\nTesting DAG Worker Engine, DOM Recycling, AdaptiveDebouncer & IPC Batching...');
+  {
+    const engine = DagWorkerEngine.getInstance();
+    const now = new Date();
+    const author = { name: 'Test', email: 't@example.com', date: now, relativeTime: 'now', avatarUrl: '' };
+    const sampleCommits: GitCommit[] = [
+      {
+        hash: '1111111111111111111111111111111111111111',
+        shortHash: '1111111',
+        parentHashes: ['0000000000000000000000000000000000000000'],
+        author,
+        committer: author,
+        subject: 'feat: worker tip',
+        body: '',
+        refs: [{ name: 'main', type: 'head', isHead: true }],
+      },
+      {
+        hash: '0000000000000000000000000000000000000000',
+        shortHash: '0000000',
+        parentHashes: [],
+        author,
+        committer: author,
+        subject: 'root',
+        body: '',
+        refs: [],
+      },
+    ];
+    const workerNodes = await engine.computeLayoutAsync(sampleCommits, 'cyberpunk');
+    const directNodes = GraphLayout.compute(sampleCommits, 'cyberpunk');
+    assert.strictEqual(workerNodes.length, directNodes.length);
+    assert.strictEqual(workerNodes[0].color, directNodes[0].color);
+
+    let arcCount = 0;
+    let rectCount = 0;
+    const mockCanvas: any = {
+      width: 80,
+      height: 120,
+      getContext: () => ({
+        clearRect: () => {},
+        beginPath: () => {},
+        arc: () => { arcCount++; },
+        fill: () => {},
+        stroke: () => {},
+        fillRect: () => { rectCount++; },
+        strokeRect: () => {},
+        fillStyle: '',
+        strokeStyle: '',
+        lineWidth: 1,
+      }),
+    };
+    engine.renderMinimap(workerNodes, mockCanvas, {
+      width: 80,
+      height: 120,
+      selectedIndex: 0,
+      viewportStartRatio: 0,
+      viewportEndRatio: 0.5,
+    });
+    assert.ok(arcCount >= 2, 'renderMinimap should draw commit dots for every node');
+    assert.ok(rectCount >= 2, 'renderMinimap should draw viewport window and selected marker');
+
+    // AdaptiveDebouncer burst scaling
+    let triggerCount = 0;
+    const debouncer = new AdaptiveDebouncer(() => {
+      triggerCount++;
+    }, { minDelayMs: 150, maxDelayMs: 1000, burstWindowMs: 600, burstThreshold: 3 });
+    debouncer.trigger(1000);
+    assert.strictEqual(debouncer.getCurrentDelayMs(), 150);
+    debouncer.trigger(1010);
+    debouncer.trigger(1020);
+    debouncer.trigger(1030);
+    assert.ok(debouncer.getCurrentDelayMs() > 150 && debouncer.getCurrentDelayMs() <= 1000);
+    debouncer.flush();
+    assert.strictEqual(triggerCount, 1);
+    debouncer.dispose();
+
+    // IPC batch queue deduplication
+    const posted: any[] = [];
+    const mockWebview: any = { postMessage: (m: any) => posted.push(m) };
+    const provider = new GraphWebviewProvider({ scheme: 'file', fsPath: __dirname, path: __dirname } as any);
+    provider.enqueueWebviewMessage(mockWebview, { command: 'toast', payload: { message: 'first' } } as any);
+    provider.enqueueWebviewMessage(mockWebview, { command: 'toast', payload: { message: 'second' } } as any);
+    const flushed = provider.flushWebviewMessages();
+    assert.strictEqual(flushed, 1, 'Duplicate command messages in batch window should coalesce to 1');
+    assert.strictEqual(posted[0].payload.message, 'second');
+    provider.dispose();
+
+    const webviewSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'webview', 'main.ts'), 'utf8');
+    assert.ok(webviewSrc.includes('recycledRowPool') && webviewSrc.includes('MAX_RECYCLED_ROWS'));
+    assert.ok(webviewSrc.includes("'PageDown'") && webviewSrc.includes("'PageUp'") && webviewSrc.includes("'Home'") && webviewSrc.includes("'End'"));
+    assert.ok(webviewSrc.includes('aria-activedescendant'));
+  }
+  console.log('  [PASS] DAG Worker Engine, DOM Recycling, AdaptiveDebouncer & IPC Batching tests passed!');
+
+  console.log('\n[PASS] ALL 46 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);
