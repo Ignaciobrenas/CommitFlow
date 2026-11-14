@@ -36,6 +36,8 @@ import {
 } from '../src/git/conventionalCommits';
 import { GitHubProvider } from '../src/remotes/githubProvider';
 import { GitLabProvider } from '../src/remotes/gitlabProvider';
+import { IpcSchemaValidator } from '../src/utils/ipcValidator';
+import { sharedMcpAuditLog } from '../src/mcp/mcpAuditLog';
 
 console.log('Starting CommitFlow Extended Test Suite...\n');
 
@@ -1901,7 +1903,123 @@ Host *.internal.corp
 
   console.log('  [PASS] Conflict Studio, Conventional Commits & GitHub/GitLab Parity tests passed!');
 
-  console.log('\n[PASS] ALL 48 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  // 49. Test Security Hardening: IPC Schema Validator, MCP Rate Limiting & Audit Log Resource (Issue #17)
+  console.log('▶ Testing IPC Schema Validator, MCP Rate Limiter & Audit Log Resource...');
+  assert.strictEqual(IpcSchemaValidator.validateWebviewMessage({ command: 'requestData' }).valid, true);
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'resolveConflictFile',
+      payload: { filePath: 'src/index.ts', strategy: 'ours' },
+    }).valid,
+    true
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'openExternal',
+      payload: 'https://github.com/Ignaciobrenas/CommitFlow',
+    }).valid,
+    true
+  );
+
+  // Disallowed / malicious IPC payloads
+  assert.strictEqual(IpcSchemaValidator.validateWebviewMessage(null).valid, false);
+  assert.strictEqual(IpcSchemaValidator.validateWebviewMessage(['array']).valid, false);
+  assert.strictEqual(IpcSchemaValidator.validateWebviewMessage({ command: 'execArbitraryCommand' }).valid, false);
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'openFile',
+      payload: { filePath: '../../etc/passwd' },
+    }).valid,
+    false
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'openFile',
+      payload: { filePath: 'src/file.ts\0.png' },
+    }).valid,
+    false
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'openExternal',
+      payload: 'javascript:alert(1)',
+    }).valid,
+    false
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage(
+      JSON.parse('{"command":"filter","payload":{"__proto__":{"isAdmin":true}}}')
+    ).valid,
+    false
+  );
+  assert.strictEqual(
+    IpcSchemaValidator.validateWebviewMessage({
+      command: 'dndResetBranchToCommit',
+      payload: { branchName: '--upload-pack=evil', targetHash: 'deadbeef' },
+    }).valid,
+    false
+  );
+
+  // HTTP server rate limit (429) & audit log ring buffer
+  sharedMcpAuditLog.clear();
+  const secKeyMgr = ApiKeyManager.getInstance();
+  const { plaintextKey: secToken, metadata: secKeyMeta } = await secKeyMgr.generateKey('Rate Limit Audit Key', ['read']);
+  const secHttp = new CommitFlowHttpServer({
+    port: 0,
+    repoRoot: process.cwd(),
+    rateLimitMax: 2,
+    rateLimitWindowMs: 10_000,
+  });
+
+  try {
+    const started = await secHttp.start();
+    const baseUrl = `http://${started.host}:${started.port}`;
+
+    // Request 1 & 2 succeed
+    const r1 = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'resources/list' }),
+    });
+    assert.strictEqual(r1.status, 200);
+    const listJson: any = await r1.json();
+    assert.ok(
+      listJson.result.resources.some((r: any) => r.uri === 'commitflow://mcp/audit-log'),
+      'MCP server should list commitflow://mcp/audit-log resource'
+    );
+
+    const r2 = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'resources/read',
+        params: { uri: 'commitflow://mcp/audit-log' },
+      }),
+    });
+    assert.strictEqual(r2.status, 200);
+
+    // Request 3 hits sliding-window rate limit -> 429
+    const r3 = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'ping' }),
+    });
+    assert.strictEqual(r3.status, 429);
+    assert.ok(r3.headers.get('retry-after'), '429 response should include Retry-After header');
+
+    const logs = secHttp.getAuditLogs();
+    assert.ok(logs.some((e) => e.status === 200 && e.rpcMethod === 'resources/list'));
+    assert.ok(logs.some((e) => e.status === 429 && e.reason === 'rate_limit_exceeded'));
+  } finally {
+    await secHttp.stop();
+    await secKeyMgr.revokeKey(secKeyMeta.id);
+  }
+
+  console.log('  [PASS] IPC Schema Validator, MCP Rate Limiter & Audit Log Resource tests passed!');
+
+  console.log('\n[PASS] ALL 49 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);
