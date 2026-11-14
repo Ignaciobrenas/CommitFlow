@@ -11,6 +11,8 @@ import { ForkIntegration } from '../remotes/forkIntegration';
 import { PersistenceManager } from '../state/persistenceManager';
 import { ApiKeyManager } from '../mcp/apiKeyManager';
 import { AdaptiveDebouncer } from '../git/branchWatcher';
+import { readGitMessageTemplate } from '../git/conventionalCommits';
+import { RemoteManager } from '../remotes/remoteManager';
 import {
   CommitFlowSettings,
   DagQueryFilters,
@@ -274,6 +276,7 @@ export class GraphWebviewProvider
         bisectStatus,
         repositories,
         submodules,
+        conflictedFiles,
       ] = await Promise.all([
         this.gitClient.getCommits(root, limit, 0, this.currentDagFilters),
         this.gitClient.getBranches(root),
@@ -288,6 +291,7 @@ export class GraphWebviewProvider
         this.gitClient.getBisectStatus(root),
         this.gitClient.getWorkspaceRepositories(root),
         this.gitClient.getSubmodules(root),
+        this.gitClient.getConflictedFiles(root),
       ]);
 
       const themeConfig = config.get<any>('graph.theme', 'auto');
@@ -353,6 +357,7 @@ export class GraphWebviewProvider
         bisectStatus,
         repositories,
         submodules,
+        conflictedFiles,
         activeRepo: root,
         forkInstalled: this.forkIntegration.findForkExecutable() !== null,
         forkEnabled: this.persistence.isForkIntegrationEnabled(),
@@ -1393,6 +1398,191 @@ export class GraphWebviewProvider
           } catch {}
           break;
         }
+
+        // --- Conflict Resolution Studio (Issue #14) ---
+        case 'requestConflictedFiles': {
+          if (root) {
+            try {
+              const files = await this.gitClient.getConflictedFiles(root);
+              webview.postMessage({
+                command: 'conflictedFilesData',
+                payload: { files },
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to inspect conflicts: ${err.message}`);
+            }
+          }
+          break;
+        }
+
+        case 'resolveConflictFile': {
+          if (root && msg.payload?.filePath && msg.payload?.strategy) {
+            try {
+              await this.gitClient.resolveConflictFile(
+                root,
+                msg.payload.filePath,
+                msg.payload.strategy
+              );
+              const files = await this.gitClient.getConflictedFiles(root);
+              webview.postMessage({
+                command: 'conflictedFilesData',
+                payload: { files },
+              } as ExtensionToWebviewMessage);
+              vscode.window.showInformationMessage(
+                `Resolved conflict in ${msg.payload.filePath} (${msg.payload.strategy}).`
+              );
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Conflict resolution failed: ${err.message}`);
+            }
+          }
+          break;
+        }
+
+        case 'openMergeEditor': {
+          if (root && msg.payload?.filePath) {
+            try {
+              const resolvedRoot = path.resolve(root);
+              const targetAbs = path.resolve(root, String(msg.payload.filePath));
+              if (targetAbs === resolvedRoot || targetAbs.startsWith(resolvedRoot + path.sep)) {
+                const fileUri = vscode.Uri.file(targetAbs);
+                try {
+                  await vscode.commands.executeCommand('git.openMergeEditor', fileUri);
+                } catch {
+                  await vscode.window.showTextDocument(fileUri);
+                }
+              }
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to open merge editor: ${err.message}`);
+            }
+          }
+          break;
+        }
+
+        case 'abortMerge': {
+          if (root) {
+            try {
+              await this.gitClient.abortMerge(root);
+              vscode.window.showInformationMessage('Merge operation aborted.');
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to abort merge: ${err.message}`);
+            }
+          }
+          break;
+        }
+
+        // --- Conventional Commits Builder & #issue Autocomplete (Issue #15) ---
+        case 'requestCommitTemplate': {
+          if (root) {
+            try {
+              const template = readGitMessageTemplate(root);
+              const workingChanges = await this.gitClient.getWorkingTreeChanges(root);
+              webview.postMessage({
+                command: 'commitTemplateData',
+                payload: {
+                  template,
+                  changesCount: workingChanges.length,
+                },
+              } as ExtensionToWebviewMessage);
+            } catch {
+              webview.postMessage({
+                command: 'commitTemplateData',
+                payload: { template: null, changesCount: 0 },
+              } as ExtensionToWebviewMessage);
+            }
+          }
+          break;
+        }
+
+        case 'commitStagedChanges': {
+          if (root && msg.payload?.message) {
+            try {
+              const res = await this.gitClient.commitStagedChanges(
+                root,
+                msg.payload.message,
+                Boolean(msg.payload.stageAll)
+              );
+              webview.postMessage({
+                command: 'commitCreated',
+                payload: res,
+              } as ExtensionToWebviewMessage);
+              vscode.window.showInformationMessage(`Created commit ${res.hash.slice(0, 7)}: ${res.subject}`);
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Commit failed: ${err.message}`);
+            }
+          }
+          break;
+        }
+
+        // --- Provider PR Parity: Comments & Approvals (Issue #16) ---
+        case 'requestPrComments': {
+          if (root && msg.payload?.prNumber) {
+            try {
+              const remoteInfo = await this.gitClient.getRemoteRepoInfo(root);
+              const provider = remoteInfo ? RemoteManager.getInstance().getProvider(remoteInfo.provider) : undefined;
+              const comments =
+                remoteInfo && provider?.getPullRequestComments
+                  ? await provider.getPullRequestComments(remoteInfo, Number(msg.payload.prNumber))
+                  : [];
+              webview.postMessage({
+                command: 'prCommentsData',
+                payload: { prNumber: Number(msg.payload.prNumber), comments },
+              } as ExtensionToWebviewMessage);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to load PR comments: ${err.message}`);
+            }
+          }
+          break;
+        }
+
+        case 'addPrComment': {
+          if (root && msg.payload?.prNumber && msg.payload?.body) {
+            try {
+              const remoteInfo = await this.gitClient.getRemoteRepoInfo(root);
+              const provider = remoteInfo ? RemoteManager.getInstance().getProvider(remoteInfo.provider) : undefined;
+              if (!remoteInfo || !provider?.createPullRequestComment) {
+                throw new Error('PR comments are not supported by the active remote provider.');
+              }
+              const comment = await provider.createPullRequestComment(
+                remoteInfo,
+                Number(msg.payload.prNumber),
+                String(msg.payload.body)
+              );
+              webview.postMessage({
+                command: 'prCommentAdded',
+                payload: { prNumber: Number(msg.payload.prNumber), comment },
+              } as ExtensionToWebviewMessage);
+              vscode.window.showInformationMessage(`Added comment to PR #${msg.payload.prNumber}`);
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to add PR comment: ${err.message}`);
+            }
+          }
+          break;
+        }
+
+        case 'approvePullRequest': {
+          if (root && msg.payload?.prNumber) {
+            try {
+              const remoteInfo = await this.gitClient.getRemoteRepoInfo(root);
+              const provider = remoteInfo ? RemoteManager.getInstance().getProvider(remoteInfo.provider) : undefined;
+              if (!remoteInfo || !provider?.approvePullRequest) {
+                throw new Error('PR approvals are not supported by the active remote provider.');
+              }
+              await provider.approvePullRequest(remoteInfo, Number(msg.payload.prNumber));
+              webview.postMessage({
+                command: 'prApproved',
+                payload: { prNumber: Number(msg.payload.prNumber) },
+              } as ExtensionToWebviewMessage);
+              vscode.window.showInformationMessage(`Approved PR #${msg.payload.prNumber}`);
+              await this.refreshData();
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to approve PR: ${err.message}`);
+            }
+          }
+          break;
+        }
       }
     });
   }
@@ -1634,6 +1824,9 @@ export class GraphWebviewProvider
         <option value="all">${tr('toolbar.allBranches')}</option>
       </select>
 
+      <button id="btn-commit-builder" class="btn-icon" title="Conventional Commit Builder">
+        <i class="codicon codicon-git-commit"></i>
+      </button>
       <button id="btn-checkout" class="btn-icon" title="${tr('toolbar.checkout')}">
         <i class="codicon codicon-arrow-swap"></i>
       </button>
@@ -1714,6 +1907,9 @@ export class GraphWebviewProvider
             Rebase en progreso: Paso <span id="rebase-step-current">1</span> de <span id="rebase-step-total">?</span>. Resuelve los conflictos y continúa.
           </div>
           <div class="rebase-actions">
+            <button id="btn-open-conflict-studio" class="btn-sm btn-accent" title="Abrir Conflict Resolution Studio y Editor 3-Way">
+              <i class="codicon codicon-extensions"></i> Conflict Studio (<span id="conflict-count-badge">0</span>)
+            </button>
             <button id="btn-rebase-continue" class="btn-sm btn-rebase-continue" title="Continuar el rebase tras resolver conflictos">
               <i class="codicon codicon-play"></i> Continuar (Continue)
             </button>
@@ -2495,6 +2691,124 @@ Always check repo state and active branch before making modifications.</code></p
           <button id="btn-dnd-confirm" class="cf-btn cf-btn-primary">
             <i class="codicon codicon-check" aria-hidden="true"></i> Ejecutar
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conflict Resolution Studio Modal (Issue #14) -->
+    <div id="conflict-studio-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="conflict-studio-title">
+      <div class="modal-content" style="max-width:660px; width:94%;">
+        <div class="modal-header">
+          <span id="conflict-studio-title" style="font-weight:700; font-size:var(--font-size-base);">
+            <i class="codicon codicon-extensions" aria-hidden="true"></i> Conflict Resolution Studio
+          </span>
+          <button id="conflict-studio-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body" style="padding:14px; display:flex; flex-direction:column; gap:10px; max-height:65vh; overflow-y:auto;">
+          <div id="conflict-studio-list" class="conflict-studio-list"></div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:12px; border-top:1px solid var(--border-color); background:var(--bg-secondary);">
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button id="btn-conflict-abort-merge" class="cf-btn cf-btn-ghost" title="git merge --abort">
+              <i class="codicon codicon-discard" aria-hidden="true"></i> Abort Merge
+            </button>
+            <button id="btn-conflict-continue-rebase" class="cf-btn cf-btn-ghost" title="git rebase --continue">
+              <i class="codicon codicon-play" aria-hidden="true"></i> Continue Rebase
+            </button>
+          </div>
+          <button id="btn-conflict-studio-done" class="cf-btn cf-btn-primary">${tr('modal.close')}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conventional Commits Builder Modal (Issue #15) -->
+    <div id="commit-builder-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="commit-builder-title">
+      <div class="modal-content" style="max-width:580px; width:94%;">
+        <div class="modal-header">
+          <span id="commit-builder-title" style="font-weight:700; font-size:var(--font-size-base);">
+            <i class="codicon codicon-git-commit" aria-hidden="true"></i> Conventional Commit Builder
+          </span>
+          <button id="commit-builder-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body" style="padding:14px; display:flex; flex-direction:column; gap:10px; position:relative;">
+          <div class="commit-builder-row">
+            <label style="flex:1; font-size:var(--font-size-xs); color:var(--text-muted); display:flex; flex-direction:column; gap:4px;">
+              Type
+              <select id="cb-type" class="branch-select" style="width:100%;">
+                <option value="feat">feat (New Feature)</option>
+                <option value="fix">fix (Bug Fix)</option>
+                <option value="docs">docs (Documentation)</option>
+                <option value="style">style (Formatting)</option>
+                <option value="refactor">refactor (Code Restructure)</option>
+                <option value="perf">perf (Performance)</option>
+                <option value="test">test (Tests)</option>
+                <option value="chore">chore (Maintenance)</option>
+                <option value="ci">ci (CI/CD)</option>
+              </select>
+            </label>
+            <label style="flex:1; font-size:var(--font-size-xs); color:var(--text-muted); display:flex; flex-direction:column; gap:4px;">
+              Scope (optional)
+              <input id="cb-scope" type="text" class="search-input" placeholder="e.g. dag, mcp, ui" style="width:100%;" />
+            </label>
+          </div>
+          <label style="font-size:var(--font-size-xs); color:var(--text-muted); display:flex; flex-direction:column; gap:4px;">
+            <span style="display:flex; justify-content:space-between;">
+              <span>Subject (type # for issue autocomplete)</span>
+              <span id="cb-subject-count" class="mono-num">0/72</span>
+            </span>
+            <input id="cb-subject" type="text" class="search-input" placeholder="short imperative description (#issue)" style="width:100%;" />
+          </label>
+          <label style="font-size:var(--font-size-xs); color:var(--text-muted); display:flex; flex-direction:column; gap:4px;">
+            Body & Issue References (type # to autocomplete issues)
+            <textarea id="cb-body" class="search-input" rows="4" placeholder="Detailed explanation, Closes #15..." style="width:100%; resize:vertical; font-family:var(--font-mono);"></textarea>
+          </label>
+          <div id="commit-issue-autocomplete" class="commit-issue-autocomplete" style="display:none;" role="listbox" aria-label="Issue suggestions"></div>
+          <div style="display:flex; gap:14px; flex-wrap:wrap; font-size:var(--font-size-xs);">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input id="cb-breaking" type="checkbox" /> Breaking Change (!)
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input id="cb-stage-all" type="checkbox" checked /> Auto-stage all if index is empty
+            </label>
+            <span id="cb-changes-info" style="color:var(--text-muted); margin-left:auto;"></span>
+          </div>
+          <div style="font-size:var(--font-size-xs); color:var(--text-muted);">
+            Live Commit Message Preview:
+            <pre id="cb-preview" class="cb-preview-box">feat: ...</pre>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; padding:12px; border-top:1px solid var(--border-color); background:var(--bg-secondary);">
+          <button id="btn-cb-cancel" class="cf-btn cf-btn-ghost">${tr('modal.close')}</button>
+          <button id="btn-cb-submit" class="cf-btn cf-btn-primary">
+            <i class="codicon codicon-check" aria-hidden="true"></i> Commit Staged Changes
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pull Request Details & Comments Modal (Issue #16) -->
+    <div id="pr-detail-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="pr-detail-title">
+      <div class="modal-content" style="max-width:580px; width:94%;">
+        <div class="modal-header">
+          <span id="pr-detail-title" style="font-weight:700; font-size:var(--font-size-base);">
+            <i class="codicon codicon-git-pull-request" aria-hidden="true"></i> Pull Request Discussion
+          </span>
+          <button id="pr-detail-close" class="btn-icon" title="${tr('modal.close')}"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="modal-body" style="padding:14px; display:flex; flex-direction:column; gap:10px; max-height:60vh; overflow-y:auto;">
+          <div id="pr-comments-list" class="pr-comments-list"></div>
+          <textarea id="pr-comment-input" class="search-input" rows="3" placeholder="Write a review comment..." style="width:100%; resize:vertical;"></textarea>
+        </div>
+        <div class="modal-footer" style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:12px; border-top:1px solid var(--border-color); background:var(--bg-secondary);">
+          <button id="btn-pr-modal-approve" class="cf-btn cf-btn-ghost">
+            <i class="codicon codicon-check-all" aria-hidden="true"></i> Approve PR
+          </button>
+          <div style="display:flex; gap:8px;">
+            <button id="btn-pr-modal-close" class="cf-btn cf-btn-ghost">${tr('modal.close')}</button>
+            <button id="btn-pr-modal-comment" class="cf-btn cf-btn-primary">
+              <i class="codicon codicon-comment" aria-hidden="true"></i> Post Comment
+            </button>
+          </div>
         </div>
       </div>
     </div>

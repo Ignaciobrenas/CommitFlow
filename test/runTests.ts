@@ -1,6 +1,8 @@
 import assert from 'assert';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
+import * as cp from 'child_process';
 import { AvatarService } from '../src/avatars/avatarService';
 import { GitParser } from '../src/git/gitParser';
 import { GraphLayout, THEME_LANE_COLORS } from '../src/graph/graphLayout';
@@ -24,6 +26,16 @@ import { computeClampedPosition, escapeHtml } from '../src/webview/primitives';
 import { DagWorkerEngine } from '../src/graph/dagWorkerClient';
 import { AdaptiveDebouncer } from '../src/git/branchWatcher';
 import { GraphWebviewProvider } from '../src/graph/graphWebviewProvider';
+import {
+  CONVENTIONAL_COMMIT_TYPES,
+  filterIssueSuggestions,
+  formatConventionalCommit,
+  parseConventionalCommit,
+  readGitMessageTemplate,
+  stripGitTemplateComments,
+} from '../src/git/conventionalCommits';
+import { GitHubProvider } from '../src/remotes/githubProvider';
+import { GitLabProvider } from '../src/remotes/gitlabProvider';
 
 console.log('Starting CommitFlow Extended Test Suite...\n');
 
@@ -1657,7 +1669,239 @@ Host *.internal.corp
   }
   console.log('  [PASS] DAG Minimap, Advanced Filters, Interactive Drag-and-Drop & Onboarding tests passed!');
 
-  console.log('\n[PASS] ALL 47 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
+  // 48. Test Conflict Resolution Studio, Conventional Commits Builder & Provider Parity (Issues #14, #15, #16)
+  console.log('▶ Testing Conflict Studio, Conventional Commits & GitHub/GitLab Parity...');
+  assert.ok(CONVENTIONAL_COMMIT_TYPES.includes('feat'));
+  assert.ok(CONVENTIONAL_COMMIT_TYPES.includes('fix'));
+  const formattedCommit = formatConventionalCommit({
+    type: 'feat',
+    scope: 'dag',
+    breaking: true,
+    subject: 'drop legacy layout (#15)',
+    body: 'Switches rendering pipeline to worker layout.\nCloses #15',
+  });
+  assert.ok(formattedCommit.startsWith('feat(dag)!: drop legacy layout (#15)'));
+  assert.ok(formattedCommit.includes('BREAKING CHANGE:'));
+  const parsedCommit = parseConventionalCommit(formattedCommit);
+  assert.strictEqual(parsedCommit?.type, 'feat');
+  assert.strictEqual(parsedCommit?.scope, 'dag');
+  assert.strictEqual(parsedCommit?.breaking, true);
+  assert.strictEqual(parsedCommit?.subject, 'drop legacy layout (#15)');
+
+  const cleanedTemplate = stripGitTemplateComments('# Comment header\n\nFixes #\n# Footer');
+  assert.strictEqual(cleanedTemplate, 'Fixes #');
+
+  const suggestions = filterIssueSuggestions(
+    [
+      { number: 12, title: 'Closed old bug', state: 'closed' },
+      { number: 14, title: 'Conflict Studio 3-way editor', state: 'open' },
+      { number: 15, title: 'Conventional Commit Builder', state: 'open' },
+    ],
+    'conv'
+  );
+  assert.strictEqual(suggestions.length, 1);
+  assert.strictEqual(suggestions[0].number, 15);
+
+  const tmpConflictRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'commitflow-conflict-test-'));
+  try {
+    const execGit = (args: string[]) => cp.execFileSync('git', args, { cwd: tmpConflictRepo, encoding: 'utf8' });
+    execGit(['init']);
+    execGit(['config', 'user.name', 'CommitFlow Test']);
+    execGit(['config', 'user.email', 'test@commitflow.local']);
+    fs.writeFileSync(path.join(tmpConflictRepo, '.gitmessage'), '# Enter commit message\n\nRefs #\n', 'utf8');
+    assert.strictEqual(readGitMessageTemplate(tmpConflictRepo), 'Refs #');
+
+    fs.writeFileSync(path.join(tmpConflictRepo, 'conflict.txt'), 'line 1\nbase line\n', 'utf8');
+    execGit(['add', '.']);
+    execGit(['commit', '-m', 'chore: initial base']);
+    const defaultBranch = execGit(['rev-parse', '--abbrev-ref', 'HEAD']).trim();
+
+    execGit(['checkout', '-b', 'feat-branch']);
+    fs.writeFileSync(path.join(tmpConflictRepo, 'conflict.txt'), 'line 1\ntheirs change\n', 'utf8');
+    execGit(['add', 'conflict.txt']);
+    execGit(['commit', '-m', 'feat: incoming change']);
+
+    execGit(['checkout', defaultBranch]);
+    fs.writeFileSync(path.join(tmpConflictRepo, 'conflict.txt'), 'line 1\nours change\n', 'utf8');
+    execGit(['add', 'conflict.txt']);
+    execGit(['commit', '-m', 'fix: current branch change']);
+
+    let mergeConflicted = false;
+    try {
+      execGit(['merge', 'feat-branch']);
+    } catch {
+      mergeConflicted = true;
+    }
+    assert.strictEqual(mergeConflicted, true, 'Merge should enter conflict state');
+
+    const conflictClient = GitClient.getInstance();
+    const detectedConflicts = await conflictClient.getConflictedFiles(tmpConflictRepo);
+    assert.strictEqual(detectedConflicts.length, 1);
+    assert.strictEqual(detectedConflicts[0].filePath, 'conflict.txt');
+    assert.ok(detectedConflicts[0].hunksCount >= 1);
+
+    let traversalBlocked = false;
+    try {
+      await conflictClient.resolveConflictFile(tmpConflictRepo, '../outside.txt', 'ours');
+    } catch {
+      traversalBlocked = true;
+    }
+    assert.strictEqual(traversalBlocked, true, 'Path traversal should be rejected by resolveConflictFile');
+
+    await conflictClient.resolveConflictFile(tmpConflictRepo, 'conflict.txt', 'theirs');
+    const afterResolve = await conflictClient.getConflictedFiles(tmpConflictRepo);
+    assert.strictEqual(afterResolve.length, 0);
+    assert.ok(fs.readFileSync(path.join(tmpConflictRepo, 'conflict.txt'), 'utf8').includes('theirs change'));
+
+    const createdCommit = await conflictClient.commitStagedChanges(tmpConflictRepo, 'fix(merge): resolve conflict #14');
+    assert.ok(createdCommit.hash.length >= 7);
+    assert.strictEqual(createdCommit.subject, 'fix(merge): resolve conflict #14');
+
+    let emptyCommitBlocked = false;
+    try {
+      await conflictClient.commitStagedChanges(tmpConflictRepo, 'chore: empty', false);
+    } catch {
+      emptyCommitBlocked = true;
+    }
+    assert.strictEqual(emptyCommitBlocked, true, 'Clean index commit should reject when stageAllIfEmpty is false');
+  } finally {
+    fs.rmSync(tmpConflictRepo, { recursive: true, force: true });
+  }
+
+  // Provider parity & HTTP mocking for GitHub + GitLab
+  const ghProv = new GitHubProvider();
+  const glProv = new GitLabProvider();
+  const fgProv = new ForgejoProvider();
+  assert.strictEqual(typeof ghProv.getCommitStatuses, 'function');
+  assert.strictEqual(typeof ghProv.getPullRequestComments, 'function');
+  assert.strictEqual(typeof ghProv.createPullRequestComment, 'function');
+  assert.strictEqual(typeof ghProv.approvePullRequest, 'function');
+  assert.strictEqual(typeof glProv.createIssueComment, 'function');
+  assert.strictEqual(typeof glProv.setIssueState, 'function');
+  assert.strictEqual(typeof glProv.getCommitStatuses, 'function');
+  assert.strictEqual(typeof glProv.getPullRequestComments, 'function');
+  assert.strictEqual(typeof glProv.createPullRequestComment, 'function');
+  assert.strictEqual(typeof glProv.approvePullRequest, 'function');
+  assert.strictEqual(typeof fgProv.getPullRequestComments, 'function');
+  assert.strictEqual(typeof fgProv.approvePullRequest, 'function');
+
+  const originalFetch = globalThis.fetch;
+  const fetchedUrls: string[] = [];
+  try {
+    (globalThis as any).fetch = async (url: string, init?: any) => {
+      fetchedUrls.push(`${init?.method || 'GET'} ${url}`);
+      if (url.includes('/pulls') && url.includes('/reviews')) {
+        return { ok: true, status: 200, json: async () => ({ id: 99 }) };
+      }
+      if (url.includes('/pulls')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              id: 1,
+              number: 42,
+              title: 'Enterprise GH PR',
+              draft: false,
+              mergeable: true,
+              user: { login: 'octo' },
+              head: { ref: 'feat/x' },
+              base: { ref: 'staging' },
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ],
+        };
+      }
+      if (url.includes('/merge_requests/') && url.endsWith('/approve')) {
+        return { ok: true, status: 201, json: async () => ({ approved: true }) };
+      }
+      if (url.includes('/merge_requests')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              id: 2,
+              iid: 77,
+              title: 'Self-hosted GL MR',
+              draft: false,
+              has_conflicts: true,
+              head_pipeline: { status: 'failed' },
+              author: { username: 'gluser' },
+              source_branch: 'fix/y',
+              target_branch: 'staging',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ],
+        };
+      }
+      if (url.includes('/commits/') && url.endsWith('/status')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ statuses: [{ context: 'ci/build', state: 'success' }] }),
+        };
+      }
+      if (url.includes('/issues/42/comments')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => (init?.method === 'POST' ? { id: 501, body: 'LGTM', user: { login: 'me' } } : []),
+        };
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    };
+
+    const gheRepo = {
+      provider: 'github' as const,
+      host: 'github.corp.local',
+      owner: 'org',
+      repo: 'app',
+      webUrl: 'https://github.corp.local/org/app',
+      isPrivate: true,
+      authConnected: true,
+    };
+    const ghePrs = await ghProv.getPullRequests(gheRepo, 'ready');
+    assert.strictEqual(ghePrs.length, 1);
+    assert.strictEqual(ghePrs[0].number, 42);
+    assert.ok(fetchedUrls.some((u) => u.includes('https://github.corp.local/api/v3/repos/org/app/pulls')));
+    const gheStatus = await ghProv.getCommitStatuses(gheRepo, 'abc1234');
+    assert.strictEqual(gheStatus[0].state, 'success');
+    await ghProv.approvePullRequest(gheRepo, 42);
+    assert.ok(fetchedUrls.some((u) => u.includes('POST https://github.corp.local/api/v3/repos/org/app/pulls/42/reviews')));
+
+    const glRepo = {
+      provider: 'gitlab' as const,
+      host: 'gitlab.corp.local',
+      owner: 'group',
+      repo: 'service',
+      webUrl: 'https://gitlab.corp.local/group/service',
+      isPrivate: true,
+      authConnected: true,
+    };
+    const glBlocked = await glProv.getPullRequests(glRepo, 'blocked');
+    assert.strictEqual(glBlocked.length, 1);
+    assert.strictEqual(glBlocked[0].ciStatus, 'failure');
+    await glProv.approvePullRequest(glRepo, 77);
+    assert.ok(fetchedUrls.some((u) => u.includes('POST https://gitlab.corp.local/api/v4/projects/group%2Fservice/merge_requests/77/approve')));
+
+    // Verify LRU cached fallback when fetch throws
+    (globalThis as any).fetch = async () => {
+      throw new Error('Offline');
+    };
+    const cachedGhePrs = await ghProv.getPullRequests(gheRepo, 'ready');
+    assert.strictEqual(cachedGhePrs.length, 1);
+    const cachedGlMrs = await glProv.getPullRequests(glRepo, 'blocked');
+    assert.strictEqual(cachedGlMrs.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  console.log('  [PASS] Conflict Studio, Conventional Commits & GitHub/GitLab Parity tests passed!');
+
+  console.log('\n[PASS] ALL 48 COMMITFLOW TEST SUITES PASSED WITH 100% SUCCESS!\n');
 })().catch((err) => {
   console.error('[CommitFlow] Test suite failed:', err);
   process.exit(1);

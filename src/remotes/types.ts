@@ -99,6 +99,9 @@ export interface RemoteProvider {
   
   // Pull Request operations
   getPullRequests?(repoInfo: RemoteRepoInfo, filter?: 'blocked' | 'ready' | 'mine' | 'all'): Promise<PullRequestInfo[]>;
+  getPullRequestComments?(repoInfo: RemoteRepoInfo, prNumber: number): Promise<IssueComment[]>;
+  createPullRequestComment?(repoInfo: RemoteRepoInfo, prNumber: number, body: string): Promise<IssueComment>;
+  approvePullRequest?(repoInfo: RemoteRepoInfo, prNumber: number): Promise<void>;
 
   // Repository metadata & CI statuses
   getRepoDetails?(repoInfo: RemoteRepoInfo): Promise<Record<string, any> | null>;

@@ -8,10 +8,24 @@ import {
   RemoteRepoInfo,
 } from './types';
 import { PersistenceManager } from '../state/persistenceManager';
+import { LruCache } from '../utils/lruCache';
 
 export class GitHubProvider implements RemoteProvider {
   public readonly type: RemoteProviderType = 'github';
   private readonly persistence = PersistenceManager.getInstance();
+  private readonly prsCache = new LruCache<string, PullRequestInfo[]>(30, 120_000);
+  private readonly statusesCache = new LruCache<
+    string,
+    Array<{ context: string; state: 'success' | 'failure' | 'pending' | 'warning' | 'error'; description?: string; targetUrl?: string }>
+  >(100, 120_000);
+
+  private getApiBaseUrl(repoInfo: RemoteRepoInfo): string {
+    const cleanHost = (repoInfo.host || 'github.com').toLowerCase();
+    if (cleanHost === 'github.com' || cleanHost.endsWith('.github.com')) {
+      return 'https://api.github.com';
+    }
+    return `https://${cleanHost}/api/v3`;
+  }
 
   public matches(_remoteUrl: string, host: string): boolean {
     const cleanHost = host.toLowerCase();
@@ -187,39 +201,167 @@ export class GitHubProvider implements RemoteProvider {
 
   public async getPullRequests(
     repoInfo: RemoteRepoInfo,
-    _filter: 'blocked' | 'ready' | 'mine' | 'all' = 'all'
+    filter: 'blocked' | 'ready' | 'mine' | 'all' = 'all'
   ): Promise<PullRequestInfo[]> {
-    const url = `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/pulls?state=open&per_page=50`;
+    const cacheKey = `${repoInfo.owner}/${repoInfo.repo}:prs:${filter}`;
+    const apiBase = this.getApiBaseUrl(repoInfo);
+    const url = `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}/pulls?state=open&per_page=50`;
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const raw: any[] = await res.json();
+        const prs: PullRequestInfo[] = raw.map((r) => {
+          const isDraft = r.draft === true;
+          const isBlocked =
+            r.mergeable === false ||
+            r.mergeable_state === 'dirty' ||
+            r.mergeable_state === 'blocked';
+          const reviewStatus: PullRequestInfo['reviewStatus'] =
+            Array.isArray(r.requested_reviewers) && r.requested_reviewers.length > 0
+              ? 'review_required'
+              : 'none';
+          const isReady = !isDraft && !isBlocked;
+          return {
+            id: r.id,
+            number: r.number,
+            title: r.title,
+            state: isDraft ? 'draft' : 'open',
+            reviewStatus,
+            ciStatus: 'none',
+            author: {
+              name: r.user?.login || 'User',
+              email: '',
+              date: new Date(r.created_at),
+              relativeTime: this.formatRelativeTime(new Date(r.created_at)),
+              avatarUrl: r.user?.avatar_url || '',
+            },
+            sourceBranch: r.head?.ref || '',
+            targetBranch: r.base?.ref || '',
+            url: r.html_url || `${repoInfo.webUrl}/pull/${r.number}`,
+            updatedAt: r.updated_at,
+            isBlocked,
+            isReady,
+            isPending: !isBlocked && !isReady,
+            commentsCount: r.comments,
+          };
+        });
+        const filtered = this.filterPullRequests(prs, filter);
+        this.prsCache.set(cacheKey, filtered);
+        return filtered;
+      }
+    } catch {
+      // Fallback to cached results on network error
+    }
+    return this.prsCache.get(cacheKey) || [];
+  }
+
+  private filterPullRequests(
+    prs: PullRequestInfo[],
+    filter: 'blocked' | 'ready' | 'mine' | 'all'
+  ): PullRequestInfo[] {
+    if (filter === 'blocked') return prs.filter((p) => p.isBlocked);
+    if (filter === 'ready') return prs.filter((p) => p.isReady);
+    return prs;
+  }
+
+  public async getCommitStatuses(
+    repoInfo: RemoteRepoInfo,
+    sha: string
+  ): Promise<Array<{ context: string; state: 'success' | 'failure' | 'pending' | 'warning' | 'error'; description?: string; targetUrl?: string }>> {
+    const cacheKey = `${repoInfo.owner}/${repoInfo.repo}:status:${sha}`;
+    const apiBase = this.getApiBaseUrl(repoInfo);
+    const url = `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}/commits/${sha}/status`;
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const data: any = await res.json();
+        const rawList: any[] = Array.isArray(data?.statuses) ? data.statuses : [];
+        const mapped = rawList.map((s) => ({
+          context: s.context || 'ci',
+          state: (s.state === 'success' || s.state === 'failure' || s.state === 'pending' || s.state === 'error'
+            ? s.state
+            : 'pending') as 'success' | 'failure' | 'pending' | 'warning' | 'error',
+          description: s.description,
+          targetUrl: s.target_url,
+        }));
+        this.statusesCache.set(cacheKey, mapped);
+        return mapped;
+      }
+    } catch {}
+    return this.statusesCache.get(cacheKey) || [];
+  }
+
+  public async getPullRequestComments(repoInfo: RemoteRepoInfo, prNumber: number): Promise<IssueComment[]> {
+    const apiBase = this.getApiBaseUrl(repoInfo);
+    const url = `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}/issues/${prNumber}/comments`;
     try {
       const headers = await this.getAuthHeaders();
       const res = await fetch(url, { headers });
       if (!res.ok) return [];
       const raw: any[] = await res.json();
-      return raw.map((r) => ({
-        id: r.id,
-        number: r.number,
-        title: r.title,
-        state: r.draft ? 'draft' : 'open',
-        reviewStatus: 'none',
-        ciStatus: 'none',
+      return raw.map((c) => ({
+        id: c.id,
         author: {
-          name: r.user?.login || 'User',
+          name: c.user?.login || 'User',
           email: '',
-          date: new Date(r.created_at),
-          relativeTime: this.formatRelativeTime(new Date(r.created_at)),
-          avatarUrl: r.user?.avatar_url || '',
+          date: new Date(c.created_at),
+          relativeTime: this.formatRelativeTime(new Date(c.created_at)),
+          avatarUrl: c.user?.avatar_url || '',
         },
-        sourceBranch: r.head?.ref || '',
-        targetBranch: r.base?.ref || '',
-        url: r.html_url || `${repoInfo.webUrl}/pull/${r.number}`,
-        updatedAt: r.updated_at,
-        isBlocked: false,
-        isReady: !r.draft,
-        isPending: false,
-        commentsCount: r.comments,
+        body: c.body || '',
+        createdAt: c.created_at,
       }));
     } catch {
       return [];
+    }
+  }
+
+  public async createPullRequestComment(
+    repoInfo: RemoteRepoInfo,
+    prNumber: number,
+    body: string
+  ): Promise<IssueComment> {
+    const apiBase = this.getApiBaseUrl(repoInfo);
+    const url = `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}/issues/${prNumber}/comments`;
+    const headers = await this.getAuthHeaders();
+    headers['Content-Type'] = 'application/json';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ body }),
+    });
+    if (!res.ok) {
+      throw new Error(`GitHub PR comment failed: HTTP ${res.status}`);
+    }
+    const c: any = await res.json();
+    return {
+      id: c.id,
+      author: {
+        name: c.user?.login || 'Me',
+        email: '',
+        date: new Date(c.created_at || Date.now()),
+        relativeTime: 'just now',
+        avatarUrl: c.user?.avatar_url || '',
+      },
+      body: c.body || body,
+      createdAt: c.created_at || new Date().toISOString(),
+    };
+  }
+
+  public async approvePullRequest(repoInfo: RemoteRepoInfo, prNumber: number): Promise<void> {
+    const apiBase = this.getApiBaseUrl(repoInfo);
+    const url = `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}/pulls/${prNumber}/reviews`;
+    const headers = await this.getAuthHeaders();
+    headers['Content-Type'] = 'application/json';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ event: 'APPROVE' }),
+    });
+    if (!res.ok) {
+      throw new Error(`GitHub PR approval failed: HTTP ${res.status}`);
     }
   }
 
