@@ -24,6 +24,7 @@ import {
   UserPersonalStats,
 } from '../git/types';
 import { t, Language } from '../i18n/locales';
+import { DagWorkerEngine } from '../graph/dagWorkerClient';
 import {
   CfButton,
   CfBadge,
@@ -879,6 +880,9 @@ function clearBranchPathHighlight(): void {
 let virtualSpacer: HTMLElement | null = null;
 let virtualViewport: HTMLElement | null = null;
 let isScrollBound = false;
+const recycledRowPool = new Map<string, HTMLElement>();
+const MAX_RECYCLED_ROWS = 120;
+const dagWorkerEngine = DagWorkerEngine.getInstance();
 
 function renderCommitRow(
   node: GraphNode,
@@ -1246,11 +1250,12 @@ function updateVirtualWindow(): void {
   const clientHeight = tableContainer.clientHeight || 600;
   const buffer = 10;
   const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - buffer);
-  const endIndex = Math.min(filteredNodes.length, Math.ceil((scrollTop + clientHeight) / rowHeight) + buffer);
+  const rawEndIndex = Math.min(filteredNodes.length, Math.ceil((scrollTop + clientHeight) / rowHeight) + buffer);
+  // Guarantee mounted rows stay strictly under 150 even on ultra-tall screens
+  const endIndex = Math.min(rawEndIndex, startIndex + 120);
   const offsetY = startIndex * rowHeight;
 
   virtualViewport.style.transform = `translateY(${offsetY}px)`;
-  virtualViewport.innerHTML = '';
 
   const fragment = document.createDocumentFragment();
   const isCompact = isCompactLayout;
@@ -1276,10 +1281,28 @@ function updateVirtualWindow(): void {
 
   for (let i = startIndex; i < endIndex; i++) {
     const node = filteredNodes[i];
-    const row = renderCommitRow(node, i, isCompact, canvasCssWidth, rowHeight, dpr);
+    const isSel = selectedNode?.commit.hash === node.commit.hash ? '1' : '0';
+    const bisectHash = bisectStatus?.isActive ? `${bisectStatus.currentCommit || ''}:${bisectStatus.badCommit || ''}:${bisectStatus.goodCommits.length}` : '0';
+    const renderKey = `${node.commit.hash}|${i}|${isCompact ? 'c' : 'f'}|${canvasCssWidth}|${rowHeight}|${isSel}|${bisectHash}`;
+
+    let row = recycledRowPool.get(renderKey);
+    if (!row) {
+      row = renderCommitRow(node, i, isCompact, canvasCssWidth, rowHeight, dpr);
+      row.id = `commit-row-${node.commit.shortHash}-${i}`;
+      row.setAttribute('data-render-key', renderKey);
+      recycledRowPool.set(renderKey, row);
+      if (recycledRowPool.size > MAX_RECYCLED_ROWS) {
+        const oldestKey = recycledRowPool.keys().next().value;
+        if (oldestKey) recycledRowPool.delete(oldestKey);
+      }
+    } else {
+      recycledRowPool.delete(renderKey);
+      recycledRowPool.set(renderKey, row);
+    }
     fragment.appendChild(row);
   }
 
+  virtualViewport.innerHTML = '';
   virtualViewport.appendChild(fragment);
 }
 
@@ -1294,9 +1317,11 @@ function jumpToCommitIndex(index: number): void {
   const targetScroll = Math.max(0, clamped * rowHeight - Math.floor(tableContainer.clientHeight / 2));
   tableContainer.scrollTop = targetScroll;
   updateVirtualWindow();
+  tableContainer.setAttribute('aria-activedescendant', `commit-row-${targetNode?.commit.shortHash || ''}-${clamped}`);
 }
 
 function renderGraph(): void {
+  recycledRowPool.clear();
   tableContainer.setAttribute('role', 'treegrid');
   tableContainer.setAttribute('aria-label', 'CommitFlow Interactive Git Graph');
 
@@ -3121,6 +3146,20 @@ window.addEventListener('keydown', (e) => {
       if (targetNode) {
         jumpToCommitIndex(prevIdx);
       }
+    } else if (e.key === 'PageDown') {
+      e.preventDefault();
+      const currentIdx = selectedNode ? filteredNodes.indexOf(selectedNode) : 0;
+      jumpToCommitIndex(Math.min(filteredNodes.length - 1, currentIdx + 15));
+    } else if (e.key === 'PageUp') {
+      e.preventDefault();
+      const currentIdx = selectedNode ? filteredNodes.indexOf(selectedNode) : 0;
+      jumpToCommitIndex(Math.max(0, currentIdx - 15));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      jumpToCommitIndex(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      jumpToCommitIndex(filteredNodes.length - 1);
     } else if (e.key === 'Enter') {
       if (selectedNode) {
         drawer.classList.add('open');

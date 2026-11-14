@@ -10,6 +10,7 @@ import { IssueService } from '../issues/issueService';
 import { ForkIntegration } from '../remotes/forkIntegration';
 import { PersistenceManager } from '../state/persistenceManager';
 import { ApiKeyManager } from '../mcp/apiKeyManager';
+import { AdaptiveDebouncer } from '../git/branchWatcher';
 import {
   CommitFlowSettings,
   ExtensionToWebviewMessage,
@@ -30,6 +31,14 @@ export class GraphWebviewProvider
   private readonly persistence = PersistenceManager.getInstance();
   private readonly disposables: vscode.Disposable[] = [];
   private activeRepoPath: string | null = null;
+  private readonly headDebouncer = new AdaptiveDebouncer(() => this.refreshData(), {
+    minDelayMs: 150,
+    maxDelayMs: 1000,
+  });
+  private refreshInFlight: Promise<void> | null = null;
+  private refreshPending = false;
+  private ipcBatchQueue = new Map<vscode.Webview, ExtensionToWebviewMessage[]>();
+  private ipcBatchTimer: NodeJS.Timeout | null = null;
 
   public async getEffectiveRepoRoot(): Promise<string | null> {
     if (this.activeRepoPath && fs.existsSync(this.activeRepoPath)) {
@@ -44,11 +53,20 @@ export class GraphWebviewProvider
   }
 
   constructor(private readonly extensionUri: vscode.Uri) {
-    // 1. Watch for Git HEAD changes to auto-refresh when checking out branches
+    // 1. Watch for Git HEAD changes with adaptive debouncing to coalesce burst storms
     const watcher = vscode.workspace.createFileSystemWatcher('**/.git/HEAD');
-    watcher.onDidChange(() => this.refreshData(), this, this.disposables);
-    watcher.onDidCreate(() => this.refreshData(), this, this.disposables);
+    watcher.onDidChange(() => this.headDebouncer.trigger(), this, this.disposables);
+    watcher.onDidCreate(() => this.headDebouncer.trigger(), this, this.disposables);
     this.disposables.push(watcher);
+    this.disposables.push({
+      dispose: () => {
+        this.headDebouncer.dispose();
+        if (this.ipcBatchTimer) {
+          clearTimeout(this.ipcBatchTimer);
+          this.ipcBatchTimer = null;
+        }
+      },
+    });
 
     // 2. Multi-root workspace: Refresh when switching active editor to a different root
     vscode.window.onDidChangeActiveTextEditor(
@@ -158,22 +176,69 @@ export class GraphWebviewProvider
   }
 
   /**
-   * Refreshes the Git data and sends to all active webviews
+   * Queues an extension-to-webview IPC message for short-window batching.
+   */
+  public enqueueWebviewMessage(webview: vscode.Webview, message: ExtensionToWebviewMessage): void {
+    const existing = this.ipcBatchQueue.get(webview) || [];
+    const dedupIdx = existing.findIndex((m) => m.command === message.command);
+    if (dedupIdx >= 0) {
+      existing[dedupIdx] = message;
+    } else {
+      existing.push(message);
+    }
+    this.ipcBatchQueue.set(webview, existing);
+
+    if (!this.ipcBatchTimer) {
+      this.ipcBatchTimer = setTimeout(() => {
+        this.flushWebviewMessages();
+      }, 16);
+    }
+  }
+
+  /**
+   * Flushes queued IPC messages immediately across registered webviews.
+   */
+  public flushWebviewMessages(): number {
+    if (this.ipcBatchTimer) {
+      clearTimeout(this.ipcBatchTimer);
+      this.ipcBatchTimer = null;
+    }
+    let flushedCount = 0;
+    for (const [webview, msgs] of this.ipcBatchQueue.entries()) {
+      for (const msg of msgs) {
+        try {
+          webview.postMessage(msg);
+          flushedCount++;
+        } catch {}
+      }
+    }
+    this.ipcBatchQueue.clear();
+    return flushedCount;
+  }
+
+  /**
+   * Refreshes the Git data with in-flight coalescing and sends to all active webviews
    */
   public async refreshData(): Promise<void> {
-    const activeWebviews = [this.view?.webview, this.panel?.webview].filter(
-      (w): w is vscode.Webview => w !== undefined
-    );
-
-    if (activeWebviews.length === 0) {
-      return;
+    if (this.refreshInFlight) {
+      this.refreshPending = true;
+      return this.refreshInFlight;
     }
 
-    activeWebviews.forEach((w) => {
-      try {
-        w.postMessage({ command: 'loading' } as ExtensionToWebviewMessage);
-      } catch {}
-    });
+    const executeRefresh = async (): Promise<void> => {
+      const activeWebviews = [this.view?.webview, this.panel?.webview].filter(
+        (w): w is vscode.Webview => w !== undefined
+      );
+
+      if (activeWebviews.length === 0) {
+        return;
+      }
+
+      activeWebviews.forEach((w) => {
+        try {
+          w.postMessage({ command: 'loading' } as ExtensionToWebviewMessage);
+        } catch {}
+      });
 
     try {
       const root = await this.getEffectiveRepoRoot();
@@ -308,6 +373,18 @@ export class GraphWebviewProvider
           } as ExtensionToWebviewMessage);
         } catch {}
       });
+    }
+    };
+
+    this.refreshInFlight = executeRefresh();
+    try {
+      await this.refreshInFlight;
+    } finally {
+      this.refreshInFlight = null;
+      if (this.refreshPending) {
+        this.refreshPending = false;
+        void this.refreshData();
+      }
     }
   }
 
